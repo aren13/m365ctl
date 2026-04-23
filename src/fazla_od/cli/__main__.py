@@ -1,17 +1,14 @@
-"""fazla-od command dispatcher.
-
-The single Python entry point is ``fazla-od``; individual ``od-*`` names
-are produced by POSIX shell wrappers in ``bin/`` that translate e.g.
-``od-auth whoami`` into ``fazla-od auth whoami``.
-"""
+"""fazla-od command dispatcher."""
 from __future__ import annotations
 
 import sys
 
 from fazla_od.cli import auth as auth_cli
+from fazla_od.cli import catalog as catalog_cli
 
 _SUBCOMMANDS = {
     "auth": auth_cli.main,
+    "catalog": catalog_cli.main,
 }
 
 

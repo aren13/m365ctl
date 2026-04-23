@@ -1,0 +1,89 @@
+"""`od-catalog` subcommands: refresh and status."""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from fazla_od.auth import AppOnlyCredential, DelegatedCredential
+from fazla_od.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
+from fazla_od.catalog.db import open_catalog
+from fazla_od.config import load_config
+from fazla_od.graph import GraphClient
+
+
+def _credential_for_scope(scope: str, cfg):
+    """'me' -> delegated; 'drive:<id>' -> app-only."""
+    if scope == "me":
+        return DelegatedCredential(cfg)
+    return AppOnlyCredential(cfg)
+
+
+def run_refresh(*, config_path: Path, scope: str) -> int:
+    cfg = load_config(config_path)
+    cred = _credential_for_scope(scope, cfg)
+    token = cred.get_token()
+    graph = GraphClient(token_provider=lambda: token)
+
+    drives = resolve_scope(scope, graph)
+    print(f"Refreshing {len(drives)} drive(s) under scope {scope!r}:")
+
+    results: list[CrawlResult] = []
+    with open_catalog(cfg.catalog.path) as conn:
+        for drive in drives:
+            print(f"  - {drive.drive_id} ({drive.display_name}, {drive.owner})")
+            result = crawl_drive(drive, graph, conn)
+            results.append(result)
+            print(f"    items seen: {result.items_seen}")
+
+    print(f"Done. Catalog: {cfg.catalog.path}")
+    return 0
+
+
+def run_status(*, config_path: Path) -> int:
+    cfg = load_config(config_path)
+    with open_catalog(cfg.catalog.path) as conn:
+        drives = conn.execute(
+            "SELECT drive_id, display_name, owner, last_refreshed_at "
+            "FROM drives ORDER BY drive_id"
+        ).fetchall()
+        (item_total,) = conn.execute("SELECT COUNT(*) FROM items").fetchone()
+        (file_total,) = conn.execute(
+            "SELECT COUNT(*) FROM items WHERE is_folder = false AND is_deleted = false"
+        ).fetchone()
+        (byte_total,) = conn.execute(
+            "SELECT COALESCE(SUM(size), 0) FROM items "
+            "WHERE is_folder = false AND is_deleted = false"
+        ).fetchone()
+
+    print(f"Catalog: {cfg.catalog.path}")
+    print(f"Drives: {len(drives)}")
+    for d in drives:
+        print(f"  {d[0]}  {d[1]} ({d[2]})  last refreshed {d[3]}")
+    print(f"Items:  {item_total} total ({file_total} live files)")
+    print(f"Bytes:  {byte_total:,}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="od-catalog")
+    p.add_argument("--config", default="config.toml")
+    sub = p.add_subparsers(dest="subcommand", required=True)
+
+    refresh = sub.add_parser("refresh", help="Delta-crawl a scope into the catalog.")
+    refresh.add_argument(
+        "--scope",
+        required=True,
+        help="'me' or 'drive:<drive-id>'",
+    )
+    sub.add_parser("status", help="Print catalog summary.")
+    return p
+
+
+def main(argv: list[str]) -> int:
+    args = build_parser().parse_args(argv)
+    config_path = Path(args.config)
+    if args.subcommand == "refresh":
+        return run_refresh(config_path=config_path, scope=args.scope)
+    if args.subcommand == "status":
+        return run_status(config_path=config_path)
+    return 2
