@@ -6,16 +6,23 @@ Notes for Claude Code (and any agentic assistant) operating this repo.
 
 A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
 
-## Current CLI surface (Plan 1 complete)
-
-Only one command exists yet:
+## Current CLI surface (Plans 1-2 complete)
 
 | Command | Purpose |
 |---|---|
 | `./bin/od-auth login` | Device-code delegated sign-in; caches token. |
 | `./bin/od-auth whoami` | Identity (delegated + app-only), cert expiry, tenant. |
+| `./bin/od-catalog-refresh --scope me\|drive:<id>` | Delta-crawl a scope into `cache/catalog.duckdb`. |
+| `./bin/od-catalog-status` | Print catalog summary: drives, items, bytes. |
+| `./bin/od-inventory --top-by-size N` | Top N largest live files. |
+| `./bin/od-inventory --stale-since YYYY-MM-DD` | Files not modified since date. |
+| `./bin/od-inventory --by-owner` | File count + total size per owner. |
+| `./bin/od-inventory --duplicates` | Items sharing a `quickXorHash`. |
+| `./bin/od-inventory --sql "<SELECT ...>"` | Ad-hoc SELECT against the catalog. |
 
-All other commands from the spec (`od-search`, `od-inventory`, `od-move`, ...) are delivered in later plans.
+All inventory commands accept `--json` for machine-readable output.
+
+All other commands from the spec (`od-search`, `od-move`, `od-label`, ...) are delivered in later plans.
 
 ## Safety model (already in effect)
 
