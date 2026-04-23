@@ -1,0 +1,24 @@
+# Fazla OneDrive Toolkit - configuration template.
+# Copy to `config.toml` (gitignored) and fill in.
+
+tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
+client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+cert_path    = "~/.config/fazla-od/fazla-od.key"   # PEM, private key, mode 600
+cert_public  = "~/.config/fazla-od/fazla-od.cer"   # PEM, public cert (also uploaded to Entra)
+default_auth = "delegated"                          # or "app-only"
+
+[scope]
+# Drives the toolkit is allowed to touch.
+# Examples: "me", "site:Finance", "site:Legal", "drive:b!abcdef..."
+# Tenant-wide mutations require items to be inside this list (or --unsafe-scope).
+allow_drives         = ["me"]
+allow_users          = ["*"]
+deny_paths           = ["/Confidential/**", "/HR/**"]
+unsafe_requires_flag = true
+
+[catalog]
+path             = "cache/catalog.duckdb"
+refresh_on_start = false
+
+[logging]
+ops_dir = "logs/ops"
