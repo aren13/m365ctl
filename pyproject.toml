@@ -4,10 +4,11 @@ version = "0.1.0"
 description = "CLI toolkit for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant via Microsoft Graph."
 requires-python = ">=3.11"
 dependencies = [
+    "cryptography>=42",
+    "duckdb>=1.1",
+    "httpx>=0.27",
     "msal>=1.28",
     "msal-extensions>=1.2",
-    "httpx>=0.27",
-    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

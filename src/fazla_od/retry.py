@@ -1,0 +1,53 @@
+"""Simple retry wrapper for transient HTTP errors.
+
+Kept deliberately minimal in Plan 2: a single ``with_retry`` callable that
+takes a zero-arg function and back-off parameters. Graph throttles 429/503
+are the common case; the helper honours a ``Retry-After`` hint if the
+caller supplies one, else exponential back-off.
+"""
+from __future__ import annotations
+
+import time
+from typing import Callable, TypeVar
+
+T = TypeVar("T")
+
+
+class RetryExhausted(RuntimeError):
+    """Raised after max_attempts transient failures."""
+
+
+def _default_is_transient(_: Exception) -> bool:
+    return False
+
+
+def _default_retry_after(_: Exception) -> float | None:
+    return None
+
+
+def with_retry(
+    fn: Callable[[], T],
+    *,
+    max_attempts: int = 5,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    sleep: Callable[[float], None] = time.sleep,
+    is_transient: Callable[[Exception], bool] = _default_is_transient,
+    retry_after_of: Callable[[Exception], float | None] = _default_retry_after,
+) -> T:
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if not is_transient(exc):
+                raise
+            if attempt == max_attempts:
+                break
+            hint = retry_after_of(exc)
+            delay = hint if hint is not None else min(
+                base_delay * (2 ** (attempt - 1)), max_delay
+            )
+            sleep(delay)
+    raise RetryExhausted(f"giving up after {max_attempts} attempts") from last_exc
