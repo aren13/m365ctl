@@ -94,3 +94,55 @@ def test_live_app_only_against_fazla_tenant() -> None:
     cred = AppOnlyCredential(cfg)
     token = cred.get_token()
     assert isinstance(token, str) and len(token) > 100
+
+
+def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
+    mock_app = MagicMock()
+    mock_app.initiate_device_flow.return_value = {
+        "user_code": "ABCD-1234",
+        "device_code": "dev-code",
+        "verification_uri": "https://microsoft.com/devicelogin",
+        "message": "Go to https://microsoft.com/devicelogin and enter ABCD-1234",
+        "expires_in": 900,
+        "interval": 5,
+    }
+    mock_app.acquire_token_by_device_flow.return_value = {
+        "access_token": "delegated-t0k3n",
+        "id_token_claims": {"preferred_username": "test@fazla.com"},
+    }
+    mock_app.get_accounts.return_value = []
+    mocker.patch("msal.PublicClientApplication", return_value=mock_app)
+    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+
+    printed: list[str] = []
+    cred = DelegatedCredential(cfg, prompt=lambda msg: printed.append(msg))
+    token = cred.login()
+
+    assert token == "delegated-t0k3n"
+    assert any("ABCD-1234" in m for m in printed)
+    mock_app.acquire_token_by_device_flow.assert_called_once()
+
+
+def test_delegated_get_token_uses_cached_account(cfg: Config, mocker) -> None:
+    mock_app = MagicMock()
+    mock_app.get_accounts.return_value = [{"username": "cached@fazla.com"}]
+    mock_app.acquire_token_silent.return_value = {"access_token": "cached-t0k3n"}
+    mocker.patch("msal.PublicClientApplication", return_value=mock_app)
+    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+
+    cred = DelegatedCredential(cfg)
+    token = cred.get_token()
+
+    assert token == "cached-t0k3n"
+    mock_app.initiate_device_flow.assert_not_called()
+
+
+def test_delegated_get_token_raises_when_not_logged_in(cfg: Config, mocker) -> None:
+    mock_app = MagicMock()
+    mock_app.get_accounts.return_value = []
+    mocker.patch("msal.PublicClientApplication", return_value=mock_app)
+    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+
+    cred = DelegatedCredential(cfg)
+    with pytest.raises(AuthError, match="not logged in"):
+        cred.get_token()
