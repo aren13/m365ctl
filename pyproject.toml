@@ -1,0 +1,39 @@
+[project]
+name = "fazla-od"
+version = "0.1.0"
+description = "CLI toolkit for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant via Microsoft Graph."
+requires-python = ">=3.11"
+dependencies = [
+    "msal>=1.28",
+    "msal-extensions>=1.2",
+    "httpx>=0.27",
+    "cryptography>=42",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3.12",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+fazla-od = "fazla_od.cli.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fazla_od"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+markers = [
+    "live: hits real Microsoft Graph; requires FAZLA_OD_LIVE_TESTS=1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
