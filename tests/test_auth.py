@@ -15,10 +15,15 @@ from fazla_od.auth import (
 )
 from fazla_od.config import Config, load_config
 
-LIVE = pytest.mark.skipif(
+_SKIPIF_LIVE = pytest.mark.skipif(
     os.environ.get("FAZLA_OD_LIVE_TESTS") != "1",
     reason="live Graph test; set FAZLA_OD_LIVE_TESTS=1 to run",
 )
+
+
+def LIVE(fn):
+    """Mark a test as live (hits real Graph) AND skip unless env var set."""
+    return _SKIPIF_LIVE(pytest.mark.live(fn))
 
 
 @pytest.fixture
