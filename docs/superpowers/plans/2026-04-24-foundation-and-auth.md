@@ -1592,3 +1592,24 @@ git commit -m "chore: Plan 1 complete — auth smoke tests pass"
 ## Plan 1 done. What's next?
 
 Plan 2 (Catalog) picks up from here: it depends on `load_config`, `AppOnlyCredential`, `GraphClient`, the `bin/` wrapper pattern, and the AGENTS.md. Nothing else.
+
+---
+
+## Completion log
+
+- **Smoke test run:** 2026-04-24
+- **Unit tests:** 14 passed + 1 live-skipped (pytest); 1 selected via `-m live` after marker fix.
+- **Live app-only flow:** PASSED (cert-based client_credentials against real Entra).
+- **Live delegated flow:** PASSED after config change (see gotcha below). Identity resolved via `/me` = `Arda Eren <arda@fazla.com>`.
+- **App-only identity via Graph:** `Fazla OneDrive Toolkit` (via `/applications(appId=...)`).
+- **Cert expiry at smoke-test time:** 729 days. Rotate reminder: ~2028-02.
+- **Token cache:** `~/.config/fazla-od/token_cache.bin`, mode `0600`, outside repo.
+
+### Gotcha encountered (documented so Plan 2+ can rely on it)
+
+The Entra app registration ships with **"Allow public client flows" = No**. The device-code delegated flow fails with `AADSTS7000218` ("request body must contain 'client_assertion' or 'client_secret'") until that toggle is set to **Yes**. Fixed in the Fazla tenant on 2026-04-24. Future app registrations in this project or elsewhere must have this toggle enabled for any `PublicClientApplication` flow (device-code, interactive browser, username/password) to work.
+
+### In-flight corrections
+
+- `tests/test_auth.py` — `LIVE` decorator now also applies `@pytest.mark.live` so `pytest -m live` selects live tests as documented in AGENTS.md. Committed as `a1d2581`.
+- `tests/__init__.py` — empty package marker created during Task 3 scaffolding but not committed at the time; picked up with this completion log.
