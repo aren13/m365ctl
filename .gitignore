@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.mypy_cache/
+.ruff_cache/
+
+# uv
+# (uv.lock IS tracked)
+
+# Secrets / config
+config.toml
+rclone/rclone.conf
+.env
+.env.*
+!.env.example
+
+# Runtime state (gitignored for now; future plans will add)
+cache/
+workspaces/
+logs/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
