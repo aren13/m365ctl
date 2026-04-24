@@ -1,10 +1,10 @@
-# AGENTS.md - Fazla OneDrive Toolkit
+# AGENTS.md - m365ctl
 
 Notes for Claude Code (and any agentic assistant) operating this repo.
 
 ## What this is
 
-A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
+A CLI for admin-scoped control of the Microsoft 365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `M365CTL-SPEC.md`. Plans are under `docs/superpowers/plans/`.
 
 ## Current CLI surface (Plans 1-4 complete)
 
@@ -62,8 +62,8 @@ cannot accidentally run a mutation plan with `od-download`.
 ### PowerShell prerequisites (for `od-audit-sharing`)
 
 One-time setup: see `docs/ops/pnp-powershell-setup.md`. Converts the PEM
-cert to PFX at `~/.config/fazla-od/fazla-od.pfx` and stores an export
-password in macOS Keychain under `FazlaODToolkit:PfxPassword`.
+cert to PFX at `~/.config/m365ctl/m365ctl.pfx` and stores an export
+password in macOS Keychain under `m365ctlODToolkit:PfxPassword`.
 
 ### Mutation safety envelope (Plan 4)
 
@@ -81,7 +81,7 @@ ODfB recycle-bin restore and purge shell out to PnP.PowerShell (see `docs/ops/pn
 ## Safety model (already in effect)
 
 - `config.toml` is **gitignored**. Never `git add` it. The tracked template is `config.toml.example`.
-- Cert private key is at `~/.config/fazla-od/fazla-od.key` (mode 600) - outside this repo. Never read, cat, or commit it.
+- Cert private key is at `~/.config/m365ctl/m365ctl.key` (mode 600) - outside this repo. Never read, cat, or commit it.
 - `cache/`, `workspaces/`, `logs/` are gitignored runtime dirs.
 
 When mutating commands ship (Plan 4):
@@ -91,7 +91,7 @@ When mutating commands ship (Plan 4):
 
 ## Authentication at a glance
 
-- **Delegated** (`./bin/od-auth login`): device-code; user signs in once, token cached in `~/.config/fazla-od/token_cache.bin`.
+- **Delegated** (`./bin/od-auth login`): device-code; user signs in once, token cached in `~/.config/m365ctl/token_cache.bin`.
 - **App-only**: certificate-based, zero user interaction per run. Used automatically by commands that need tenant-wide access.
 
 Both flows run against the same Entra app; admin consent is granted for both.
