@@ -275,14 +275,18 @@ Adapt `test_purge_404_wraps_with_manual_instructions` for the new behaviour, sam
 - `ecf4663` / `83308f9` — Task 2: restore fallback (+ data-recovery hazard fix: raise on unknown library suffix).
 - `dc2ce07` — Cross-cutting refactor: shared `invoke_pwsh` and `lookup_site_url_from_drive_id` in `fazla_od/mutate/_pwsh.py`.
 - `4ddc796` — Task 3: purge fallback.
-- `2d59da6` (or whichever SHA this log commit ends up at after any rebase) — Task 4: docs + completion log.
+- `7475988` — Task 4: docs + initial completion log.
+- `a6409aa` — Close final-review gaps: add tests for lookup-fallback-through paths; warn on recycle-bin ceiling; fix latent `GraphError` constructor bug in `_pwsh.py`.
+- `7207b29` — Live-smoke fix: thread delete `before` through the reverse op's args; normalize Graph-path `/drives/<id>/root:` prefix to site-relative for PnP's `-DirName`.
+- `8dc0502` — Live-smoke fix: drop `-PfxPath cfg.cert_path` override (PEM key, not PFX); PS default at `~/.config/fazla-od/fazla-od.pfx` is correct.
+- `d0a2949` — Live-smoke fix: recover purge `before` block from prior `od-delete` audit record so `Find-RecycleBinItem` has a real `LeafName`/`DirName` to match.
 
 ### Test delta
 
 - Baseline (before this plan): 197 passed + 1 skipped.
-- After: 201 passed + 1 skipped. (+4 tests: 2 in `test_mutate_delete.py`, 2 in `test_mutate_clean.py`.)
+- After: 216 passed + 1 skipped. (+19 tests across `test_mutate_delete.py`, `test_mutate_clean.py`, `test_mutate_undo.py`, `test_pwsh.py`, `test_audit.py`, `test_cli_clean.py`.)
 
-Full-suite run at commit `4ddc796` (headless dev machine, no tenant access): `201 passed, 1 skipped in 0.89s`. The one skip is the live-gated `test_auth.py::test_live_whoami`, unchanged from Plan 4.
+Full-suite run at HEAD: `216 passed, 1 skipped`. The one skip is the live-gated `test_auth.py::test_live_whoami`, unchanged from Plan 4.
 
 ### Design deviations from the original plan
 
@@ -290,22 +294,43 @@ Full-suite run at commit `4ddc796` (headless dev machine, no tenant access): `20
 - Extracted shared `invoke_pwsh` helper to avoid triplicate `subprocess.run(["pwsh", ...])` across `label.py`, `delete.py`, `clean.py`. Unplanned but code-review-driven.
 - `Find-RecycleBinItem` ambiguity handling: the plan said "throws with a specific error code (`NoMatch` / `AmbiguousMatch`)" AND "On ambiguity, log all matches to stderr, pick the newest." Resolved to the second form — `AmbiguousMatch` is a `Write-Warning`; only `NoMatch` throws. Rationale: the most-recent delete is almost certainly the undo target, and failing-closed on ambiguity would block common restores.
 
-### Live smoke (TO BE RUN BY OPERATOR)
+### Live smoke — executed 2026-04-24
 
-Steps 1–3 of Task 4 require live tenant access (Keychain unlocked, PFX in place, real OneDrive file) and were not executed during this plan run. Operator should run them against `_fazla_smoke2/hello2.txt` (same shape as Plan 4 Task 13 smoke). Expected outcomes:
+File: `_fazla_smoke2/hello2.txt` staged in the primary operator's personal OneDrive (`drive_id = b!3FSdMpv3t0Kf…pm_ga`, `item_id = 01KEZPQAHEAAZT7HM6BJG2DKB4VKTUZQCT`). Three commits (`7207b29`, `8dc0502`, `d0a2949`) were required to close bugs surfaced only by the live run — all now fixed and covered by new tests.
 
-- **Step 1 — `od-delete` + `od-undo` round-trip:** `[<uuid>] ok (reverse of <delete_op>)`; file reappears via `od-search --scope me "hello2.txt"`.
-- **Step 2 — re-delete + `od-clean recycle-bin --from-plan`:** purge prints `[<uuid>] ok`; subsequent `od-undo` on the purge op exits 2 with `irreversible: op ... was a recycle-bin purge — items are permanently deleted ...`.
-- **Step 3 — audit log:** 4 paired `start`/`end` records with `result: ok`; the final undo-on-purge never writes an audit record (raises before the first log call).
+- **Step 1 — `od-delete` + `od-undo` restore round-trip:** ✅
+  - Delete op: `8eaaaeaf-d060-4496-ae4b-b8a2325ddff9` → `[…] ok (recycled)`.
+  - Undo op: `0b8b5af8-365e-4b6a-bf23-ec576524e802` → `[…] ok (reverse of 8eaaaeaf-…)`.
+  - Post-restore verification via `GET /drives/{id}/root:/_fazla_smoke2/hello2.txt`: item present, same `item_id`.
 
-Once the operator runs the smoke, append the actual op IDs and audit-log excerpts here:
+- **Step 2 — re-delete + purge + undo-on-purge:** ✅
+  - Re-delete op: `24ed444a-8632-4305-aefb-245acb7f87c6` → `[…] ok (recycled)`.
+  - Purge op: `smoke-purge-24ed444a-8632-4305-aefb-245acb7f87c6` → `[…] ok`.
+  - Undo-on-purge exit 2 with: `irreversible: op 'smoke-purge-…' was a recycle-bin purge — items are permanently deleted and not recoverable by this toolkit. If retention backup is available, contact Microsoft 365 admin.`
 
-- **Step 1 delete op_id:** `<TBD>`
-- **Step 1 undo op_id:** `<TBD>`
-- **Step 2 re-delete op_id:** `<TBD>`
-- **Step 2 purge op_id:** `<TBD>`
-- **Step 2 undo-on-purge exit status + stderr:** `<TBD>`
-- **Step 3 audit-log excerpts:** `<TBD>`
+- **Step 3 — audit log:** four paired `start`/`end` records all `result: ok`, plus one failed purge `end` during bug investigation (expected). Undo-on-purge wrote nothing (raises `Irreversible` before the first `log_mutation_start` call). Representative records (same-day `logs/ops/2026-04-24.jsonl`):
+  ```
+  start od-delete                 op=8eaaaeaf...
+  end                             op=8eaaaeaf... result=ok
+  start od-undo(restore)          op=0b8b5af8...
+  end                             op=0b8b5af8... result=ok
+  start od-delete                 op=24ed444a...
+  end                             op=24ed444a... result=ok
+  start od-clean(recycle-bin)     op=smoke-purge-24ed444a...
+  end                             op=smoke-purge-24ed444a... result=ok
+  ```
+
+### Bugs surfaced and fixed during live smoke
+
+Worth calling out explicitly — these weren't visible from unit-tests alone:
+
+1. **Reverse-op discarded the delete's `before` block** (`mutate/undo.py`). The restore reverse Operation had empty `args`, and at undo time `cli/undo.py` tried a live `_lookup_item` which 404s on recycle-bin items. Fix (`7207b29`): pack `orig_name`/`orig_parent_path` into the reverse op's `args`.
+
+2. **Graph path format mismatches PnP `DirName`.** `before.parent_path` recorded at delete time is `/drives/<id>/root:/<path>`; PnP's recycle-bin `DirName` is site-relative (e.g. `personal/<user>/Documents/<path>`). The `-like "*$DirName"` match failed. Fix (`7207b29`): added `normalize_recycle_dir_name` in `_pwsh.py` that strips everything up to and including `root:`.
+
+3. **`-PfxPath` was overridden with the PEM key** (`cfg.cert_path` is `.key`, not `.pfx`). PS tried to load `.key` as a certificate and failed. Fix (`8dc0502`): drop the override; the PS default at `~/.config/fazla-od/fazla-od.pfx` is the right path.
+
+4. **Purge had no way to recover `before.name` when the item was already in the recycle bin.** `cli/clean.py` fell back to empty meta on the 404, sending `-LeafName ""` to PS. Fix (`d0a2949`): new audit helper `find_most_recent_delete_before` walks the log for a matching prior `od-delete` start record and uses its `before` block. Operator-facing warning surfaced when no such record exists.
 
 ### Intentionally deferred (per plan)
 
