@@ -130,3 +130,37 @@ def test_is_folder_denied_user_config_pattern():
 
 def test_hardcoded_deny_folders_list_is_frozen():
     assert isinstance(HARDCODED_DENY_FOLDERS, frozenset)
+
+
+def test_mail_list_fails_fast_when_mailbox_not_in_allow_list(tmp_path):
+    """Scope enforcement: listing a mailbox outside allow_mailboxes raises before Graph."""
+    import pytest
+    from m365ctl.common.safety import ScopeViolation
+    from m365ctl.mail.cli.list import main
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("""
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "/tmp/nonexistent.key"
+cert_public  = "/tmp/nonexistent.cer"
+default_auth = "delegated"
+
+[scope]
+allow_drives    = ["me"]
+allow_mailboxes = ["me"]
+
+[catalog]
+path = "cache/catalog.duckdb"
+
+[mail]
+catalog_path = "cache/mail.duckdb"
+
+[logging]
+ops_dir = "logs/ops"
+""".lstrip())
+
+    # --mailbox upn:other@example.com is NOT in allow_mailboxes=["me"].
+    # assert_mailbox_allowed raises ScopeViolation (no TTY → no /dev/tty confirm path available).
+    with pytest.raises(ScopeViolation):
+        main(["--config", str(cfg_path), "--mailbox", "upn:other@example.com"])
