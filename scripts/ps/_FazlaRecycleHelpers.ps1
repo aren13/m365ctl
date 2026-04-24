@@ -31,7 +31,7 @@ function Get-FazlaPfxPassword {
         [string] $KeychainService = "FazlaODToolkit:PfxPassword",
         [string] $KeychainAccount = "fazla-od"
     )
-    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w 2>$null
+    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w
     if (-not $raw) {
         throw "KeychainMissing: no entry for service=$KeychainService account=$KeychainAccount. Run ./scripts/ps/convert-cert.sh."
     }
@@ -70,12 +70,12 @@ function Connect-FazlaSite {
     if (-not (Test-Path -LiteralPath $PfxPath)) {
         throw "PfxMissing: $PfxPath not found. Run ./scripts/ps/convert-cert.sh."
     }
-    $pwd = Get-FazlaPfxPassword
+    $pfxSecret = Get-FazlaPfxPassword
     Connect-PnPOnline `
         -Tenant $Tenant `
         -ClientId $ClientId `
         -CertificatePath $PfxPath `
-        -CertificatePassword $pwd `
+        -CertificatePassword $pfxSecret `
         -Url $SiteUrl | Out-Null
 }
 
@@ -105,21 +105,22 @@ function Find-RecycleBinItem {
         [Parameter(Mandatory=$true)] [string] $LeafName,
         [Parameter(Mandatory=$true)] [string] $DirName
     )
+    $escapedDirName = [System.Management.Automation.WildcardPattern]::Escape($DirName)
     $all = Get-PnPRecycleBinItem -RowLimit 5000
-    $matches = @($all | Where-Object {
-        $_.LeafName -eq $LeafName -and $_.DirName -like "*$DirName"
+    $candidates = @($all | Where-Object {
+        $_.LeafName -eq $LeafName -and $_.DirName -like "*$escapedDirName"
     } | Sort-Object -Property DeletedDate -Descending)
 
-    if ($matches.Count -eq 0) {
+    if ($candidates.Count -eq 0) {
         throw "NoMatch: no recycle-bin item with LeafName='$LeafName' under DirName like '*$DirName'."
     }
-    if ($matches.Count -gt 1) {
-        $summary = ($matches | ForEach-Object {
+    if ($candidates.Count -gt 1) {
+        $summary = ($candidates | ForEach-Object {
             "id=$($_.Id) deleted=$($_.DeletedDate.ToString('o')) dir=$($_.DirName)"
         }) -join "; "
-        Write-Warning "AmbiguousMatch: $($matches.Count) candidates for '$LeafName' in '*$DirName'; picking newest. Candidates: $summary"
+        Write-Warning "AmbiguousMatch: $($candidates.Count) candidates for '$LeafName' in '*$DirName'; picking newest. Candidates: $summary"
     }
-    return $matches[0]
+    return $candidates[0]
 }
 
 function Resolve-SiteUrlFromDriveId {
