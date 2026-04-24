@@ -7,13 +7,16 @@ from pathlib import Path
 
 from fazla_od.audit import AuditLogger
 from fazla_od.cli._common import build_graph_client
+from fazla_od.cli.label import _lookup_label_item
 from fazla_od.cli.move import _lookup_item
 from fazla_od.config import load_config
+from fazla_od.graph import GraphError
 from fazla_od.mutate.delete import execute_recycle_delete, execute_restore
 from fazla_od.mutate.label import execute_label_apply, execute_label_remove
 from fazla_od.mutate.move import execute_move
 from fazla_od.mutate.rename import execute_rename
 from fazla_od.mutate.undo import Irreversible, build_reverse_operation
+from fazla_od.safety import ScopeViolation, assert_scope_allowed
 
 
 def run_undo(*, config_path: Path, op_id: str, confirm: bool,
@@ -32,10 +35,29 @@ def run_undo(*, config_path: Path, op_id: str, confirm: bool,
         return 0
 
     graph = build_graph_client(cfg, scope=None)
+
+    use_label_lookup = rev.action in ("label-apply", "label-remove")
+    lookup_fn = _lookup_label_item if use_label_lookup else _lookup_item
     try:
-        before = _lookup_item(graph, rev.drive_id, rev.item_id)
-    except Exception:
+        before = lookup_fn(graph, rev.drive_id, rev.item_id)
+    except GraphError:
+        # restore-from-recycle and label-remove can legitimately 404 here; proceed
+        # with minimal metadata. Transient/auth errors propagate via this too, but
+        # they'd surface immediately at execute time.
         before = {"parent_path": "(unknown)", "name": ""}
+        if use_label_lookup:
+            # execute_label_* needs this key even if empty.
+            before["server_relative_url"] = ""
+
+    scope_probe = {"drive_id": rev.drive_id, "item_id": rev.item_id,
+                   "full_path": before.get("parent_path", "") + "/" + before.get("name", ""),
+                   "name": before.get("name", ""),
+                   "parent_path": before.get("parent_path", "")}
+    try:
+        assert_scope_allowed(type("X", (), scope_probe)(), cfg, unsafe_scope=unsafe_scope)
+    except ScopeViolation as e:
+        print(f"scope violation: {e}", file=sys.stderr)
+        return 2
 
     if rev.action == "rename":
         r = execute_rename(rev, graph, logger, before=before)

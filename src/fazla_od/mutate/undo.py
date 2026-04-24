@@ -49,15 +49,16 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
         )
 
     if cmd == "od-move":
-        args: dict = {}
-        if "parent_id" in before:
-            args["new_parent_item_id"] = before["parent_id"]
-        else:
-            args["new_parent_path"] = before.get("parent_path", "/")
+        if "parent_id" not in before:
+            raise Irreversible(
+                f"move op {op_id!r} audit record has no parent_id in before; "
+                f"cannot auto-reverse (catalog would need to re-resolve "
+                f"{before.get('parent_path', '?')!r} to a drive-item id)."
+            )
         return Operation(
             op_id=new_op_id(), action="move",
             drive_id=drive_id, item_id=item_id,
-            args=args,
+            args={"new_parent_item_id": before["parent_id"]},
             dry_run_result=f"(undo of {op_id}) move back to "
                            f"{before.get('parent_path', '?')}",
         )
@@ -93,10 +94,16 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
         )
 
     if cmd == "od-label(apply)":
+        site_url = (start.get("args") or {}).get("site_url")
+        if not site_url:
+            raise Irreversible(
+                f"label-apply op {op_id!r} has no site_url in audit args; "
+                f"cannot build reverse-op"
+            )
         return Operation(
             op_id=new_op_id(), action="label-remove",
             drive_id=drive_id, item_id=item_id,
-            args={"site_url": start["args"]["site_url"]},
+            args={"site_url": site_url},
             dry_run_result=f"(undo of {op_id}) remove label "
                            f"{start['args'].get('label','?')!r}",
         )
@@ -107,10 +114,16 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
             raise Irreversible(
                 f"op {op_id!r} removed a label but prior label unknown"
             )
+        site_url = (start.get("args") or {}).get("site_url")
+        if not site_url:
+            raise Irreversible(
+                f"label-remove op {op_id!r} has no site_url in audit args; "
+                f"cannot build reverse-op"
+            )
         return Operation(
             op_id=new_op_id(), action="label-apply",
             drive_id=drive_id, item_id=item_id,
-            args={"site_url": start["args"]["site_url"], "label": prior_label},
+            args={"site_url": site_url, "label": prior_label},
             dry_run_result=f"(undo of {op_id}) re-apply {prior_label!r}",
         )
 

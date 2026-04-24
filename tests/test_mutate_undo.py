@@ -113,3 +113,62 @@ def test_reverse_unknown_op_id_raises(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     with pytest.raises(Irreversible, match="not found"):
         build_reverse_operation(logger, "nonexistent")
+
+
+def test_reverse_move_without_parent_id_is_irreversible(tmp_path):
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="M2", cmd="od-move",
+        args={"new_parent_item_id": "B"}, drive_id="d", item_id="i",
+        before={"parent_path": "/A", "name": "x"},  # NO parent_id
+        after={"parent_path": "/B", "name": "x"}, result="ok")
+    with pytest.raises(Irreversible, match="parent_id"):
+        build_reverse_operation(logger, "M2")
+
+
+def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="L2", cmd="od-label(remove)",
+        args={"site_url": "https://fazla.sharepoint.com/"},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/", "name": "x",
+                "server_relative_url": "/Documents/x",
+                "label": "Internal"},
+        after={"parent_path": "/", "name": "x", "label": None},
+        result="ok")
+    rev = build_reverse_operation(logger, "L2")
+    assert rev.action == "label-apply"
+    assert rev.args["label"] == "Internal"
+    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+
+
+def test_reverse_label_remove_without_prior_label_is_irreversible(tmp_path):
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="L3", cmd="od-label(remove)",
+        args={"site_url": "https://fazla.sharepoint.com/"},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/", "name": "x",
+                "server_relative_url": "/Documents/x"},  # no 'label' key
+        after={"parent_path": "/", "name": "x", "label": None},
+        result="ok")
+    with pytest.raises(Irreversible, match="prior label unknown"):
+        build_reverse_operation(logger, "L3")
+
+
+def test_reverse_old_versions_clean_is_irreversible(tmp_path):
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="V1", cmd="od-clean(old-versions)",
+        args={"keep": 3}, drive_id="d", item_id="i",
+        before={"parent_path": "/", "name": "x"},
+        after={"versions_deleted": ["v1", "v2"]}, result="ok")
+    with pytest.raises(Irreversible, match="version"):
+        build_reverse_operation(logger, "V1")
+
+
+def test_reverse_stale_shares_clean_is_irreversible(tmp_path):
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="S1", cmd="od-clean(stale-shares)",
+        args={"older_than_days": 90}, drive_id="d", item_id="i",
+        before={"parent_path": "/", "name": "x"},
+        after={"permissions_revoked": ["p1"]}, result="ok")
+    with pytest.raises(Irreversible, match="sharing link"):
+        build_reverse_operation(logger, "S1")
