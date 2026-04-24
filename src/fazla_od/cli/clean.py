@@ -101,9 +101,11 @@ def run_clean(
                 any_error = True
                 continue
             exec_fn = _ACTION_EXECUTORS[action]
-            result = exec_fn(op, graph, logger,
-                             before={"parent_path": meta["parent_path"],
-                                     "name": meta["name"]})
+            kwargs: dict = {"before": {"parent_path": meta["parent_path"],
+                                       "name": meta["name"]}}
+            if action == "recycle-purge":
+                kwargs["cfg"] = cfg
+            result = exec_fn(op, graph, logger, **kwargs)
             if result.status != "ok":
                 any_error = True
                 print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
@@ -168,9 +170,11 @@ def run_clean(
         exec_fn = _ACTION_EXECUTORS[action]
         for op in plan.operations:
             meta = _lookup_item(graph, op.drive_id, op.item_id)
-            result = exec_fn(op, graph, logger,
-                             before={"parent_path": meta["parent_path"],
-                                     "name": meta["name"]})
+            kwargs: dict = {"before": {"parent_path": meta["parent_path"],
+                                       "name": meta["name"]}}
+            if action == "recycle-purge":
+                kwargs["cfg"] = cfg
+            result = exec_fn(op, graph, logger, **kwargs)
             if result.status != "ok":
                 any_error = True
                 print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)

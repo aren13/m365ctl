@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import httpx
 
-from fazla_od.audit import AuditLogger
+from fazla_od.audit import AuditLogger, iter_audit_entries
+from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
 from fazla_od.graph import GraphClient
 from fazla_od.mutate.clean import (
     purge_recycle_bin_item,
@@ -18,6 +22,19 @@ def _client(handler):
     return GraphClient(token_provider=lambda: "t",
                        transport=httpx.MockTransport(handler),
                        sleep=lambda s: None)
+
+
+def _stub_cfg(tmp_path: Path) -> Config:
+    return Config(
+        tenant_id="tenant-1", client_id="client-1",
+        cert_path=tmp_path / "fazla-od.pfx",
+        cert_public=tmp_path / "fazla-od.cer",
+        default_auth="app-only",
+        scope=ScopeConfig(allow_drives=["d1"], allow_users=["*"],
+                          deny_paths=[], unsafe_requires_flag=True),
+        catalog=CatalogConfig(path=tmp_path / "catalog.duckdb"),
+        logging=LoggingConfig(ops_dir=tmp_path / "logs/ops"),
+    )
 
 
 def test_recycle_bin_purge_is_explicit_command(tmp_path):
@@ -36,6 +53,7 @@ def test_recycle_bin_purge_is_explicit_command(tmp_path):
                                     before={"parent_path": "(recycle bin)",
                                             "name": "old.txt"})
     assert result.status == "ok"
+    assert result.after["irreversible"] is True
     assert any("permanentDelete" in p for _, p in calls)
 
 
@@ -99,22 +117,131 @@ def test_revoke_stale_shares_only_touches_links_older_than_cutoff(tmp_path):
     assert deleted == ["p-stale"]
 
 
-def test_purge_404_wraps_with_manual_instructions(tmp_path):
-    """Graph /permanentDelete 404s on recycle-bin items; we add a line
-    pointing operators at SharePoint REST / PnP for the real purge."""
+def test_purge_404_wraps_with_manual_instructions(tmp_path, mocker):
+    """Graph /permanentDelete 404s on recycle-bin items AND pwsh is not
+    installed; we add a line pointing operators at SharePoint REST / PnP
+    for the real purge."""
     def handler(request):
+        if request.url.path.endswith("/permanentDelete"):
+            return httpx.Response(
+                404, json={"error": {"code": "itemNotFound",
+                                     "message": "Item not found"}}
+            )
+        # _lookup_site_url hits GET /drives/{id}
         return httpx.Response(
-            404, json={"error": {"code": "itemNotFound",
-                                 "message": "Item not found"}}
+            200,
+            json={"id": "d1",
+                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
+
+    # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
+    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+                 side_effect=FileNotFoundError("pwsh: not found"))
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-purge", action="recycle-purge",
                    drive_id="d1", item_id="I",
                    args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
                                     before={"parent_path": "(recycle bin)",
-                                            "name": "old.txt"})
+                                            "name": "old.txt"},
+                                    cfg=cfg)
     assert result.status == "error"
     assert "itemNotFound" in result.error
     assert "Clear-PnPRecycleBinItem" in result.error
+
+
+def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
+    """Graph returns itemNotFound; the PnP fallback runs and succeeds."""
+    def handler(request):
+        if request.url.path.endswith("/permanentDelete"):
+            return httpx.Response(
+                404, json={"error": {"code": "itemNotFound",
+                                     "message": "Item not found"}}
+            )
+        # _lookup_site_url hits GET /drives/{id}
+        return httpx.Response(
+            200,
+            json={"id": "d1",
+                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+        )
+
+    completed = MagicMock()
+    completed.returncode = 0
+    completed.stdout = json.dumps({
+        "recycle_bin_item_id": "abc-123",
+        "purged_name": "old.txt",
+    })
+    completed.stderr = ""
+    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+                       return_value=completed)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-p1", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                            "name": "old.txt"},
+                                    cfg=cfg)
+
+    assert result.status == "ok"
+    assert result.after["recycle_bin_item_id"] == "abc-123"
+    assert result.after["irreversible"] is True
+    assert result.after["parent_path"] == "(permanently deleted)"
+    # Subprocess called with the PS script + expected params.
+    run.assert_called_once()
+    argv = run.call_args[0][0]
+    assert argv[0] == "pwsh"
+    assert any(a.endswith("recycle-purge.ps1") for a in argv)
+    assert argv[argv.index("-Tenant") + 1] == "tenant-1"
+    assert argv[argv.index("-ClientId") + 1] == "client-1"
+    assert argv[argv.index("-SiteUrl") + 1] == "https://fazla.sharepoint.com/sites/Foo"
+    assert argv[argv.index("-LeafName") + 1] == "old.txt"
+    assert argv[argv.index("-DirName") + 1] == "/Shared Documents/_fazla_smoke"
+    # Audit-end recorded as ok.
+    entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-p1"]
+    assert entries[-1]["result"] == "ok"
+
+
+def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
+    """Graph returns 404; PS fallback runs but fails — stderr propagates
+    into CleanResult.error without the legacy manual-wrap text."""
+    def handler(request):
+        if request.url.path.endswith("/permanentDelete"):
+            return httpx.Response(
+                404, json={"error": {"code": "itemNotFound",
+                                     "message": "Item not found"}}
+            )
+        return httpx.Response(
+            200,
+            json={"id": "d1",
+                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+        )
+
+    completed = MagicMock()
+    completed.returncode = 1
+    completed.stdout = ""
+    completed.stderr = "Clear-PnPRecycleBinItem: access denied"
+    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+                 return_value=completed)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-p2", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                            "name": "old.txt"},
+                                    cfg=cfg)
+
+    assert result.status == "error"
+    assert "access denied" in result.error
+    # Guard against regression that re-wraps PS stderr with the legacy
+    # _ODFB_PURGE_MANUAL text; that phrase is unique to the manual wrap.
+    assert "Graph v1.0 /permanentDelete" not in result.error
+    entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-p2"]
+    assert entries[-1]["result"] == "error"
