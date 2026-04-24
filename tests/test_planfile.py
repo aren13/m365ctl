@@ -184,3 +184,32 @@ def test_plan_loader_accepts_phase3_mail_actions(tmp_path):
         "mail.move", "mail.copy", "mail.flag", "mail.read",
         "mail.focus", "mail.categorize", "mail.delete.soft",
     ]
+
+
+def test_plan_loader_accepts_phase5a_mail_actions(tmp_path):
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
+    import json
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({
+        "version": PLAN_SCHEMA_VERSION,
+        "created_at": "2026-04-25T00:00:00Z",
+        "source_cmd": "mail-send --from-plan",
+        "scope": "me",
+        "operations": [
+            {"op_id": "1", "action": "mail.draft.create", "drive_id": "me", "item_id": "", "args": {"subject": "hi"}},
+            {"op_id": "2", "action": "mail.draft.update", "drive_id": "me", "item_id": "d1", "args": {}},
+            {"op_id": "3", "action": "mail.draft.delete", "drive_id": "me", "item_id": "d1", "args": {}},
+            {"op_id": "4", "action": "mail.send",          "drive_id": "me", "item_id": "d1", "args": {}},
+            {"op_id": "5", "action": "mail.reply",         "drive_id": "me", "item_id": "m1", "args": {}},
+            {"op_id": "6", "action": "mail.reply.all",     "drive_id": "me", "item_id": "m1", "args": {}},
+            {"op_id": "7", "action": "mail.forward",       "drive_id": "me", "item_id": "m1", "args": {}},
+            {"op_id": "8", "action": "mail.attach.add",    "drive_id": "me", "item_id": "m1", "args": {}},
+            {"op_id": "9", "action": "mail.attach.remove", "drive_id": "me", "item_id": "m1", "args": {}},
+        ],
+    }))
+    plan = load_plan(path)
+    assert [op.action for op in plan.operations] == [
+        "mail.draft.create", "mail.draft.update", "mail.draft.delete",
+        "mail.send", "mail.reply", "mail.reply.all", "mail.forward",
+        "mail.attach.add", "mail.attach.remove",
+    ]

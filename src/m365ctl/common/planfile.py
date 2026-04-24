@@ -37,6 +37,10 @@ Action = Literal[
     # Phase 3 — safe message mutations.
     "mail.move", "mail.copy", "mail.flag", "mail.read",
     "mail.focus", "mail.categorize", "mail.delete.soft",
+    # Phase 5a — compose.
+    "mail.draft.create", "mail.draft.update", "mail.draft.delete",
+    "mail.send", "mail.reply", "mail.reply.all", "mail.forward",
+    "mail.attach.add", "mail.attach.remove",
 ]
 
 _VALID_ACTIONS: frozenset[str] = frozenset({
@@ -57,6 +61,10 @@ _VALID_ACTIONS: frozenset[str] = frozenset({
     # Phase 3 — safe message mutations.
     "mail.move", "mail.copy", "mail.flag", "mail.read",
     "mail.focus", "mail.categorize", "mail.delete.soft",
+    # Phase 5a — compose.
+    "mail.draft.create", "mail.draft.update", "mail.draft.delete",
+    "mail.send", "mail.reply", "mail.reply.all", "mail.forward",
+    "mail.attach.add", "mail.attach.remove",
 })
 
 _REQUIRED_OP_FIELDS = ("op_id", "action", "drive_id", "item_id", "args")
