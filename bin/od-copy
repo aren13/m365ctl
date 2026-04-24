@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli copy "$@"
+exec uv run --project "$REPO" python -m m365ctl od copy "$@"

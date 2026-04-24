@@ -9,12 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from fazla_od.cli._common import _expand_me_in_allow_drives
+from m365ctl.onedrive.cli._common import _expand_me_in_allow_drives
 
 
 def _cfg(allow: list[str]) -> object:
     """Build a minimal config-shaped stub. We only touch .scope.allow_drives."""
-    from fazla_od.config import (
+    from m365ctl.common.config import (
         CatalogConfig, Config, LoggingConfig, ScopeConfig,
     )
     return Config(
@@ -58,7 +58,7 @@ def test_expand_is_noop_for_app_only_scope() -> None:
 
 def test_expand_leaves_me_in_place_when_graph_errors() -> None:
     """Delegated token but /me/drive failed — safe fallback: keep sentinel."""
-    from fazla_od.graph import GraphError
+    from m365ctl.common.graph import GraphError
     cfg = _cfg(["me"])
     graph = MagicMock()
     graph.get.side_effect = GraphError("HTTP500: oops")

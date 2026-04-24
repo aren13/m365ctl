@@ -1,4 +1,4 @@
-# PnP.PowerShell setup for Fazla OneDrive Toolkit
+# PnP.PowerShell setup for m365ctl
 
 One-time setup to enable `od-audit-sharing`, which shells out to PowerShell.
 
@@ -42,20 +42,20 @@ PEM key + PEM cert we use for the Python flow. Run the one-shot helper:
 
 This produces `~/.config/fazla-od/fazla-od.pfx` (mode 600, gitignored —
 `~/.config/fazla-od/` is outside the repo) and stores a ~40-char random
-password in macOS Keychain under service `FazlaODToolkit:PfxPassword`,
+password in macOS Keychain under service `m365ctl:PfxPassword`,
 account `fazla-od`.
 
 Verify:
 ```bash
 ls -la ~/.config/fazla-od/fazla-od.pfx
-security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w | wc -c
+security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w | wc -c
 ```
 Expected: the PFX exists; the password is ~40 characters.
 
 ## 3. Confirm the Entra app has the same cert thumbprint
 
 The PFX is built from the exact same PEM key+cert that Plan 1 uploaded to
-Entra (thumbprint `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`). No new cert
+Entra (thumbprint `<your-cert-thumbprint>`). No new cert
 upload is required.
 
 ## 3b. Grant the Entra app SharePoint-API permissions (NOT just Graph)
@@ -81,21 +81,21 @@ Fix (one-time, tenant admin required):
 
 If you don't need full control, `Sites.Manage.All` works for `od-audit-sharing` (read-only on permissions). `od-label` requires `Sites.FullControl.All` to set sensitivity labels.
 
-The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps/recycle-purge.ps1`, both dot-sourcing `scripts/ps/_FazlaRecycleHelpers.ps1`) call `Restore-PnPRecycleBinItem` and `Clear-PnPRecycleBinItem` respectively. These are covered by the same `Sites.FullControl.All` grant above — no additional permission is needed.
+The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps/recycle-purge.ps1`, both dot-sourcing `scripts/ps/_M365ctlRecycleHelpers.ps1`) call `Restore-PnPRecycleBinItem` and `Clear-PnPRecycleBinItem` respectively. These are covered by the same `Sites.FullControl.All` grant above — no additional permission is needed.
 
 ## 4. Smoke-test the connection
 
 ```bash
 pwsh -NoLogo -Command '
     $pwd = ConvertTo-SecureString -String (
-        security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w
+        security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w
     ) -AsPlainText -Force
     Connect-PnPOnline `
-        -Tenant 361efb70-ca20-41ae-b204-9045df001350 `
-        -ClientId b22e6fd3-4859-43ae-b997-997ad3aaf14b `
+        -Tenant <your-tenant-id> `
+        -ClientId <your-client-id> `
         -CertificatePath "$HOME/.config/fazla-od/fazla-od.pfx" `
         -CertificatePassword $pwd `
-        -Url https://fazla.sharepoint.com
+        -Url https://<your-tenant>.sharepoint.com
     Get-PnPTenantSite | Select-Object -First 3 Url, Title
 '
 ```

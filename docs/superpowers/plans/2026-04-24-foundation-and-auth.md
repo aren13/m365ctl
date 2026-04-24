@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Scaffold the Fazla OneDrive Toolkit repo and ship a working `od-auth` command that authenticates against the Fazla M365 tenant via both delegated (device-code) and app-only (certificate) flows, providing the foundation every subsequent plan will build on.
+**Goal:** Scaffold the m365ctl repo and ship a working `od-auth` command that authenticates against the Microsoft 365 tenant via both delegated (device-code) and app-only (certificate) flows, providing the foundation every subsequent plan will build on.
 
-**Architecture:** Python 3.11+ package (`fazla_od`) managed by `uv`. MSAL-backed auth library with persistent delegated token cache. Thin `httpx`-based Graph client wrapper (no `msgraph-sdk` dependency yet — added in Plan 2). POSIX shell wrappers under `bin/` dispatch to a single Python entry point with subcommands. No mutating commands in Plan 1, so the audit-log and retry helpers are deferred to later plans.
+**Architecture:** Python 3.11+ package (`m365ctl`) managed by `uv`. MSAL-backed auth library with persistent delegated token cache. Thin `httpx`-based Graph client wrapper (no `msgraph-sdk` dependency yet — added in Plan 2). POSIX shell wrappers under `bin/` dispatch to a single Python entry point with subcommands. No mutating commands in Plan 1, so the audit-log and retry helpers are deferred to later plans.
 
 **Tech Stack:** Python 3.11+, `uv`, `msal`, `msal-extensions`, `httpx`, `pytest`, `pytest-mock`, bash, Microsoft Graph v1.0.
 
@@ -15,11 +15,11 @@
 - Git repo initialised; spec + plan committed; `config.toml` gitignored.
 
 **Inputs the engineer will need (already gathered):**
-- `tenant_id`: `361efb70-ca20-41ae-b204-9045df001350`
-- `client_id`: `b22e6fd3-4859-43ae-b997-997ad3aaf14b`
-- Cert private key: `~/.config/fazla-od/fazla-od.key` (PEM)
-- Cert public cert: `~/.config/fazla-od/fazla-od.cer` (PEM)
-- Cert SHA-1 thumbprint: `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`
+- `tenant_id`: `00000000-0000-0000-0000-000000000000`
+- `client_id`: `11111111-1111-1111-1111-111111111111`
+- Cert private key: `~/.config/m365ctl/m365ctl.key` (PEM)
+- Cert public cert: `~/.config/m365ctl/m365ctl.cer` (PEM)
+- Cert SHA-1 thumbprint: `<your-cert-thumbprint>`
 - Admin consent granted in Entra for BOTH Delegated and Application permission sets.
 
 **Domain primer (for engineers unfamiliar with M365):**
@@ -31,7 +31,7 @@
 ## File structure (end of Plan 1)
 
 ```
-Fazla-OneDrive/
+m365ctl/
 ├── .gitignore
 ├── AGENTS.md
 ├── README.md
@@ -40,11 +40,11 @@ Fazla-OneDrive/
 ├── pyproject.toml
 ├── uv.lock
 ├── bin/
-│   └── od-auth                     # bash wrapper → uv run python -m fazla_od.cli auth
+│   └── od-auth                     # bash wrapper → uv run python -m m365ctl.cli auth
 ├── src/
-│   └── fazla_od/
+│   └── m365ctl/
 │       ├── __init__.py
-│       ├── __main__.py             # python -m fazla_od entry
+│       ├── __main__.py             # python -m m365ctl entry
 │       ├── config.py               # TOML loader + Config dataclass
 │       ├── auth.py                 # MSAL wrapper (delegated + app-only)
 │       ├── graph.py                # httpx client with bearer-token helper
@@ -62,7 +62,7 @@ Fazla-OneDrive/
 └── docs/
     ├── superpowers/
     │   ├── specs/
-    │   │   └── 2026-04-24-fazla-onedrive-toolkit-design.md    # already exists
+    │   │   └── 2026-04-24-m365ctl-design.md    # already exists
     │   └── plans/
     │       └── 2026-04-24-foundation-and-auth.md              # this file
 ```
@@ -72,16 +72,16 @@ Fazla-OneDrive/
 ### Task 1: Initialise git repo and .gitignore
 
 **Files:**
-- Create: `/Users/ae/Projects/Fazla-OneDrive/.gitignore`
+- Create: `/Users/ae/Projects/m365ctl/.gitignore`
 
 - [ ] **Step 1: Initialise git**
 
 Run:
 ```bash
-cd /Users/ae/Projects/Fazla-OneDrive
+cd /Users/ae/Projects/m365ctl
 git init -b main
 ```
-Expected: `Initialized empty Git repository in .../Fazla-OneDrive/.git/`.
+Expected: `Initialized empty Git repository in .../m365ctl/.git/`.
 
 - [ ] **Step 2: Write `.gitignore`**
 
@@ -124,7 +124,7 @@ Run:
 ```bash
 git status
 ```
-Expected: `Untracked files:` list; no file path mentions `config.toml`, `rclone.conf`, `~/.config/fazla-od`, or any `.key`/`.cer`.
+Expected: `Untracked files:` list; no file path mentions `config.toml`, `rclone.conf`, `~/.config/m365ctl`, or any `.key`/`.cer`.
 
 - [ ] **Step 4: Commit**
 
@@ -138,7 +138,7 @@ git commit -m "chore: initial .gitignore"
 ### Task 2: Commit the approved spec and this plan
 
 **Files:**
-- Already exist: `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`, `docs/superpowers/plans/2026-04-24-foundation-and-auth.md`
+- Already exist: `docs/superpowers/specs/2026-04-24-m365ctl-design.md`, `docs/superpowers/plans/2026-04-24-foundation-and-auth.md`
 
 - [ ] **Step 1: Stage and commit**
 
@@ -167,9 +167,9 @@ Expected: `uv 0.5.x` or newer. If missing, install with `brew install uv`.
 
 ```toml
 [project]
-name = "fazla-od"
+name = "m365ctl"
 version = "0.1.0"
-description = "CLI toolkit for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant via Microsoft Graph."
+description = "CLI toolkit for admin-scoped control of the m365ctl M365 OneDrive + SharePoint tenant via Microsoft Graph."
 requires-python = ">=3.11"
 dependencies = [
     "msal>=1.28",
@@ -186,20 +186,20 @@ dev = [
 ]
 
 [project.scripts]
-fazla-od = "fazla_od.cli.__main__:main"
+m365ctl = "m365ctl.cli.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fazla_od"]
+packages = ["src/m365ctl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
 markers = [
-    "live: hits real Microsoft Graph; requires FAZLA_OD_LIVE_TESTS=1",
+    "live: hits real Microsoft Graph; requires M365CTL_LIVE_TESTS=1",
 ]
 
 [tool.ruff]
@@ -210,11 +210,11 @@ target-version = "py311"
 - [ ] **Step 3: Write minimal `README.md`**
 
 ```markdown
-# Fazla OneDrive Toolkit
+# m365ctl
 
-CLI for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant.
+CLI for admin-scoped control of the m365ctl M365 OneDrive + SharePoint tenant.
 
-See `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md` for the full design.
+See `docs/superpowers/specs/2026-04-24-m365ctl-design.md` for the full design.
 
 ## Quick start (after Plan 1)
 
@@ -227,22 +227,22 @@ See `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md` for the
 See spec §9 for the full layout. After Plan 1 only `bin/od-auth` exists.
 ```
 
-- [ ] **Step 4: Create the `src/fazla_od/` package with stub files**
+- [ ] **Step 4: Create the `src/m365ctl/` package with stub files**
 
 ```bash
-mkdir -p src/fazla_od/cli tests
-touch src/fazla_od/__init__.py src/fazla_od/cli/__init__.py tests/__init__.py
+mkdir -p src/m365ctl/cli tests
+touch src/m365ctl/__init__.py src/m365ctl/cli/__init__.py tests/__init__.py
 ```
 
-Write `src/fazla_od/__main__.py`:
+Write `src/m365ctl/__main__.py`:
 ```python
-from fazla_od.cli.__main__ import main
+from m365ctl.cli.__main__ import main
 
 if __name__ == "__main__":
     main()
 ```
 
-Write `src/fazla_od/cli/__main__.py` (stub — will be expanded in Task 9):
+Write `src/m365ctl/cli/__main__.py` (stub — will be expanded in Task 9):
 ```python
 import sys
 
@@ -250,7 +250,7 @@ import sys
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
-        print("usage: fazla-od <subcommand> [args...]", file=sys.stderr)
+        print("usage: m365ctl <subcommand> [args...]", file=sys.stderr)
         return 2
     print(f"unknown subcommand: {argv[0]}", file=sys.stderr)
     return 2
@@ -272,15 +272,15 @@ Expected: `Resolved N packages`, `Installed N packages`, and a `.venv/` director
 
 Run:
 ```bash
-uv run python -c "import fazla_od; print(fazla_od.__name__)"
+uv run python -c "import m365ctl; print(m365ctl.__name__)"
 ```
-Expected: `fazla_od`.
+Expected: `m365ctl`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add pyproject.toml uv.lock README.md src/
-git commit -m "chore: scaffold fazla_od Python package with uv"
+git commit -m "chore: scaffold m365ctl Python package with uv"
 ```
 
 ---
@@ -289,7 +289,7 @@ git commit -m "chore: scaffold fazla_od Python package with uv"
 
 **Files:**
 - Create: `tests/test_config.py`
-- Create: `src/fazla_od/config.py`
+- Create: `src/m365ctl/config.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -299,17 +299,17 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.config import Config, ConfigError, load_config
+from m365ctl.config import Config, ConfigError, load_config
 
 
 def _valid_toml(tmp_path: Path) -> Path:
     p = tmp_path / "config.toml"
     p.write_text(
         """
-tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
-client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
-cert_path    = "~/.config/fazla-od/fazla-od.key"
-cert_public  = "~/.config/fazla-od/fazla-od.cer"
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
 default_auth = "delegated"
 
 [scope]
@@ -332,8 +332,8 @@ ops_dir = "logs/ops"
 def test_load_returns_config_with_parsed_fields(tmp_path: Path) -> None:
     cfg = load_config(_valid_toml(tmp_path))
     assert isinstance(cfg, Config)
-    assert cfg.tenant_id == "361efb70-ca20-41ae-b204-9045df001350"
-    assert cfg.client_id == "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+    assert cfg.tenant_id == "00000000-0000-0000-0000-000000000000"
+    assert cfg.client_id == "11111111-1111-1111-1111-111111111111"
     assert cfg.default_auth == "delegated"
     assert cfg.scope.allow_drives == ["me"]
 
@@ -373,13 +373,13 @@ Run:
 ```bash
 uv run pytest tests/test_config.py -v
 ```
-Expected: all 5 tests FAIL with `ModuleNotFoundError: No module named 'fazla_od.config'` or `ImportError`.
+Expected: all 5 tests FAIL with `ModuleNotFoundError: No module named 'm365ctl.config'` or `ImportError`.
 
 - [ ] **Step 3: Implement `config.py`**
 
-Create `src/fazla_od/config.py`:
+Create `src/m365ctl/config.py`:
 ```python
-"""TOML-backed configuration loader for fazla_od.
+"""TOML-backed configuration loader for m365ctl.
 
 The config file is usually at the repo root (`config.toml`); all paths
 inside are expanded with `~` → `$HOME` but are not resolved against the
@@ -506,7 +506,7 @@ Expected: all 5 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/config.py tests/test_config.py
+git add src/m365ctl/config.py tests/test_config.py
 git commit -m "feat(config): TOML-backed Config loader with validation"
 ```
 
@@ -520,13 +520,13 @@ git commit -m "feat(config): TOML-backed Config loader with validation"
 - [ ] **Step 1: Write the example**
 
 ```toml
-# Fazla OneDrive Toolkit — configuration template.
+# m365ctl — configuration template.
 # Copy to `config.toml` (gitignored) and fill in.
 
-tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
-client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
-cert_path    = "~/.config/fazla-od/fazla-od.key"   # PEM, private key, mode 600
-cert_public  = "~/.config/fazla-od/fazla-od.cer"   # PEM, public cert (also uploaded to Entra)
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"   # PEM, private key, mode 600
+cert_public  = "~/.config/m365ctl/m365ctl.cer"   # PEM, public cert (also uploaded to Entra)
 default_auth = "delegated"                          # or "app-only"
 
 [scope]
@@ -573,7 +573,7 @@ git commit -m "feat(config): config.toml.example template"
 
 **Files:**
 - Create: `tests/test_auth.py`
-- Create: `src/fazla_od/auth.py`
+- Create: `src/m365ctl/auth.py`
 
 - [ ] **Step 1: Write failing tests for app-only auth**
 
@@ -587,18 +587,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.auth import (
+from m365ctl.auth import (
     AppOnlyCredential,
     AuthError,
     CertInfo,
     DelegatedCredential,
     get_cert_info,
 )
-from fazla_od.config import Config, load_config
+from m365ctl.config import Config, load_config
 
 LIVE = pytest.mark.skipif(
-    os.environ.get("FAZLA_OD_LIVE_TESTS") != "1",
-    reason="live Graph test; set FAZLA_OD_LIVE_TESTS=1 to run",
+    os.environ.get("M365CTL_LIVE_TESTS") != "1",
+    reason="live Graph test; set M365CTL_LIVE_TESTS=1 to run",
 )
 
 
@@ -630,7 +630,7 @@ def test_app_only_acquires_token_using_cert(
 ) -> None:
     # Stub the cert thumbprint helper — we don't want to parse a fake cert here.
     mocker.patch(
-        "fazla_od.auth.get_cert_info",
+        "m365ctl.auth.get_cert_info",
         return_value=CertInfo(
             subject="CN=Test",
             thumbprint="ABCDEF",
@@ -653,7 +653,7 @@ def test_app_only_acquires_token_using_cert(
 
 def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
     mocker.patch(
-        "fazla_od.auth.get_cert_info",
+        "m365ctl.auth.get_cert_info",
         return_value=CertInfo("CN=x", "AB", "2028-01-01T00:00:00Z", 900),
     )
     mock_app = MagicMock()
@@ -669,7 +669,7 @@ def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
 
 
 @LIVE
-def test_live_app_only_against_fazla_tenant() -> None:
+def test_live_app_only_against_tenant() -> None:
     """Smoke test: real cert, real Entra. Requires config.toml + cert on disk."""
     cfg = load_config(Path("config.toml"))
     cred = AppOnlyCredential(cfg)
@@ -683,13 +683,13 @@ Run:
 ```bash
 uv run pytest tests/test_auth.py -v
 ```
-Expected: FAIL with `ModuleNotFoundError: No module named 'fazla_od.auth'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'm365ctl.auth'`.
 
 - [ ] **Step 3: Implement app-only half of `auth.py`**
 
-Create `src/fazla_od/auth.py`:
+Create `src/m365ctl/auth.py`:
 ```python
-"""MSAL-backed authentication for fazla_od.
+"""MSAL-backed authentication for m365ctl.
 
 Two flows, both using the same Azure AD app registration:
 
@@ -711,7 +711,7 @@ import msal
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
-from fazla_od.config import Config
+from m365ctl.config import Config
 
 GRAPH_SCOPES_APP_ONLY = ["https://graph.microsoft.com/.default"]
 
@@ -795,7 +795,7 @@ Expected: the two mocked `test_app_only_*` tests PASS. The live test is SKIPPED.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/auth.py tests/test_auth.py
+git add src/m365ctl/auth.py tests/test_auth.py
 git commit -m "feat(auth): cert-based app-only credential with MSAL"
 ```
 
@@ -804,7 +804,7 @@ git commit -m "feat(auth): cert-based app-only credential with MSAL"
 ### Task 7: Delegated (device-code) auth with persistent cache
 
 **Files:**
-- Modify: `src/fazla_od/auth.py`
+- Modify: `src/m365ctl/auth.py`
 - Modify: `tests/test_auth.py`
 
 - [ ] **Step 1: Add failing tests for delegated credential**
@@ -823,11 +823,11 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
     }
     mock_app.acquire_token_by_device_flow.return_value = {
         "access_token": "delegated-t0k3n",
-        "id_token_claims": {"preferred_username": "test@fazla.com"},
+        "id_token_claims": {"preferred_username": "test@example.com"},
     }
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
 
     printed: list[str] = []
     cred = DelegatedCredential(cfg, prompt=lambda msg: printed.append(msg))
@@ -840,10 +840,10 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
 
 def test_delegated_get_token_uses_cached_account(cfg: Config, mocker) -> None:
     mock_app = MagicMock()
-    mock_app.get_accounts.return_value = [{"username": "cached@fazla.com"}]
+    mock_app.get_accounts.return_value = [{"username": "cached@example.com"}]
     mock_app.acquire_token_silent.return_value = {"access_token": "cached-t0k3n"}
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     token = cred.get_token()
@@ -856,7 +856,7 @@ def test_delegated_get_token_raises_when_not_logged_in(cfg: Config, mocker) -> N
     mock_app = MagicMock()
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     with pytest.raises(AuthError, match="not logged in"):
@@ -873,7 +873,7 @@ Expected: 3 tests FAIL — the first two with `NotImplementedError`, the third s
 
 - [ ] **Step 3: Replace the `DelegatedCredential` placeholder**
 
-Two edits to `src/fazla_od/auth.py`:
+Two edits to `src/m365ctl/auth.py`:
 
 **(a)** Add these imports at the top of the file, next to the existing imports (not inside the class below):
 ```python
@@ -891,7 +891,7 @@ GRAPH_SCOPES_DELEGATED = [
     "User.Read",
 ]
 
-_CACHE_DIR = Path.home() / ".config" / "fazla-od"
+_CACHE_DIR = Path.home() / ".config" / "m365ctl"
 _CACHE_FILE = _CACHE_DIR / "token_cache.bin"
 
 
@@ -900,7 +900,7 @@ def _load_persistent_cache() -> msal.SerializableTokenCache | None:
 
     We use a plain file at mode 600 rather than msal-extensions' Keychain
     integration because the latter has historical stability issues on
-    macOS. The file sits in ~/.config/fazla-od/ alongside the cert and
+    macOS. The file sits in ~/.config/m365ctl/ alongside the cert and
     inherits the directory's 700 permissions.
     """
     cache = msal.SerializableTokenCache()
@@ -981,7 +981,7 @@ Expected: 5 PASS (2 app-only + 3 delegated), 1 SKIP (live).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/auth.py tests/test_auth.py
+git add src/m365ctl/auth.py tests/test_auth.py
 git commit -m "feat(auth): delegated device-code credential with persistent cache"
 ```
 
@@ -990,7 +990,7 @@ git commit -m "feat(auth): delegated device-code credential with persistent cach
 ### Task 8: Graph client wrapper
 
 **Files:**
-- Create: `src/fazla_od/graph.py`
+- Create: `src/m365ctl/graph.py`
 - Create: `tests/test_graph.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1002,7 +1002,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError
+from m365ctl.graph import GraphClient, GraphError
 
 
 def test_get_attaches_bearer_token() -> None:
@@ -1041,11 +1041,11 @@ Run:
 ```bash
 uv run pytest tests/test_graph.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.graph'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.graph'`.
 
 - [ ] **Step 3: Implement `graph.py`**
 
-Create `src/fazla_od/graph.py`:
+Create `src/m365ctl/graph.py`:
 ```python
 """Thin httpx-backed Microsoft Graph client.
 
@@ -1108,7 +1108,7 @@ Expected: both tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/graph.py tests/test_graph.py
+git add src/m365ctl/graph.py tests/test_graph.py
 git commit -m "feat(graph): minimal httpx Graph client with bearer-token helper"
 ```
 
@@ -1117,8 +1117,8 @@ git commit -m "feat(graph): minimal httpx Graph client with bearer-token helper"
 ### Task 9: `auth login` / `auth whoami` subcommands
 
 **Files:**
-- Create: `src/fazla_od/cli/auth.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Create: `src/m365ctl/cli/auth.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 - Create: `tests/test_cli_auth.py`
 
 - [ ] **Step 1: Write failing tests for `whoami`**
@@ -1132,7 +1132,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.cli.auth import run_whoami
+from m365ctl.cli.auth import run_whoami
 
 
 def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
@@ -1142,52 +1142,52 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
     cfg.client_id = "client-uuid"
     cfg.cert_path = tmp_path / "k"
     cfg.cert_public = tmp_path / "c"
-    mocker.patch("fazla_od.cli.auth.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.auth.load_config", return_value=cfg)
 
     delegated = MagicMock()
     delegated.get_token.return_value = "deleg"
-    mocker.patch("fazla_od.cli.auth.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.cli.auth.DelegatedCredential", return_value=delegated)
 
     app_only = MagicMock()
-    app_only.cert_info.subject = "CN=FazlaODToolkit"
+    app_only.cert_info.subject = "CN=m365ctl"
     app_only.cert_info.thumbprint = "ABCDEF"
     app_only.cert_info.days_until_expiry = 728
     app_only.cert_info.not_after_utc = "2028-04-22T22:12:10+00:00"
     app_only.get_token.return_value = "app"
-    mocker.patch("fazla_od.cli.auth.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.cli.auth.AppOnlyCredential", return_value=app_only)
 
     graph = MagicMock()
     graph.get.side_effect = [
-        {"displayName": "Arda Eren", "userPrincipalName": "arda@fazla.com"},
-        {"displayName": "FazlaODToolkit"},
+        {"displayName": "Arda Eren", "userPrincipalName": "arda@example.com"},
+        {"displayName": "m365ctl"},
     ]
-    mocker.patch("fazla_od.cli.auth.GraphClient", return_value=graph)
+    mocker.patch("m365ctl.cli.auth.GraphClient", return_value=graph)
 
     rc = run_whoami(config_path=tmp_path / "config.toml")
     out = capsys.readouterr().out
 
     assert rc == 0
     assert "Arda Eren" in out
-    assert "arda@fazla.com" in out
-    assert "FazlaODToolkit" in out
+    assert "arda@example.com" in out
+    assert "m365ctl" in out
     assert "ABCDEF" in out
     assert "728" in out
     assert "tenant-uuid" in out
 
 
 def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
-    from fazla_od.auth import AuthError
+    from m365ctl.auth import AuthError
 
     cfg = MagicMock()
     cfg.tenant_id = "t"
     cfg.client_id = "c"
     cfg.cert_public = tmp_path / "c"
     cfg.cert_path = tmp_path / "k"
-    mocker.patch("fazla_od.cli.auth.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.auth.load_config", return_value=cfg)
 
     delegated = MagicMock()
     delegated.get_token.side_effect = AuthError("not logged in; run `od-auth login` first")
-    mocker.patch("fazla_od.cli.auth.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.cli.auth.DelegatedCredential", return_value=delegated)
 
     app_only = MagicMock()
     app_only.cert_info.subject = "CN=x"
@@ -1195,18 +1195,18 @@ def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
     app_only.cert_info.days_until_expiry = 700
     app_only.cert_info.not_after_utc = "2028-01-01T00:00:00+00:00"
     app_only.get_token.return_value = "app"
-    mocker.patch("fazla_od.cli.auth.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.cli.auth.AppOnlyCredential", return_value=app_only)
 
     graph = MagicMock()
-    graph.get.return_value = {"displayName": "FazlaODToolkit"}
-    mocker.patch("fazla_od.cli.auth.GraphClient", return_value=graph)
+    graph.get.return_value = {"displayName": "m365ctl"}
+    mocker.patch("m365ctl.cli.auth.GraphClient", return_value=graph)
 
     rc = run_whoami(config_path=tmp_path / "config.toml")
     out = capsys.readouterr().out
 
     assert rc == 0
     assert "not logged in" in out.lower()
-    assert "FazlaODToolkit" in out  # app-only still works
+    assert "m365ctl" in out  # app-only still works
 ```
 
 - [ ] **Step 2: Verify they fail**
@@ -1215,11 +1215,11 @@ Run:
 ```bash
 uv run pytest tests/test_cli_auth.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.cli.auth'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.cli.auth'`.
 
 - [ ] **Step 3: Implement `cli/auth.py`**
 
-Create `src/fazla_od/cli/auth.py`:
+Create `src/m365ctl/cli/auth.py`:
 ```python
 """`od-auth` subcommands: login and whoami."""
 from __future__ import annotations
@@ -1227,13 +1227,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from fazla_od.auth import (
+from m365ctl.auth import (
     AppOnlyCredential,
     AuthError,
     DelegatedCredential,
 )
-from fazla_od.config import load_config
-from fazla_od.graph import GraphClient
+from m365ctl.config import load_config
+from m365ctl.graph import GraphClient
 
 
 def run_login(config_path: Path) -> int:
@@ -1247,7 +1247,7 @@ def run_login(config_path: Path) -> int:
 def run_whoami(config_path: Path) -> int:
     cfg = load_config(config_path)
 
-    print("Fazla OneDrive Toolkit")
+    print("m365ctl")
     print("======================")
     print(f"Tenant:                {cfg.tenant_id}")
 
@@ -1315,19 +1315,19 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 4: Wire the subcommand into `cli/__main__.py`**
 
-Replace the contents of `src/fazla_od/cli/__main__.py`:
+Replace the contents of `src/m365ctl/cli/__main__.py`:
 ```python
-"""fazla-od command dispatcher.
+"""m365ctl command dispatcher.
 
-The single Python entry point is ``fazla-od``; individual ``od-*`` names
+The single Python entry point is ``m365ctl``; individual ``od-*`` names
 are produced by POSIX shell wrappers in ``bin/`` that translate e.g.
-``od-auth whoami`` into ``fazla-od auth whoami``.
+``od-auth whoami`` into ``m365ctl auth whoami``.
 """
 from __future__ import annotations
 
 import sys
 
-from fazla_od.cli import auth as auth_cli
+from m365ctl.cli import auth as auth_cli
 
 _SUBCOMMANDS = {
     "auth": auth_cli.main,
@@ -1337,7 +1337,7 @@ _SUBCOMMANDS = {
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     if not argv or argv[0] in {"-h", "--help"}:
-        print("usage: fazla-od <subcommand> [args...]")
+        print("usage: m365ctl <subcommand> [args...]")
         print(f"  subcommands: {', '.join(_SUBCOMMANDS)}")
         return 0 if argv else 2
     sub = argv[0]
@@ -1376,7 +1376,7 @@ Breakdown:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/fazla_od/cli/ tests/test_cli_auth.py
+git add src/m365ctl/cli/ tests/test_cli_auth.py
 git commit -m "feat(cli): od-auth login / whoami subcommands"
 ```
 
@@ -1392,7 +1392,7 @@ git commit -m "feat(cli): od-auth login / whoami subcommands"
 Create `bin/od-auth` with exactly:
 ```bash
 #!/usr/bin/env bash
-# od-auth — dispatch to fazla-od auth subcommand.
+# od-auth — dispatch to m365ctl auth subcommand.
 # The wrapper lives here rather than in pyproject [project.scripts] so
 # users can invoke `./bin/od-auth` directly from a repo clone without
 # installing the package, and so future tools added under `bin/` use a
@@ -1400,7 +1400,7 @@ Create `bin/od-auth` with exactly:
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli auth "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli auth "$@"
 ```
 
 - [ ] **Step 2: Make it executable**
@@ -1434,13 +1434,13 @@ git commit -m "feat(cli): bin/od-auth bash wrapper"
 - [ ] **Step 1: Write it**
 
 ```markdown
-# AGENTS.md — Fazla OneDrive Toolkit
+# AGENTS.md — m365ctl
 
 Notes for Claude Code (and any agentic assistant) operating this repo.
 
 ## What this is
 
-A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
+A CLI for admin-scoped control of the Microsoft 365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-m365ctl-design.md`. Plans are under `docs/superpowers/plans/`.
 
 ## Current CLI surface (Plan 1 complete)
 
@@ -1456,7 +1456,7 @@ All other commands from the spec (`od-search`, `od-inventory`, `od-move`, …) a
 ## Safety model (already in effect)
 
 - `config.toml` is **gitignored**. Never `git add` it. The tracked template is `config.toml.example`.
-- Cert private key is at `~/.config/fazla-od/fazla-od.key` (mode 600) — outside this repo. Never read, cat, or commit it.
+- Cert private key is at `~/.config/m365ctl/m365ctl.key` (mode 600) — outside this repo. Never read, cat, or commit it.
 - `cache/`, `workspaces/`, `logs/` are gitignored runtime dirs.
 
 When mutating commands ship (Plan 4):
@@ -1466,7 +1466,7 @@ When mutating commands ship (Plan 4):
 
 ## Authentication at a glance
 
-- **Delegated** (`./bin/od-auth login`): device-code; user signs in once, token cached in `~/.config/fazla-od/token_cache.bin`.
+- **Delegated** (`./bin/od-auth login`): device-code; user signs in once, token cached in `~/.config/m365ctl/token_cache.bin`.
 - **App-only**: certificate-based, zero user interaction per run. Used automatically by commands that need tenant-wide access.
 
 Both flows run against the same Entra app; admin consent is granted for both.
@@ -1476,7 +1476,7 @@ Both flows run against the same Entra app; admin consent is granted for both.
 ```bash
 uv sync --extra dev
 uv run pytest          # unit + mocked
-FAZLA_OD_LIVE_TESTS=1 uv run pytest -m live    # hits real Graph
+M365CTL_LIVE_TESTS=1 uv run pytest -m live    # hits real Graph
 ```
 ```
 
@@ -1491,17 +1491,17 @@ git commit -m "docs: AGENTS.md v1 (Plan 1 surface)"
 
 ### Task 12: End-to-end live smoke test
 
-This task has **no code** — it verifies the real system works against the Fazla tenant. Cannot be done on CI; must be done on the user's machine with the cert present.
+This task has **no code** — it verifies the real system works against the m365ctl tenant. Cannot be done on CI; must be done on the user's machine with the cert present.
 
 - [ ] **Step 1: Pre-flight checks**
 
 Run:
 ```bash
-ls -la ~/.config/fazla-od/
-test -r ~/.config/fazla-od/fazla-od.key && echo "key readable"
-test -r ~/.config/fazla-od/fazla-od.cer && echo "cer readable"
+ls -la ~/.config/m365ctl/
+test -r ~/.config/m365ctl/m365ctl.key && echo "key readable"
+test -r ~/.config/m365ctl/m365ctl.cer && echo "cer readable"
 ```
-Expected: `fazla-od.key` (mode -rw-------), `fazla-od.cer` (mode -rw-r--r--), both "readable" printed.
+Expected: `m365ctl.key` (mode -rw-------), `m365ctl.cer` (mode -rw-r--r--), both "readable" printed.
 
 - [ ] **Step 2: Confirm `config.toml` exists and points at real values**
 
@@ -1509,18 +1509,18 @@ Run:
 ```bash
 grep -E "^(tenant_id|client_id|cert_path|cert_public)" config.toml
 ```
-Expected: tenant_id=`361efb70-...`, client_id=`b22e6fd3-...`, both cert paths resolving under `~/.config/fazla-od/`.
+Expected: tenant_id=`00000000-...`, client_id=`11111111-...`, both cert paths resolving under `~/.config/m365ctl/`.
 
 - [ ] **Step 3: App-only flow (no browser needed)**
 
 Run:
 ```bash
-FAZLA_OD_LIVE_TESTS=1 uv run pytest tests/test_auth.py -m live -v
+M365CTL_LIVE_TESTS=1 uv run pytest tests/test_auth.py -m live -v
 ```
-Expected: `test_live_app_only_against_fazla_tenant PASSED`.
+Expected: `test_live_app_only_against_tenant PASSED`.
 
 If it fails with `invalid_client` or `AADSTS700016`:
-- Confirm cert thumbprint in Entra matches `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`.
+- Confirm cert thumbprint in Entra matches `<your-cert-thumbprint>`.
 - Confirm admin consent is still granted (green checks on all permissions).
 
 - [ ] **Step 4: Delegated login flow**
@@ -1530,7 +1530,7 @@ Run:
 ./bin/od-auth login
 ```
 Expected: prints a message like `To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code XXXX-YYYY to authenticate.`
-Open the URL, enter the code, complete sign-in with your Fazla tenant account.
+Open the URL, enter the code, complete sign-in with your m365ctl tenant account.
 Final line: `Logged in. Token length: NNNN. Cache persisted.`
 
 - [ ] **Step 5: Whoami**
@@ -1541,12 +1541,12 @@ Run:
 ```
 Expected output shape:
 ```
-Fazla OneDrive Toolkit
+m365ctl
 ======================
-Tenant:                361efb70-ca20-41ae-b204-9045df001350
-Delegated identity:    <Your Name> <you@fazla.com>
-App-only identity:     FazlaODToolkit (appId b22e6fd3-...)
-App-only cert:         CN=FazlaODToolkit, thumbprint C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF, expires 2028-04-22T22:12:10+00:00 (NNN days)
+Tenant:                00000000-0000-0000-0000-000000000000
+Delegated identity:    <Your Name> <you@example.com>
+App-only identity:     m365ctl (appId 11111111-...)
+App-only cert:         CN=m365ctl, thumbprint <your-cert-thumbprint>, expires 2028-04-22T22:12:10+00:00 (NNN days)
 Catalog:               not yet built (Plan 2)
 ```
 
@@ -1554,7 +1554,7 @@ Catalog:               not yet built (Plan 2)
 
 Run:
 ```bash
-ls -la ~/.config/fazla-od/token_cache.bin
+ls -la ~/.config/m365ctl/token_cache.bin
 ```
 Expected: mode `-rw-------` (0600), owner = you.
 
@@ -1600,14 +1600,14 @@ Plan 2 (Catalog) picks up from here: it depends on `load_config`, `AppOnlyCreden
 - **Smoke test run:** 2026-04-24
 - **Unit tests:** 14 passed + 1 live-skipped (pytest); 1 selected via `-m live` after marker fix.
 - **Live app-only flow:** PASSED (cert-based client_credentials against real Entra).
-- **Live delegated flow:** PASSED after config change (see gotcha below). Identity resolved via `/me` = `Arda Eren <arda@fazla.com>`.
-- **App-only identity via Graph:** `Fazla OneDrive Toolkit` (via `/applications(appId=...)`).
+- **Live delegated flow:** PASSED after config change (see gotcha below). Identity resolved via `/me` = `Arda Eren <arda@example.com>`.
+- **App-only identity via Graph:** `m365ctl` (via `/applications(appId=...)`).
 - **Cert expiry at smoke-test time:** 729 days. Rotate reminder: ~2028-02.
-- **Token cache:** `~/.config/fazla-od/token_cache.bin`, mode `0600`, outside repo.
+- **Token cache:** `~/.config/m365ctl/token_cache.bin`, mode `0600`, outside repo.
 
 ### Gotcha encountered (documented so Plan 2+ can rely on it)
 
-The Entra app registration ships with **"Allow public client flows" = No**. The device-code delegated flow fails with `AADSTS7000218` ("request body must contain 'client_assertion' or 'client_secret'") until that toggle is set to **Yes**. Fixed in the Fazla tenant on 2026-04-24. Future app registrations in this project or elsewhere must have this toggle enabled for any `PublicClientApplication` flow (device-code, interactive browser, username/password) to work.
+The Entra app registration ships with **"Allow public client flows" = No**. The device-code delegated flow fails with `AADSTS7000218` ("request body must contain 'client_assertion' or 'client_secret'") until that toggle is set to **Yes**. Fixed in the m365ctl tenant on 2026-04-24. Future app registrations in this project or elsewhere must have this toggle enabled for any `PublicClientApplication` flow (device-code, interactive browser, username/password) to work.
 
 ### In-flight corrections
 

@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.clean import (
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+from m365ctl.common.graph import GraphClient
+from m365ctl.onedrive.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
     revoke_stale_shares,
 )
-from fazla_od.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 
 def _client(handler):
@@ -27,8 +27,8 @@ def _client(handler):
 def _stub_cfg(tmp_path: Path) -> Config:
     return Config(
         tenant_id="tenant-1", client_id="client-1",
-        cert_path=tmp_path / "fazla-od.pfx",
-        cert_public=tmp_path / "fazla-od.cer",
+        cert_path=tmp_path / "m365ctl.pfx",
+        cert_public=tmp_path / "m365ctl.cer",
         default_auth="app-only",
         scope=ScopeConfig(allow_drives=["d1"], allow_users=["*"],
                           deny_paths=[], unsafe_requires_flag=True),
@@ -131,11 +131,11 @@ def test_purge_404_wraps_with_manual_instructions(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
-    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                  side_effect=FileNotFoundError("pwsh: not found"))
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -164,7 +164,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -174,7 +174,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
         "purged_name": "old.txt",
     })
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    run = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -183,7 +183,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                    before={"parent_path": "/Shared Documents/_smoke",
                                             "name": "old.txt"},
                                     cfg=cfg)
 
@@ -198,9 +198,9 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
     assert any(a.endswith("recycle-purge.ps1") for a in argv)
     assert argv[argv.index("-Tenant") + 1] == "tenant-1"
     assert argv[argv.index("-ClientId") + 1] == "client-1"
-    assert argv[argv.index("-SiteUrl") + 1] == "https://fazla.sharepoint.com/sites/Foo"
+    assert argv[argv.index("-SiteUrl") + 1] == "https://contoso.sharepoint.com/sites/Foo"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
-    assert argv[argv.index("-DirName") + 1] == "Shared Documents/_fazla_smoke"
+    assert argv[argv.index("-DirName") + 1] == "Shared Documents/_smoke"
     # Audit-end recorded as ok.
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-p1"]
     assert entries[-1]["result"] == "ok"
@@ -219,7 +219,7 @@ def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path,
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -229,7 +229,7 @@ def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path,
         "purged_name": "old.txt",
     })
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    run = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -238,14 +238,14 @@ def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path,
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/drives/abc/root:/_fazla_smoke2",
+                                    before={"parent_path": "/drives/abc/root:/_smoke2",
                                             "name": "old.txt"},
                                     cfg=cfg)
 
     assert result.status == "ok"
     run.assert_called_once()
     argv = run.call_args[0][0]
-    assert argv[argv.index("-DirName") + 1] == "_fazla_smoke2"
+    assert argv[argv.index("-DirName") + 1] == "_smoke2"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
 
 
@@ -302,14 +302,14 @@ def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Clear-PnPRecycleBinItem: access denied"
-    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                  return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -318,7 +318,7 @@ def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                    before={"parent_path": "/Shared Documents/_smoke",
                                             "name": "old.txt"},
                                     cfg=cfg)
 

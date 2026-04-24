@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from fazla_od.cli.label import run_label
+from m365ctl.onedrive.cli.label import run_label
 
 
 def _stub_cfg(tmp_path: Path):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -22,17 +22,17 @@ def _stub_cfg(tmp_path: Path):
 
 def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     mocker.patch(
-        "fazla_od.cli.label._lookup_label_item",
+        "m365ctl.onedrive.cli.label._lookup_label_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/X/x.docx", "name": "x.docx",
                       "parent_path": "/X",
                       "server_relative_url": "/X/x.docx"},
     )
     client = MagicMock()
-    mocker.patch("fazla_od.cli.label.build_graph_client", return_value=client)
-    run_mock = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=client)
+    run_mock = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                             side_effect=AssertionError("subprocess must NOT run"))
 
     rc = run_label(
@@ -40,7 +40,7 @@ def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
         subcmd="apply",
         scope="drive:d1", drive_id="d1", item_id="i1",
         label="Confidential",
-        site_url="https://fazla.sharepoint.com/",
+        site_url="https://contoso.sharepoint.com/",
         server_relative_url=None,
         from_plan=None, plan_out=None,
         confirm=False, unsafe_scope=False,
@@ -53,13 +53,13 @@ def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
 
 def test_apply_requires_label(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     rc = run_label(
         config_path=tmp_path / "config.toml",
         subcmd="apply",
         scope="drive:d1", drive_id="d1", item_id="i1",
         label=None,
-        site_url="https://fazla.sharepoint.com/",
+        site_url="https://contoso.sharepoint.com/",
         server_relative_url=None,
         from_plan=None, plan_out=None,
         confirm=False, unsafe_scope=False,
@@ -70,9 +70,9 @@ def test_apply_requires_label(tmp_path, mocker, capsys):
 
 def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     mocker.patch(
-        "fazla_od.cli.label._lookup_label_item",
+        "m365ctl.onedrive.cli.label._lookup_label_item",
         side_effect=lambda g, d, i: {
             "drive_id": d, "item_id": i,
             "full_path": f"/A/{i}", "name": i,
@@ -80,26 +80,26 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
             "server_relative_url": f"/A/{i}",
         },
     )
-    mocker.patch("fazla_od.cli.label.build_graph_client", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=MagicMock())
 
     completed = MagicMock()
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok"})
     completed.stderr = ""
-    run_mock = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    run_mock = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                             return_value=completed)
 
-    from fazla_od.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",
         "source_cmd": "od-label apply ...",
         "scope": "drive:d1",
         "operations": [
-            {"op_id": f"op-{i}", "action": "label-apply",
+            {"op_id": f"op-{i}", "action": "od.label-apply",
              "drive_id": "d1", "item_id": f"I{i}",
              "args": {"label": "Internal",
-                      "site_url": "https://fazla.sharepoint.com/"},
+                      "site_url": "https://contoso.sharepoint.com/"},
              "dry_run_result": ""} for i in range(3)
         ],
     }

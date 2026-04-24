@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Deprecated: use `m365ctl-undo` (short) or `m365ctl undo` (full).
+echo "bin/od-undo: deprecated; prefer bin/m365ctl-undo (same behavior)." >&2
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli undo "$@"
+exec uv run --project "$REPO" python -m m365ctl undo "$@"

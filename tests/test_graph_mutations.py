@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError
+from m365ctl.common.graph import GraphClient, GraphError
 
 
 def test_patch_sends_json_body_with_bearer() -> None:
@@ -97,7 +97,7 @@ def test_patch_retries_on_429_then_succeeds() -> None:
 
 
 def test_patch_gives_up_after_max_attempts() -> None:
-    from fazla_od.retry import RetryExhausted
+    from m365ctl.common.retry import RetryExhausted
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

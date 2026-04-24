@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.graph import GraphClient, GraphError, is_transient_graph_error
+from m365ctl.common.graph import GraphClient, GraphError, is_transient_graph_error
 
 
 def _queue_handler(responses: list[httpx.Response]):

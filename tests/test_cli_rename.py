@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from fazla_od.cli.rename import run_rename
+from m365ctl.onedrive.cli.rename import run_rename
 
 
 def _stub_cfg(tmp_path: Path):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -21,15 +21,15 @@ def _stub_cfg(tmp_path: Path):
 
 def test_single_rename_dry_run_no_graph_call(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.rename.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.rename.load_config", return_value=cfg)
     mocker.patch(
-        "fazla_od.cli.rename._lookup_item",
+        "m365ctl.onedrive.cli.rename._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/x.txt", "name": "x.txt",
                       "parent_path": "/"},
     )
     client = MagicMock()
-    mocker.patch("fazla_od.cli.rename.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.onedrive.cli.rename.build_graph_client", return_value=client)
 
     rc = run_rename(
         config_path=tmp_path / "config.toml",

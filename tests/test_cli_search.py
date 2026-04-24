@@ -4,12 +4,11 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
-from fazla_od.catalog.crawl import DriveSpec
-from fazla_od.catalog.db import open_catalog
-from fazla_od.cli.search import run_search
-from fazla_od.search.graph_search import SearchHit
+from m365ctl.onedrive.catalog.crawl import DriveSpec
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.cli.search import run_search
+from m365ctl.onedrive.search.graph_search import SearchHit
 
 
 def _cfg(tmp_path: Path):
@@ -28,22 +27,22 @@ def _seed(db: Path) -> None:
                                is_deleted, size, modified_at, modified_by)
             VALUES
               ('d', 'c1', 'local-invoice.pdf', '/L/local-invoice.pdf', false, false,
-               100, TIMESTAMP '2024-03-01 00:00:00', 'a@fazla.com')
+               100, TIMESTAMP '2024-03-01 00:00:00', 'a@example.com')
             """
         )
 
 
 def test_search_merges_graph_and_catalog_json(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.search.GraphClient", return_value=MagicMock())
 
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.onedrive.cli.search.graph_search",
         return_value=iter(
             [
                 SearchHit("d", "g1", "Graph-invoice.pdf",
@@ -74,19 +73,19 @@ def test_search_merges_graph_and_catalog_json(tmp_path, mocker, capsys) -> None:
 
 def test_search_scope_tenant_uses_app_only_and_filters(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.search.load_config", return_value=cfg)
     delegated = MagicMock()
     app_only = MagicMock()
     app_only.get_token.return_value = "app"
-    mocker.patch("fazla_od.cli.search.DelegatedCredential", return_value=delegated)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential", return_value=app_only)
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.search.resolve_scope",
+    mocker.patch("m365ctl.onedrive.cli.search.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.search.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.search.resolve_scope",
                  return_value=[DriveSpec("dx", "dn", "o", "business",
                                          "/drives/dx/root/delta")])
     # Graph returns one hit on drive 'dx' and one on drive 'other'; only dx survives.
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.onedrive.cli.search.graph_search",
         return_value=iter([
             SearchHit("dx", "in-scope", "A", "/A", 1, "2024-01-01T00:00:00Z",
                       None, False, "graph"),
@@ -111,13 +110,13 @@ def test_search_scope_tenant_uses_app_only_and_filters(tmp_path, mocker) -> None
 
 def test_search_tsv_output_has_header(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.search.graph_search", return_value=iter([]))
+    mocker.patch("m365ctl.onedrive.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.search.graph_search", return_value=iter([]))
     _seed(cfg.catalog.path)
 
     run_search(
@@ -137,14 +136,14 @@ def test_search_tsv_output_has_header(tmp_path, mocker, capsys) -> None:
 
 def test_search_limit_truncates(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.onedrive.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.search.GraphClient", return_value=MagicMock())
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.onedrive.cli.search.graph_search",
         return_value=iter([
             SearchHit("d", f"g{i}", f"n{i}", f"/n{i}", 1,
                       f"2024-{i+1:02d}-01T00:00:00Z", None, False, "graph")

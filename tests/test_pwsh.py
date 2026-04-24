@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from fazla_od.mutate._pwsh import normalize_recycle_dir_name
+from m365ctl.onedrive.mutate._pwsh import normalize_recycle_dir_name
 
 
 def test_normalize_strips_graph_drives_prefix_with_root_marker():
     """Full Graph path (the shape recorded by the delete audit entry)
     drops everything up to and including ``root:``."""
     assert (
-        normalize_recycle_dir_name("/drives/b!abc/root:/_fazla_smoke2")
-        == "_fazla_smoke2"
+        normalize_recycle_dir_name("/drives/b!abc/root:/_smoke2")
+        == "_smoke2"
     )
 
 

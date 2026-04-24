@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.crawl import (
+from m365ctl.onedrive.catalog.crawl import (
     CrawlResult,
     DriveSpec,
     crawl_drive,
     resolve_scope,
 )
-from fazla_od.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.db import open_catalog
 
 
 def test_resolve_scope_me_calls_me_drive(mocker) -> None:
@@ -19,15 +19,15 @@ def test_resolve_scope_me_calls_me_drive(mocker) -> None:
     graph.get.return_value = {
         "id": "drive-me-id",
         "driveType": "business",
-        "owner": {"user": {"email": "arda@fazla.com"}},
-        "name": "OneDrive - Fazla",
+        "owner": {"user": {"email": "arda@example.com"}},
+        "name": "OneDrive - Example",
     }
     drives = resolve_scope("me", graph)
     assert drives == [
         DriveSpec(
             drive_id="drive-me-id",
-            display_name="OneDrive - Fazla",
-            owner="arda@fazla.com",
+            display_name="OneDrive - Example",
+            owner="arda@example.com",
             drive_type="business",
             graph_path="/me/drive/root/delta",
         )
@@ -40,7 +40,7 @@ def test_resolve_scope_drive_by_id() -> None:
     graph.get.return_value = {
         "id": "drive-xyz",
         "driveType": "documentLibrary",
-        "owner": {"user": {"email": "site-owner@fazla.com"}},
+        "owner": {"user": {"email": "site-owner@example.com"}},
         "name": "Finance",
     }
     drives = resolve_scope("drive:drive-xyz", graph)
@@ -57,8 +57,8 @@ def test_resolve_scope_rejects_unknown_scheme() -> None:
 def test_crawl_drive_inserts_items_and_stores_delta_link(tmp_path: Path) -> None:
     drive = DriveSpec(
         drive_id="d1",
-        display_name="OneDrive - Fazla",
-        owner="arda@fazla.com",
+        display_name="OneDrive - Example",
+        owner="arda@example.com",
         drive_type="business",
         graph_path="/me/drive/root/delta",
     )
@@ -112,8 +112,8 @@ def test_crawl_drive_inserts_items_and_stores_delta_link(tmp_path: Path) -> None
 def test_crawl_drive_uses_stored_delta_link_on_second_call(tmp_path: Path) -> None:
     drive = DriveSpec(
         drive_id="d1",
-        display_name="OneDrive - Fazla",
-        owner="arda@fazla.com",
+        display_name="OneDrive - Example",
+        owner="arda@example.com",
         drive_type="business",
         graph_path="/me/drive/root/delta",
     )

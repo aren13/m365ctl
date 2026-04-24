@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from fazla_od.cli.copy import run_copy
+from m365ctl.onedrive.cli.copy import run_copy
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -28,11 +28,11 @@ def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
 
 def test_single_item_dry_run_does_not_call_graph(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.copy.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.copy.load_config", return_value=cfg)
     mock_client = MagicMock()
-    mocker.patch("fazla_od.cli.copy.build_graph_client", return_value=mock_client)
+    mocker.patch("m365ctl.onedrive.cli.copy.build_graph_client", return_value=mock_client)
     mocker.patch(
-        "fazla_od.cli.copy._lookup_item",
+        "m365ctl.onedrive.cli.copy._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/A/x", "name": "x",
                       "parent_path": "/A"},
@@ -55,7 +55,7 @@ def test_single_item_dry_run_does_not_call_graph(tmp_path, mocker, capsys):
 
 def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.copy.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.copy.load_config", return_value=cfg)
     rc = run_copy(
         config_path=tmp_path / "config.toml",
         scope="drive:d1",
@@ -72,7 +72,7 @@ def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsy
 
 def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.copy.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.copy.load_config", return_value=cfg)
 
     post_calls = {"n": 0}
 
@@ -86,15 +86,15 @@ def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
         return httpx.Response(200, json={"status": "completed",
                                          "resourceId": "unused"})
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     real_client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),
         sleep=lambda s: None,
     )
-    mocker.patch("fazla_od.cli.copy.build_graph_client", return_value=real_client)
+    mocker.patch("m365ctl.onedrive.cli.copy.build_graph_client", return_value=real_client)
     mocker.patch(
-        "fazla_od.cli.copy._lookup_item",
+        "m365ctl.onedrive.cli.copy._lookup_item",
         side_effect=lambda graph, drive_id, item_id: {
             "drive_id": drive_id, "item_id": item_id,
             "full_path": f"/src/{item_id}", "name": item_id,
@@ -102,7 +102,7 @@ def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
         },
     )
 
-    from fazla_od.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",

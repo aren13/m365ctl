@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.rename import execute_rename
-from fazla_od.planfile import Operation
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.graph import GraphClient
+from m365ctl.onedrive.mutate.rename import execute_rename
+from m365ctl.common.planfile import Operation
 
 
 def test_execute_rename_issues_patch_with_new_name(tmp_path):

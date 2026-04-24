@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError
+from m365ctl.common.graph import GraphClient, GraphError
 
 
 def test_get_attaches_bearer_token() -> None:

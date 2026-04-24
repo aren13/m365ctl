@@ -2,15 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.config import Config, ConfigError, load_config
+from m365ctl.common.config import Config, ConfigError, load_config
 
 
 def _valid_toml(tmp_path: Path) -> Path:
     p = tmp_path / "config.toml"
     p.write_text(
         """
-tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
-client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
 cert_path    = "~/.config/fazla-od/fazla-od.key"
 cert_public  = "~/.config/fazla-od/fazla-od.cer"
 default_auth = "delegated"
@@ -35,8 +35,8 @@ ops_dir = "logs/ops"
 def test_load_returns_config_with_parsed_fields(tmp_path: Path) -> None:
     cfg = load_config(_valid_toml(tmp_path))
     assert isinstance(cfg, Config)
-    assert cfg.tenant_id == "361efb70-ca20-41ae-b204-9045df001350"
-    assert cfg.client_id == "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+    assert cfg.tenant_id == "00000000-0000-0000-0000-000000000000"
+    assert cfg.client_id == "11111111-1111-1111-1111-111111111111"
     assert cfg.default_auth == "delegated"
     assert cfg.scope.allow_drives == ["me"]
 
@@ -68,3 +68,95 @@ def test_invalid_default_auth_raises(tmp_path: Path) -> None:
     p.write_text(toml)
     with pytest.raises(ConfigError, match="default_auth"):
         load_config(p)
+
+
+def test_config_loads_allow_mailboxes_and_deny_folders(tmp_path):
+    from m365ctl.common.config import load_config
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("""
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
+default_auth = "delegated"
+
+[scope]
+allow_drives    = ["me"]
+allow_mailboxes = ["me", "shared:ops@example.com"]
+allow_users     = ["*"]
+deny_paths      = ["/HR/**"]
+deny_folders    = ["Archive/Legal/*"]
+unsafe_requires_flag = true
+
+[catalog]
+path             = "cache/catalog.duckdb"
+refresh_on_start = false
+
+[mail]
+catalog_path           = "cache/mail.duckdb"
+default_deleted_folder = "Deleted Items"
+default_junk_folder    = "Junk Email"
+default_drafts_folder  = "Drafts"
+default_sent_folder    = "Sent Items"
+default_triage_root    = "Inbox/Triage"
+categories_master      = ["Followup", "Waiting"]
+signature_path         = ""
+drafts_before_send     = true
+schedule_send_enabled  = false
+
+[logging]
+ops_dir        = "logs/ops"
+purged_dir     = "logs/purged"
+retention_days = 30
+""".lstrip())
+    cfg = load_config(cfg_path)
+    assert cfg.scope.allow_mailboxes == ["me", "shared:ops@example.com"]
+    assert cfg.scope.deny_folders == ["Archive/Legal/*"]
+    assert cfg.mail.catalog_path.name == "mail.duckdb"
+    assert cfg.mail.default_triage_root == "Inbox/Triage"
+    assert cfg.mail.categories_master == ["Followup", "Waiting"]
+    assert cfg.mail.signature_path is None          # empty string -> None
+    assert cfg.mail.drafts_before_send is True
+    assert cfg.mail.schedule_send_enabled is False
+    assert cfg.logging.purged_dir.name == "purged"
+    assert cfg.logging.retention_days == 30
+
+
+def test_config_mail_section_defaults_when_omitted(tmp_path):
+    from m365ctl.common.config import load_config
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("""
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
+default_auth = "delegated"
+
+[scope]
+allow_drives = ["me"]
+
+[catalog]
+path = "cache/catalog.duckdb"
+
+[logging]
+ops_dir = "logs/ops"
+""".lstrip())
+    cfg = load_config(cfg_path)
+    # scope defaults
+    assert cfg.scope.allow_mailboxes == ["me"]
+    assert cfg.scope.deny_folders == []
+    # mail defaults (spec 7.2)
+    assert cfg.mail.default_deleted_folder == "Deleted Items"
+    assert cfg.mail.default_junk_folder == "Junk Email"
+    assert cfg.mail.default_drafts_folder == "Drafts"
+    assert cfg.mail.default_sent_folder == "Sent Items"
+    assert cfg.mail.default_triage_root == "Inbox/Triage"
+    assert cfg.mail.categories_master == []
+    assert cfg.mail.signature_path is None
+    assert cfg.mail.drafts_before_send is True
+    assert cfg.mail.schedule_send_enabled is False
+    # mail catalog_path default: "cache/mail.duckdb"
+    assert cfg.mail.catalog_path.as_posix().endswith("cache/mail.duckdb")
+    # logging defaults
+    assert cfg.logging.purged_dir.as_posix().endswith("logs/purged")
+    assert cfg.logging.retention_days == 30

@@ -1,0 +1,26 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v2
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --all-extras
+      - run: uv run ruff check
+      # TODO: tighten to blocking once the Phase 0 mypy baseline is cleaned up.
+      # Current baseline: ~34 errors across 16 files (missing stubs for
+      # msal/duckdb + legacy typing gaps predating the rebrand).
+      - run: uv run mypy src || true
+      - run: uv run pytest -m "not live"

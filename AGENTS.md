@@ -1,105 +1,78 @@
-# AGENTS.md - Fazla OneDrive Toolkit
+# AGENTS.md — m365ctl
 
-Notes for Claude Code (and any agentic assistant) operating this repo.
+Notes for Claude Code and other agentic assistants working on this repo.
+Terse on purpose — scannable > complete.
 
-## What this is
+## Overview
 
-A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
+m365ctl is a dual-domain CLI targeting Microsoft Graph:
 
-## Current CLI surface (Plans 1-4 complete)
+- **OneDrive + SharePoint** — the Phase 0 focus; verbs exist today.
+- **Mail** — scaffold only in Phase 0; Phase 1+ fills it out.
 
-| Command | Purpose |
-|---|---|
-| `./bin/od-auth login` | Device-code delegated sign-in; caches token. |
-| `./bin/od-auth whoami` | Identity (delegated + app-only), cert expiry, tenant. |
-| `./bin/od-catalog-refresh --scope me\|drive:<id>` | Delta-crawl a scope into `cache/catalog.duckdb`. |
-| `./bin/od-catalog-status` | Print catalog summary: drives, items, bytes. |
-| `./bin/od-inventory --top-by-size N` | Top N largest live files. |
-| `./bin/od-inventory --stale-since YYYY-MM-DD` | Files not modified since date. |
-| `./bin/od-inventory --by-owner` | File count + total size per owner. |
-| `./bin/od-inventory --duplicates` | Items sharing a `quickXorHash`. |
-| `./bin/od-inventory --sql "<SELECT ...>"` | Ad-hoc SELECT against the catalog. |
-| `./bin/od-catalog-refresh --scope tenant` | Delta-crawl every user drive + every SharePoint library (app-only). Prompts on /dev/tty if >5 drives unless `--yes`. |
-| `./bin/od-catalog-refresh --scope site:<slug-or-id>` | Delta-crawl one SharePoint site's drives. |
-| `./bin/od-search <query> [--scope …] [--type file\|folder\|all] [--modified-since …] [--owner …] [--limit N]` | Fuse Graph /search/query with DuckDB catalog LIKE match; dedupe by (drive_id, item_id). |
-| `./bin/od-download --item-id … --drive-id …` | Stream one file into `workspaces/download-<ts>/`. |
-| `./bin/od-download --from-plan plan.json` | Download the set listed in a Plan-3 plan file (`action == "download"`). |
-| `./bin/od-download --query "<SELECT …>" [--plan-out plan.json]` | Build a plan from a catalog SELECT; `--plan-out` writes it without downloading. |
-| `./bin/od-audit-sharing --scope site:<url> [--output-format json\|tsv]` | Emit one row per permission via PnP.PowerShell (requires one-time setup — see `docs/ops/pnp-powershell-setup.md`). |
-| `./bin/od-move --pattern <glob> --scope <s> --plan-out plan.json` | Build a move plan (dry-run). |
-| `./bin/od-move --from-plan plan.json --confirm` | Execute the plan's moves. |
-| `./bin/od-rename --drive-id <d> --item-id <i> --new-name <n> --confirm` | Single-item rename. |
-| `./bin/od-copy --pattern <glob> --scope <s> --plan-out plan.json` | Build a copy plan (dry-run). |
-| `./bin/od-copy --from-plan plan.json --confirm` | Execute the plan's copies (async polling). |
-| `./bin/od-delete ... --plan-out` / `--from-plan --confirm` | Soft-delete to recycle bin. |
-| `./bin/od-clean recycle-bin --scope <s>` | Hard-purge recycle bin. Not reversible. |
-| `./bin/od-clean old-versions --keep N --scope <s>` | Drop all but N newest versions per item. |
-| `./bin/od-clean stale-shares --older-than N --scope <s>` | Revoke sharing links older than N days. |
-| `./bin/od-label apply --label <name> ...` / `od-label remove ...` | Apply/remove sensitivity label via PnP.PowerShell. |
-| `./bin/od-undo <op_id> --confirm` | Replay the reverse of a past op from the audit log. |
+Common auth / config / safety plumbing lives in `common/`. Each domain is a
+sibling sub-package.
 
-All inventory commands accept `--json` for machine-readable output.
+## Where to start
 
-All other commands from the spec (`od-search`, `od-move`, `od-label`, ...) are delivered in later plans.
+1. `docs/superpowers/specs/2026-04-24-m365ctl-design.md` — the parent design spec (OneDrive track, architecture, safety model).
+2. `docs/superpowers/specs/2026-04-24-m365ctl-mail-module.md` — the Mail module spec (Phase 1 target).
+3. `CONTRIBUTING.md` — dev setup, test commands, commit conventions.
+4. `docs/setup/first-run.md` — tenant setup prerequisites.
 
-### Plan-file schema (read-only ops — Plan 3)
+## Package layout
 
-Plan 3 emits / consumes plan files of the shape:
+- `src/m365ctl/common/` — auth, graph, config, audit, safety, retry, planfile,
+  `undo.Dispatcher`.
+- `src/m365ctl/onedrive/` — catalog, download, mutate, search, cli (OneDrive
+  domain).
+- `src/m365ctl/mail/` — `catalog/`, `mutate/`, `triage/`, `cli/` scaffolds.
+  Empty in Phase 0.
+- `src/m365ctl/cli/` — top-level dispatcher (`m365ctl <domain> <verb>`).
 
-```json
-[
-  {"action": "download",
-   "drive_id": "<id>",
-   "item_id":  "<id>",
-   "args": {"full_path": "/path/in/drive"}}
-]
-```
+## Safety envelope
 
-Plan 4 will extend `action` with `move | rename | copy | delete | label` and
-their own `args` shapes; Plan-3 tools reject any non-`download` action so you
-cannot accidentally run a mutation plan with `od-download`.
+- Dry-run is the default. Every mutation requires `--confirm`.
+- Bulk operations use the plan-file workflow: generate → review → replay.
+- Scope gates:
+  - Allow-lists: `allow_drives`, `allow_mailboxes` (empty = allow-all).
+  - Deny-lists: `deny_paths`, `deny_folders` (absolute; always enforced).
+- Audit log: `logs/ops/YYYY-MM-DD.jsonl`. Every mutation records
+  `before` / `after` blocks.
+- Undo: `m365ctl.common.undo.Dispatcher` replays inverses from the audit log.
+  Irreversible ops are flagged at registration time and refuse to undo.
 
-### PowerShell prerequisites (for `od-audit-sharing`)
+## Key conventions
 
-One-time setup: see `docs/ops/pnp-powershell-setup.md`. Converts the PEM
-cert to PFX at `~/.config/fazla-od/fazla-od.pfx` and stores an export
-password in macOS Keychain under `FazlaODToolkit:PfxPassword`.
-
-### Mutation safety envelope (Plan 4)
-
-All mutating commands:
-- Dry-run by default; require `--confirm` to execute.
-- Bulk ops (with `--pattern`) require the plan-file workflow — `--pattern --confirm` without `--from-plan` is rejected.
-- Every mutation appends to `logs/ops/YYYY-MM-DD.jsonl` (start BEFORE the Graph call, end AFTER).
-- Items outside `scope.allow_drives` require `--unsafe-scope` + a `/dev/tty` `y/N` confirm (piped stdin cannot bypass).
-- Items matching `scope.deny_paths` are ALWAYS blocked — no override.
-
-Audit log is append-only. `./bin/od-undo <op_id>` reads start/end records and builds an inverse op (rename→rename, move→move-back, copy→delete-copy, delete→restore, label-apply→label-remove). Irreversible ops (recycle-bin purge, version delete, share revoke) raise a clear error.
-
-ODfB recycle-bin restore and purge shell out to PnP.PowerShell (see `docs/ops/pnp-powershell-setup.md`); OneDrive-Personal continues to use Graph directly.
-
-## Safety model (already in effect)
-
-- `config.toml` is **gitignored**. Never `git add` it. The tracked template is `config.toml.example`.
-- Cert private key is at `~/.config/fazla-od/fazla-od.key` (mode 600) - outside this repo. Never read, cat, or commit it.
-- `cache/`, `workspaces/`, `logs/` are gitignored runtime dirs.
-
-When mutating commands ship (Plan 4):
-- `--dry-run` is always the default; `--confirm` is required to execute.
-- Bulk ops require the plan-file workflow (`--plan-out` -> review -> `--from-plan`).
-- See spec §7 for the full model. Follow it.
-
-## Authentication at a glance
-
-- **Delegated** (`./bin/od-auth login`): device-code; user signs in once, token cached in `~/.config/fazla-od/token_cache.bin`.
-- **App-only**: certificate-based, zero user interaction per run. Used automatically by commands that need tenant-wide access.
-
-Both flows run against the same Entra app; admin consent is granted for both.
+- TDD — write the test first. See `tests/` for the pattern.
+- Audit capture is load-bearing: never drop the `before` block even when the
+  state is partially known (e.g. item already in recycle bin).
+- Plan-file actions are namespaced: `od.move`, `od.rename`, etc. Bare-action
+  legacy plans are normalized on read for back-compat.
 
 ## Running tests
 
 ```bash
-uv sync --extra dev
-uv run pytest          # unit + mocked
-FAZLA_OD_LIVE_TESTS=1 uv run pytest -m live    # hits real Graph
+# Unit + mocked integration (default):
+uv run pytest -m "not live"
+
+# Live smoke (needs tenant + config.toml):
+M365CTL_LIVE_TESTS=1 uv run pytest -m live
 ```
+
+## PowerShell prerequisites
+
+`od-audit-sharing` and a handful of label/restore/purge paths shell out to
+PnP.PowerShell. See `docs/ops/pnp-powershell-setup.md`. The PFX password is
+kept in macOS Keychain under service `m365ctl`, account `PfxPassword`.
+
+## Tenant-agnostic rule
+
+No concrete tenant values in tracked code, tests, or docs:
+
+- UPNs and domains → `user@example.com`, `contoso.com`.
+- Tenant / client IDs → placeholders in `config.toml.example`.
+- Site URLs → `https://contoso.sharepoint.com/...`.
+
+The only allowed exception is `docs/setup/migrating-from-fazla-od.md`, which
+documents the old `fazla-od` names for the one-time migration.

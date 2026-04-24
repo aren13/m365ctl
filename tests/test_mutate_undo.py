@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.mutate.undo import Irreversible, build_reverse_operation
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.onedrive.mutate.undo import Irreversible, build_reverse_operation
 
 
 def _ap(logger: AuditLogger, op_id: str, cmd: str, args: dict,
@@ -27,7 +24,7 @@ def test_reverse_rename_restores_original_name(tmp_path):
         before={"parent_path": "/", "name": "old.txt"},
         after={"parent_path": "/", "name": "new.txt"}, result="ok")
     rev = build_reverse_operation(logger, "R1")
-    assert rev.action == "rename"
+    assert rev.action == "od.rename"
     assert rev.args == {"new_name": "old.txt"}
     assert rev.item_id == "i"
 
@@ -40,7 +37,7 @@ def test_reverse_move_moves_back(tmp_path):
         after={"parent_path": "/B", "name": "x", "parent_id": "B"},
         result="ok")
     rev = build_reverse_operation(logger, "M1")
-    assert rev.action == "move"
+    assert rev.action == "od.move"
     assert "new_parent_item_id" in rev.args or "new_parent_path" in rev.args
 
 
@@ -55,7 +52,7 @@ def test_reverse_copy_deletes_the_copy(tmp_path):
                "target_parent_item_id": "P", "new_name": "dup.txt"},
         result="ok")
     rev = build_reverse_operation(logger, "C1")
-    assert rev.action == "delete"
+    assert rev.action == "od.delete"
     assert rev.drive_id == "d2"
     assert rev.item_id == "NEW"
 
@@ -68,7 +65,7 @@ def test_reverse_recycle_delete_is_restore(tmp_path):
         after={"parent_path": "(recycle bin)", "name": "x",
                "recycled_from": "/A"}, result="ok")
     rev = build_reverse_operation(logger, "D1")
-    assert rev.action == "restore"
+    assert rev.action == "od.restore"
     assert rev.drive_id == "d"
     assert rev.item_id == "i"
 
@@ -103,15 +100,15 @@ def test_reverse_label_apply_is_remove(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L1", cmd="od-label(apply)",
         args={"label": "Confidential",
-              "site_url": "https://fazla.sharepoint.com/"},
+              "site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x"},
         after={"parent_path": "/", "name": "x", "label": "Confidential"},
         result="ok")
     rev = build_reverse_operation(logger, "L1")
-    assert rev.action == "label-remove"
-    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+    assert rev.action == "od.label-remove"
+    assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 
 
 def test_reverse_op_failed_originally_raises(tmp_path):
@@ -143,7 +140,7 @@ def test_reverse_move_without_parent_id_is_irreversible(tmp_path):
 def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L2", cmd="od-label(remove)",
-        args={"site_url": "https://fazla.sharepoint.com/"},
+        args={"site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x",
@@ -151,15 +148,15 @@ def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
         after={"parent_path": "/", "name": "x", "label": None},
         result="ok")
     rev = build_reverse_operation(logger, "L2")
-    assert rev.action == "label-apply"
+    assert rev.action == "od.label-apply"
     assert rev.args["label"] == "Internal"
-    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+    assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 
 
 def test_reverse_label_remove_without_prior_label_is_irreversible(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L3", cmd="od-label(remove)",
-        args={"site_url": "https://fazla.sharepoint.com/"},
+        args={"site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x"},  # no 'label' key

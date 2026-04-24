@@ -4,10 +4,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.cli.inventory import run_inventory
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.cli.inventory import run_inventory
 
 
 def _stub_config(tmp_path: Path):
@@ -23,17 +22,17 @@ def _seed(db: Path) -> None:
             INSERT INTO items (drive_id, item_id, name, is_folder, is_deleted,
                                size, modified_at, modified_by, quick_xor_hash)
             VALUES
-              ('d', '1', 'big.mp4',  false, false, 5000000000, TIMESTAMP '2023-03-01 00:00:00', 'alice@fazla.com', 'H1'),
-              ('d', '2', 'mid.zip',  false, false, 1000000000, TIMESTAMP '2024-01-01 00:00:00', 'alice@fazla.com', 'H2'),
-              ('d', '3', 'dup-a',    false, false, 500,        TIMESTAMP '2024-10-01 00:00:00', 'bob@fazla.com',   'DUP'),
-              ('d', '4', 'dup-b',    false, false, 500,        TIMESTAMP '2024-10-02 00:00:00', 'bob@fazla.com',   'DUP')
+              ('d', '1', 'big.mp4',  false, false, 5000000000, TIMESTAMP '2023-03-01 00:00:00', 'alice@example.com', 'H1'),
+              ('d', '2', 'mid.zip',  false, false, 1000000000, TIMESTAMP '2024-01-01 00:00:00', 'alice@example.com', 'H2'),
+              ('d', '3', 'dup-a',    false, false, 500,        TIMESTAMP '2024-10-01 00:00:00', 'bob@example.com',   'DUP'),
+              ('d', '4', 'dup-b',    false, false, 500,        TIMESTAMP '2024-10-02 00:00:00', 'bob@example.com',   'DUP')
             """
         )
 
 
 def test_top_by_size_tsv(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     rc = run_inventory(
         config_path=tmp_path / "config.toml",
@@ -55,7 +54,7 @@ def test_top_by_size_tsv(tmp_path, mocker, capsys) -> None:
 
 def test_top_by_size_json(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -74,7 +73,7 @@ def test_top_by_size_json(tmp_path, mocker, capsys) -> None:
 
 def test_by_owner(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -88,13 +87,13 @@ def test_by_owner(tmp_path, mocker, capsys) -> None:
     out = capsys.readouterr().out
     parsed = json.loads(out)
     owners = {r["owner"]: r["total_size"] for r in parsed}
-    assert owners["alice@fazla.com"] == 6000000000
-    assert owners["bob@fazla.com"] == 1000
+    assert owners["alice@example.com"] == 6000000000
+    assert owners["bob@example.com"] == 1000
 
 
 def test_duplicates(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -113,7 +112,7 @@ def test_duplicates(tmp_path, mocker, capsys) -> None:
 
 def test_sql_passthrough(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -131,7 +130,7 @@ def test_sql_passthrough(tmp_path, mocker, capsys) -> None:
 
 def test_requires_exactly_one_mode(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     rc = run_inventory(
         config_path=tmp_path / "config.toml",
         top_by_size=None,

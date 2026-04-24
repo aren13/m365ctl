@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.copy import execute_copy
-from fazla_od.planfile import Operation
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.graph import GraphClient
+from m365ctl.onedrive.mutate.copy import execute_copy
+from m365ctl.common.planfile import Operation
 
 
 def test_execute_copy_polls_location_until_complete(tmp_path):

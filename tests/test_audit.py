@@ -4,9 +4,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
-from fazla_od.audit import (
+from m365ctl.common.audit import (
     AuditLogger,
     find_most_recent_delete_before,
     find_op_by_id,
@@ -57,8 +56,8 @@ def test_log_start_then_end_writes_two_lines(tmp_path: Path) -> None:
     )
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     recs = [
-        json.loads(l)
-        for l in (tmp_path / "logs" / "ops" / f"{day}.jsonl")
+        json.loads(line)
+        for line in (tmp_path / "logs" / "ops" / f"{day}.jsonl")
         .read_text()
         .strip()
         .splitlines()

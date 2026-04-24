@@ -4,16 +4,15 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import httpx
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.cli.clean import run_clean
-from fazla_od.graph import GraphError
-from fazla_od.mutate.clean import CleanResult
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.onedrive.cli.clean import run_clean
+from m365ctl.common.graph import GraphError
+from m365ctl.onedrive.mutate.clean import CleanResult
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -31,9 +30,9 @@ def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
 
 def test_recycle_bin_dry_run_emits_plan_of_recycled_items(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
 
-    from fazla_od.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "
@@ -54,14 +53,14 @@ def test_recycle_bin_dry_run_emits_plan_of_recycled_items(tmp_path, mocker):
     assert rc == 0
     plan = json.loads(plan_out.read_text())
     actions = [op["action"] for op in plan["operations"]]
-    assert actions == ["recycle-purge", "recycle-purge"]
+    assert actions == ["od.recycle-purge", "od.recycle-purge"]
 
 
 def test_old_versions_plan_one_op_per_item(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
 
-    from fazla_od.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "
@@ -81,15 +80,15 @@ def test_old_versions_plan_one_op_per_item(tmp_path, mocker):
     assert rc == 0
     plan = json.loads(plan_out.read_text())
     assert len(plan["operations"]) == 1
-    assert plan["operations"][0]["action"] == "version-delete"
+    assert plan["operations"][0]["action"] == "od.version-delete"
     assert plan["operations"][0]["args"]["keep"] == 5
 
 
 def test_stale_shares_older_than_days_honored(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
 
-    from fazla_od.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "
@@ -117,7 +116,7 @@ def _write_purge_plan(path: Path, drive_id: str, item_id: str, op_id: str) -> No
         "source_cmd": "smoke",
         "scope": "me",
         "operations": [
-            {"op_id": op_id, "action": "recycle-purge",
+            {"op_id": op_id, "action": "od.recycle-purge",
              "drive_id": drive_id, "item_id": item_id,
              "args": {}, "dry_run_result": "smoke"}
         ],
@@ -128,7 +127,7 @@ def test_purge_via_plan_recovers_before_from_prior_delete_audit_record(
     tmp_path, mocker,
 ):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
 
     # Seed a prior od-delete audit record for (d1, i1).
     logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
@@ -149,10 +148,10 @@ def test_purge_via_plan_recovers_before_from_prior_delete_audit_record(
     _write_purge_plan(plan_path, "d1", "i1", "smoke-purge-abc")
 
     # Mock the graph client and _lookup_item so the recycle-bin 404 fires.
-    mocker.patch("fazla_od.cli.clean.build_graph_client",
+    mocker.patch("m365ctl.onedrive.cli.clean.build_graph_client",
                  return_value=MagicMock())
     mocker.patch(
-        "fazla_od.cli.clean._lookup_item",
+        "m365ctl.onedrive.cli.clean._lookup_item",
         side_effect=GraphError("HTTP404: itemNotFound"),
     )
     captured: dict = {}
@@ -165,12 +164,12 @@ def test_purge_via_plan_recovers_before_from_prior_delete_audit_record(
                    "name": before["name"], "irreversible": True},
         )
 
-    mocker.patch("fazla_od.cli.clean.purge_recycle_bin_item",
+    mocker.patch("m365ctl.onedrive.cli.clean.purge_recycle_bin_item",
                  side_effect=_fake_purge)
     # Rebind the dispatch table to the patched callable.
     mocker.patch.dict(
-        "fazla_od.cli.clean._ACTION_EXECUTORS",
-        {"recycle-purge": _fake_purge},
+        "m365ctl.onedrive.cli.clean._ACTION_EXECUTORS",
+        {"od.recycle-purge": _fake_purge},
     )
 
     rc = run_clean(
@@ -190,16 +189,16 @@ def test_purge_without_prior_delete_audit_warns_operator(
     tmp_path, mocker, capsys,
 ):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
 
     # No prior delete op logged.
     plan_path = tmp_path / "purge.json"
     _write_purge_plan(plan_path, "d1", "orphan", "smoke-purge-orphan")
 
-    mocker.patch("fazla_od.cli.clean.build_graph_client",
+    mocker.patch("m365ctl.onedrive.cli.clean.build_graph_client",
                  return_value=MagicMock())
     mocker.patch(
-        "fazla_od.cli.clean._lookup_item",
+        "m365ctl.onedrive.cli.clean._lookup_item",
         side_effect=GraphError("HTTP404: itemNotFound"),
     )
 
@@ -211,8 +210,8 @@ def test_purge_without_prior_delete_audit_warns_operator(
         )
 
     mocker.patch.dict(
-        "fazla_od.cli.clean._ACTION_EXECUTORS",
-        {"recycle-purge": _fake_purge},
+        "m365ctl.onedrive.cli.clean._ACTION_EXECUTORS",
+        {"od.recycle-purge": _fake_purge},
     )
 
     rc = run_clean(
@@ -233,7 +232,7 @@ def test_purge_without_prior_delete_audit_warns_operator(
 
 def test_confirm_required_to_execute_bulk_pattern(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.clean.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.clean.load_config", return_value=cfg)
     rc = run_clean(
         config_path=tmp_path / "config.toml",
         subcmd="recycle-bin",

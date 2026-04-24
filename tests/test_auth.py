@@ -1,23 +1,39 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.auth import (
+from m365ctl.common.auth import (
     AppOnlyCredential,
     AuthError,
     CertInfo,
     DelegatedCredential,
-    get_cert_info,
 )
-from fazla_od.config import Config, load_config
+from m365ctl.common.config import Config, load_config
+
+
+def _live_tests_enabled() -> bool:
+    """Accepts M365CTL_LIVE_TESTS (preferred) or FAZLA_OD_LIVE_TESTS (deprecated)."""
+    new = os.environ.get("M365CTL_LIVE_TESTS")
+    legacy = os.environ.get("FAZLA_OD_LIVE_TESTS")
+    if new:
+        return new == "1"
+    if legacy:
+        print(
+            "m365ctl: FAZLA_OD_LIVE_TESTS is deprecated; set M365CTL_LIVE_TESTS=1 instead.",
+            file=sys.stderr,
+        )
+        return legacy == "1"
+    return False
+
 
 _SKIPIF_LIVE = pytest.mark.skipif(
-    os.environ.get("FAZLA_OD_LIVE_TESTS") != "1",
-    reason="live Graph test; set FAZLA_OD_LIVE_TESTS=1 to run",
+    not _live_tests_enabled(),
+    reason="live Graph test; set M365CTL_LIVE_TESTS=1 to run",
 )
 
 
@@ -54,7 +70,7 @@ def test_app_only_acquires_token_using_cert(
 ) -> None:
     # Stub the cert thumbprint helper -- we don't want to parse a fake cert here.
     mocker.patch(
-        "fazla_od.auth.get_cert_info",
+        "m365ctl.common.auth.get_cert_info",
         return_value=CertInfo(
             subject="CN=Test",
             thumbprint="ABCDEF",
@@ -77,7 +93,7 @@ def test_app_only_acquires_token_using_cert(
 
 def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
     mocker.patch(
-        "fazla_od.auth.get_cert_info",
+        "m365ctl.common.auth.get_cert_info",
         return_value=CertInfo("CN=x", "AB", "2028-01-01T00:00:00Z", 900),
     )
     mock_app = MagicMock()
@@ -93,7 +109,7 @@ def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
 
 
 @LIVE
-def test_live_app_only_against_fazla_tenant() -> None:
+def test_live_app_only_against_tenant() -> None:
     """Smoke test: real cert, real Entra. Requires config.toml + cert on disk."""
     cfg = load_config(Path("config.toml"))
     cred = AppOnlyCredential(cfg)
@@ -113,11 +129,11 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
     }
     mock_app.acquire_token_by_device_flow.return_value = {
         "access_token": "delegated-t0k3n",
-        "id_token_claims": {"preferred_username": "test@fazla.com"},
+        "id_token_claims": {"preferred_username": "test@example.com"},
     }
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     printed: list[str] = []
     cred = DelegatedCredential(cfg, prompt=lambda msg: printed.append(msg))
@@ -130,10 +146,10 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
 
 def test_delegated_get_token_uses_cached_account(cfg: Config, mocker) -> None:
     mock_app = MagicMock()
-    mock_app.get_accounts.return_value = [{"username": "cached@fazla.com"}]
+    mock_app.get_accounts.return_value = [{"username": "cached@example.com"}]
     mock_app.acquire_token_silent.return_value = {"access_token": "cached-t0k3n"}
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     token = cred.get_token()
@@ -146,8 +162,39 @@ def test_delegated_get_token_raises_when_not_logged_in(cfg: Config, mocker) -> N
     mock_app = MagicMock()
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("fazla_od.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     with pytest.raises(AuthError, match="not logged in"):
         cred.get_token()
+
+
+def test_load_persistent_cache_migrates_legacy_fazla_od_dir(tmp_path, monkeypatch):
+    from m365ctl.common import auth as auth_mod
+    fake_home = tmp_path
+    monkeypatch.setattr(auth_mod.Path, "home", staticmethod(lambda: fake_home))
+    # Re-evaluate the module-level constants against the patched home.
+    monkeypatch.setattr(auth_mod, "_CACHE_DIR", fake_home / ".config" / "m365ctl")
+    monkeypatch.setattr(auth_mod, "_CACHE_FILE", fake_home / ".config" / "m365ctl" / "token_cache.bin")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_DIR", fake_home / ".config" / "fazla-od")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_FILE", fake_home / ".config" / "fazla-od" / "token_cache.bin")
+    legacy = fake_home / ".config" / "fazla-od"
+    legacy.mkdir(parents=True)
+    (legacy / "token_cache.bin").write_text("{}")
+    cache = auth_mod._load_persistent_cache()
+    assert cache is not None
+    assert (fake_home / ".config" / "m365ctl" / "token_cache.bin").exists()
+    # Legacy file moved, not copied.
+    assert not (legacy / "token_cache.bin").exists()
+
+
+def test_load_persistent_cache_returns_empty_when_no_cache(tmp_path, monkeypatch):
+    from m365ctl.common import auth as auth_mod
+    monkeypatch.setattr(auth_mod, "_CACHE_DIR", tmp_path / ".config" / "m365ctl")
+    monkeypatch.setattr(auth_mod, "_CACHE_FILE", tmp_path / ".config" / "m365ctl" / "token_cache.bin")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_DIR", tmp_path / ".config" / "fazla-od")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_FILE", tmp_path / ".config" / "fazla-od" / "token_cache.bin")
+    cache = auth_mod._load_persistent_cache()
+    # msal returns an empty SerializableTokenCache when nothing on disk.
+    assert cache is not None
+    assert not (tmp_path / ".config" / "m365ctl" / "token_cache.bin").exists()

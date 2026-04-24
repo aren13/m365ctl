@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# od-auth - dispatch to fazla-od auth subcommand.
+# od-auth - dispatch to m365ctl auth subcommand.
 # The wrapper lives here rather than in pyproject [project.scripts] so
 # users can invoke `./bin/od-auth` directly from a repo clone without
 # installing the package, and so future tools added under `bin/` use a
@@ -7,4 +7,4 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli auth "$@"
+exec uv run --project "$REPO" python -m m365ctl od auth "$@"
