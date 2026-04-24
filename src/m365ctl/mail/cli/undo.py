@@ -151,13 +151,23 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
         r = execute_move(rev, graph, logger, before=current_before)
 
     elif action == "mail.delete.soft":
-        print(
-            f"mail undo: cmd for this op was mail-copy; inverse is mail.delete.soft "
-            f"on the copy {rev.item_id!r}. Phase 4 adds programmatic delete-soft; "
-            f"for now remove the copy via Outlook UI.",
-            file=sys.stderr,
-        )
-        return 2
+        from m365ctl.mail.mutate.delete import execute_soft_delete
+        rev.args.setdefault("auth_mode", auth_mode)
+        # before capture for the undo of THIS undo (i.e. if user later re-deletes the
+        # restored message): fetch current parent so the next audit record is useful.
+        try:
+            from m365ctl.mail.messages import get_message
+            msg = get_message(
+                graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
+                message_id=rev.item_id,
+            )
+            current_before = {
+                "parent_folder_id": msg.parent_folder_id,
+                "parent_folder_path": msg.parent_folder_path,
+            }
+        except Exception:
+            current_before = {}
+        r = execute_soft_delete(rev, graph, logger, before=current_before)
 
     elif action == "mail.flag":
         from m365ctl.mail.mutate.flag import execute_flag

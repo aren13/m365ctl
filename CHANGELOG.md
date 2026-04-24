@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-04-25
+
+### Added
+- **`m365ctl mail delete` — soft delete via move-to-Deleted-Items.** Single-item (`--message-id --confirm`) or bulk-plan (`--from --subject --folder --plan-out` → review → `--from-plan --confirm`). Bulk ≥20 ops require interactive `/dev/tty` confirm.
+- `src/m365ctl/mail/mutate/delete.py` — `execute_soft_delete`: `POST /messages/{id}/move {"destinationId": "deleteditems"}`.
+- `bin/mail-delete` short wrapper; dispatcher route for `mail delete` verb.
+- `--help` explicitly distinguishes soft delete from the hard-delete `mail clean` verb (Phase 6).
+
+### Changed
+- **`m365ctl undo <op-id>` now reverses `mail.delete.soft` ops** — moves the message back to its original parent folder using `before.parent_folder_id` captured at delete time.
+- **Closed the Phase 3 `mail.copy` undo chain.** The copy's inverse (`mail.delete.soft` on the new message id) now runs end-to-end: `m365ctl undo <copy-op-id>` soft-deletes the copy instead of printing a Phase 4 deferral message.
+- `mail/mutate/undo.py`: `build_reverse_mail_operation` grew a `cmd == "mail-delete-soft"` branch. The Dispatcher's `mail.delete.soft` inverse returns a real `(before, after) → mail.move` spec (replacing the Phase 3 placeholder).
+- `mail/cli/undo.py`: the `action == "mail.delete.soft"` branch now calls `execute_soft_delete` (replacing the Phase 3 deferral print).
+
+### Deferred
+- Hard delete (`mail clean`) — Phase 6. Uses `DELETE /messages/{id}`; bypasses Deleted Items; irreversible.
+- ETag 412 → refresh → retry loop still deferred (Phase 3.5 or later).
+
 ## [0.4.0] — 2026-04-25
 
 ### Added
