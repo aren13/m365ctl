@@ -113,6 +113,11 @@ def test_crawl_folder_410_sync_state_not_found_restarts(tmp_path: Path) -> None:
             "WHERE mailbox_upn = 'me' AND folder_id = 'fld-inbox'"
         ).fetchone()
         assert status == "restarted"
+    # And the second pagination call must have used the initial_path, not
+    # the expired stored deltaLink — otherwise the "restart" is fake and
+    # we'd loop on the stale token.
+    second_call_path = graph.get_paginated.call_args_list[1].args[0]
+    assert second_call_path == "/me/mailFolders/fld-inbox/messages/delta"
 
 
 def _raises_sync_state_not_found():

@@ -101,8 +101,12 @@ ON CONFLICT (mailbox_upn, folder_id) DO UPDATE SET
 
 
 def _is_sync_state_not_found(exc: GraphError) -> bool:
+    # GraphError messages are formatted "<code>: <msg>" by GraphClient._parse,
+    # so the prefix is either "syncStateNotFound:" or "HTTP410:" depending on
+    # whether Graph returned a typed error code. Anchor on those tokens so
+    # arbitrary messages containing "410" elsewhere don't trigger a resync.
     msg = str(exc).lower()
-    return "syncstatenotfound" in msg or "410" in msg
+    return "syncstatenotfound" in msg or "http410" in msg
 
 
 def _stored_delta_link(conn, *, mailbox_upn: str, folder_id: str) -> str | None:
