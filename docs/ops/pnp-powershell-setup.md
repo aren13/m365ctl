@@ -4,16 +4,32 @@ One-time setup to enable `od-audit-sharing`, which shells out to PowerShell.
 
 ## 1. Install PowerShell + PnP module
 
+**Homebrew heads-up (as of 2026-04):** the `powershell` cask was renamed
+to `powershell@preview` and then deprecated; its checksum is currently
+broken against the upstream `.pkg`. The durable path is to install the
+signed `.pkg` directly from Microsoft's GitHub releases:
+
 ```bash
-brew install --cask powershell    # macOS
-pwsh -NoLogo -Command "Install-Module PnP.PowerShell -Scope CurrentUser -Force"
+# Replace the URL with the latest from https://github.com/PowerShell/PowerShell/releases
+# (use -osx-x64 for Intel Macs).
+curl -L --output /tmp/powershell.pkg \
+  https://github.com/PowerShell/PowerShell/releases/download/v7.6.1/powershell-lts-7.6.1-osx-arm64.pkg
+sudo installer -pkg /tmp/powershell.pkg -target /
+rm /tmp/powershell.pkg
+```
+
+Then install the PnP module into the current user (no sudo):
+
+```bash
+pwsh -NoLogo -Command "Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber"
 ```
 
 Verify:
 ```bash
+pwsh --version                                                       # PowerShell 7.6.x
 pwsh -NoLogo -Command "Get-Module -ListAvailable PnP.PowerShell | Select-Object Version"
 ```
-Expected: a version line (2.x or newer).
+Expected: a PowerShell version ≥ 7.4 and a PnP module version ≥ 2.x (3.x current).
 
 ## 2. Convert the PEM certificate to PKCS#12 (.pfx)
 
@@ -41,6 +57,29 @@ Expected: the PFX exists; the password is ~40 characters.
 The PFX is built from the exact same PEM key+cert that Plan 1 uploaded to
 Entra (thumbprint `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`). No new cert
 upload is required.
+
+## 3b. Grant the Entra app SharePoint-API permissions (NOT just Graph)
+
+`od-audit-sharing` (and other PnP-backed commands like `od-label`) call
+the **SharePoint REST/CSOM API**, not Microsoft Graph. These APIs have a
+separate permission surface from Graph, and the Entra app needs
+**application-level** permissions granted there too. Plan 1 only granted
+Microsoft Graph permissions (`Sites.ReadWrite.All` on Graph), which is
+insufficient for PnP.
+
+Symptom when this is missing: `Connect-PnPOnline` succeeds but any
+subsequent PnP cmdlet (`Get-PnPList`, `Get-PnPListItemPermission`, …)
+fails with `Unauthorized` from the SharePoint REST API.
+
+Fix (one-time, tenant admin required):
+
+1. [Entra admin center](https://entra.microsoft.com) → **App registrations** → open the toolkit's app.
+2. **API permissions** → **Add a permission** → **SharePoint** (not Microsoft Graph) → **Application permissions**.
+3. Check `Sites.FullControl.All`. Add.
+4. Back on the permissions list, click **"Grant admin consent for <tenant>"**. Confirm.
+5. Wait ~30 seconds for propagation, then retry.
+
+If you don't need full control, `Sites.Manage.All` works for `od-audit-sharing` (read-only on permissions). `od-label` requires `Sites.FullControl.All` to set sensitivity labels.
 
 ## 4. Smoke-test the connection
 
