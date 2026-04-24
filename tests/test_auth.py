@@ -198,3 +198,9 @@ def test_load_persistent_cache_returns_empty_when_no_cache(tmp_path, monkeypatch
     # msal returns an empty SerializableTokenCache when nothing on disk.
     assert cache is not None
     assert not (tmp_path / ".config" / "m365ctl" / "token_cache.bin").exists()
+
+
+def test_graph_scopes_delegated_includes_mail_surface():
+    from m365ctl.common.auth import GRAPH_SCOPES_DELEGATED
+    for required in ("Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite"):
+        assert required in GRAPH_SCOPES_DELEGATED, f"missing delegated scope {required!r}"

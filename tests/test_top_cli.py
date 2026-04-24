@@ -34,10 +34,26 @@ def test_unknown_domain_exits_nonzero():
     assert r.returncode != 0
 
 
-def test_mail_domain_exists_but_has_no_verbs_yet():
-    # Phase 0: mail tree is scaffold only. `mail` should print a
-    # "not yet implemented" notice and exit non-zero, not ImportError.
+def test_mail_domain_no_verb_prints_usage():
+    # With no verb: mail dispatcher prints its own usage and exits non-zero.
     r = _run(["mail"])
     assert r.returncode != 0
     out = (r.stdout + r.stderr).lower()
-    assert "not yet" in out or "phase 1" in out
+    assert "verb" in out or "usage" in out
+
+
+def test_mail_domain_routes_to_mail_cli():
+    r = _run(["mail", "--help"])
+    assert r.returncode == 0
+    out = r.stdout + r.stderr
+    assert "list" in out
+    assert "get" in out
+    assert "search" in out
+
+
+def test_mail_list_help_reachable():
+    r = _run(["mail", "list", "--help"])
+    # Stub still returns 2 pre-Task-13; --help flag is the argparse path and should exit 0
+    # once the real verb lands. For Group 6, the stub replies non-zero with a
+    # "not yet implemented" notice. Accept either here until Group 7 lands.
+    assert r.returncode in (0, 2)
