@@ -41,6 +41,7 @@ _USAGE = (
     "  rules        list / show inbox rules\n"
     "  settings     show mailbox settings\n"
     "  attach       list / get attachments\n"
+    "  catalog      catalog refresh / catalog status (DuckDB mirror)\n"
     "\n"
     "Mutations (safe — all undoable):\n"
     "  move         move one or more messages\n"
@@ -107,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.reply import main as f
     elif verb == "forward":
         from m365ctl.mail.cli.forward import main as f
+    elif verb == "catalog":
+        from m365ctl.mail.cli.catalog import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
