@@ -5,6 +5,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-24
+
+### Added
+- **Mail folder CRUD:** `m365ctl mail folders create/rename/move/delete` (soft delete). Dry-run default; `--confirm` required to execute. Compliance folders (`Recoverable Items`, `Purges`, `Audits`, `Calendar`, `Contacts`, `Tasks`, `Notes`) are hard-coded to reject before any Graph call.
+- **Master-category CRUD + sync:** `m365ctl mail categories add/update/remove/sync`. `sync` reconciles against `[mail].categories_master` — only adds missing; never removes user-created extras.
+- **Mail undo:** `m365ctl undo <op-id>` now dispatches mail ops alongside `od.*`. The top-level router peeks the audit record's `cmd` field to route.
+  - `mail.folder.create` ↔ `mail.folder.delete`
+  - `mail.folder.rename` ↔ rename back
+  - `mail.folder.move` ↔ move back
+  - `mail.folder.delete` — **Irreversible in Phase 2** (folder restore from Deleted Items lands Phase 4+)
+  - `mail.categories.add` ↔ `mail.categories.remove`
+  - `mail.categories.update` ↔ update back
+  - `mail.categories.remove` ↔ `mail.categories.add` (message→category links cannot be restored)
+- `src/m365ctl/mail/mutate/` tree: `folders.py`, `categories.py`, `undo.py`, `_common.py` (`MailResult`, `assert_mail_target_allowed`, `derive_mailbox_upn`).
+- `src/m365ctl/mail/cli/undo.py` — mail-specific undo handler (routed from top-level `m365ctl undo`).
+- Plan-file schema accepts `mail.folder.*` + `mail.categories.*` action namespaces.
+
+### Changed
+- `src/m365ctl/mail/cli/folders.py` gains `create/rename/move/delete` subcommands. Bare `mail folders` invocation preserves Phase 1 reader behavior.
+- `src/m365ctl/mail/cli/categories.py` gains `add/update/remove/sync` subcommands. Bare invocation preserves list behavior.
+- `src/m365ctl/cli/undo.py` rewritten from thin delegate into a cmd-prefix router (OneDrive path unchanged; mail path dispatched to `mail.cli.undo.run_undo_mail`).
+
+### Safety
+- Every mail mutation runs `assert_mail_target_allowed` (mailbox scope + hardcoded compliance folder deny) BEFORE credential construction and BEFORE any Graph call.
+- `--confirm` required for every mutation. Dry-run is the default.
+
 ## [0.2.0] — 2026-04-24
 
 ### Added
