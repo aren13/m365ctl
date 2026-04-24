@@ -156,7 +156,7 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
                 pages = graph.get_paginated(path)
             for items, _ in pages:
                 gathered.extend(items)
-        except Exception:
+        except (TypeError, AttributeError):
             gathered = []
         if gathered:
             return gathered
