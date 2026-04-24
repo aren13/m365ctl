@@ -6,7 +6,7 @@ Notes for Claude Code (and any agentic assistant) operating this repo.
 
 A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
 
-## Current CLI surface (Plans 1-3 complete)
+## Current CLI surface (Plans 1-4 complete)
 
 | Command | Purpose |
 |---|---|
@@ -26,6 +26,17 @@ A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint 
 | `./bin/od-download --from-plan plan.json` | Download the set listed in a Plan-3 plan file (`action == "download"`). |
 | `./bin/od-download --query "<SELECT …>" [--plan-out plan.json]` | Build a plan from a catalog SELECT; `--plan-out` writes it without downloading. |
 | `./bin/od-audit-sharing --scope site:<url> [--output-format json\|tsv]` | Emit one row per permission via PnP.PowerShell (requires one-time setup — see `docs/ops/pnp-powershell-setup.md`). |
+| `./bin/od-move --pattern <glob> --scope <s> --plan-out plan.json` | Build a move plan (dry-run). |
+| `./bin/od-move --from-plan plan.json --confirm` | Execute the plan's moves. |
+| `./bin/od-rename --drive-id <d> --item-id <i> --new-name <n> --confirm` | Single-item rename. |
+| `./bin/od-copy --pattern <glob> --scope <s> --plan-out plan.json` | Build a copy plan (dry-run). |
+| `./bin/od-copy --from-plan plan.json --confirm` | Execute the plan's copies (async polling). |
+| `./bin/od-delete ... --plan-out` / `--from-plan --confirm` | Soft-delete to recycle bin. |
+| `./bin/od-clean recycle-bin --scope <s>` | Hard-purge recycle bin. Not reversible. |
+| `./bin/od-clean old-versions --keep N --scope <s>` | Drop all but N newest versions per item. |
+| `./bin/od-clean stale-shares --older-than N --scope <s>` | Revoke sharing links older than N days. |
+| `./bin/od-label apply --label <name> ...` / `od-label remove ...` | Apply/remove sensitivity label via PnP.PowerShell. |
+| `./bin/od-undo <op_id> --confirm` | Replay the reverse of a past op from the audit log. |
 
 All inventory commands accept `--json` for machine-readable output.
 
@@ -53,6 +64,17 @@ cannot accidentally run a mutation plan with `od-download`.
 One-time setup: see `docs/ops/pnp-powershell-setup.md`. Converts the PEM
 cert to PFX at `~/.config/fazla-od/fazla-od.pfx` and stores an export
 password in macOS Keychain under `FazlaODToolkit:PfxPassword`.
+
+### Mutation safety envelope (Plan 4)
+
+All mutating commands:
+- Dry-run by default; require `--confirm` to execute.
+- Bulk ops (with `--pattern`) require the plan-file workflow — `--pattern --confirm` without `--from-plan` is rejected.
+- Every mutation appends to `logs/ops/YYYY-MM-DD.jsonl` (start BEFORE the Graph call, end AFTER).
+- Items outside `scope.allow_drives` require `--unsafe-scope` + a `/dev/tty` `y/N` confirm (piped stdin cannot bypass).
+- Items matching `scope.deny_paths` are ALWAYS blocked — no override.
+
+Audit log is append-only. `./bin/od-undo <op_id>` reads start/end records and builds an inverse op (rename→rename, move→move-back, copy→delete-copy, delete→restore, label-apply→label-remove). Irreversible ops (recycle-bin purge, version delete, share revoke) raise a clear error.
 
 ## Safety model (already in effect)
 
