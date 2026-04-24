@@ -18,18 +18,18 @@ The supported paths on macOS/Linux are SharePoint REST (auth complexity) or PnP.
 - `./bin/od-delete … --confirm` followed by `./bin/od-undo <op_id> --confirm` round-trips a file through the recycle bin and back against ODfB. Audit log shows `start`/`end` for both ops with `result: ok`.
 - `./bin/od-clean recycle-bin --from-plan … --confirm` permanently deletes a recycle-bin item. `od-undo` on that op raises `Irreversible` via the `cmd == "od-clean(recycle-bin)"` branch (not via the fallback "did not succeed originally" branch that we currently fall through to).
 - Both PS scripts have unit tests (subprocess mocked, same pattern as `test_mutate_label.py`).
-- Live smoke test round-trips one throwaway file (same `_fazla_smoke/hello.txt` shape as Plan 4 Task 13).
+- Live smoke test round-trips one throwaway file (same `_m365ctl_smoke/hello.txt` shape as Plan 4 Task 13).
 - `docs/ops/pnp-powershell-setup.md` updated with any new prereqs (likely none — `Sites.FullControl.All` already covers this).
 - `AGENTS.md` unchanged on the verb-surface side (same `od-undo` / `od-clean`) but gains a short note in the Plan 4 "Mutation safety envelope" subsection that ODfB restore/purge now goes through PnP.
 
 **Dependencies (already in place from Plans 1–4):**
-- `fazla_od.graph.GraphClient` + `GraphError`.
-- `fazla_od.audit.AuditLogger` + start/end helpers.
-- `fazla_od.safety.assert_scope_allowed` (still called before the shell-out — PnP can't bypass scope).
-- `fazla_od.planfile.Operation`.
-- `fazla_od.mutate.delete.{execute_recycle_delete, execute_restore, DeleteResult}`.
-- `fazla_od.mutate.clean.{purge_recycle_bin_item, CleanResult}`.
-- PnP.PowerShell 3.x + PFX + Keychain entry `FazlaODToolkit:PfxPassword` / `fazla-od`.
+- `m365ctl.graph.GraphClient` + `GraphError`.
+- `m365ctl.audit.AuditLogger` + start/end helpers.
+- `m365ctl.safety.assert_scope_allowed` (still called before the shell-out — PnP can't bypass scope).
+- `m365ctl.planfile.Operation`.
+- `m365ctl.mutate.delete.{execute_recycle_delete, execute_restore, DeleteResult}`.
+- `m365ctl.mutate.clean.{purge_recycle_bin_item, CleanResult}`.
+- PnP.PowerShell 3.x + PFX + Keychain entry `m365ctl:PfxPassword` / `m365ctl`.
 
 **Intentionally deferred (not this plan):**
 - Version history restore (`od-clean old-versions` has no undo; unrecoverable-by-design).
@@ -67,10 +67,10 @@ Safer: split on `/Shared%20Documents` or `/Documents`, take the left half, URL-d
 
 ### PS auth + script shape
 
-Same prologue as `audit-sharing.ps1` / `Set-FazlaLabel.ps1`:
+Same prologue as `audit-sharing.ps1` / `Set-m365ctlLabel.ps1`:
 ```powershell
 $pwd = ConvertTo-SecureString -String (
-    /usr/bin/security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w
+    /usr/bin/security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w
 ) -AsPlainText -Force
 Connect-PnPOnline -Tenant <tid> -ClientId <cid> `
     -CertificatePath $PfxPath -CertificatePassword $pwd -Url $SiteUrl
@@ -86,9 +86,9 @@ Output is one JSON line on stdout on success, `Write-Error` on failure (exits no
 scripts/ps/
 ├── recycle-restore.ps1              # NEW
 ├── recycle-purge.ps1                # NEW
-└── _FazlaRecycleHelpers.ps1         # NEW: shared site-URL / lookup helpers (dot-sourced)
+└── _m365ctlRecycleHelpers.ps1         # NEW: shared site-URL / lookup helpers (dot-sourced)
 
-src/fazla_od/
+src/m365ctl/
 ├── mutate/
 │   ├── delete.py                    # MODIFIED: execute_restore falls back to pwsh on notSupported
 │   └── clean.py                     # MODIFIED: purge_recycle_bin_item falls back to pwsh on 404
@@ -105,20 +105,20 @@ No new Python files. No CLI surface change. `od-undo` and `od-clean recycle-bin`
 
 ---
 
-## Task 1: `scripts/ps/_FazlaRecycleHelpers.ps1` — shared auth + lookup
+## Task 1: `scripts/ps/_m365ctlRecycleHelpers.ps1` — shared auth + lookup
 
 **Files:**
-- Create: `scripts/ps/_FazlaRecycleHelpers.ps1`
+- Create: `scripts/ps/_m365ctlRecycleHelpers.ps1`
 
 Exports three functions, dot-sourced by the other two scripts:
 
-- `Connect-FazlaSite -Tenant -ClientId -PfxPath -SiteUrl` — wraps `Connect-PnPOnline` with cert+Keychain auth; throws if the Keychain entry is missing.
+- `Connect-m365ctlSite -Tenant -ClientId -PfxPath -SiteUrl` — wraps `Connect-PnPOnline` with cert+Keychain auth; throws if the Keychain entry is missing.
 - `Find-RecycleBinItem -LeafName -DirName` — returns the single most-recent matching `RecycleBinItem` or throws with a specific error code (`NoMatch` / `AmbiguousMatch`). On ambiguity, log all matches to stderr, pick the newest by `DeletedDate`.
 - `Resolve-SiteUrlFromDriveId -DriveId -TenantHost` — calls Microsoft Graph via `Invoke-PnPGraphMethod` (or a plain `Invoke-RestMethod` if PnP's helper isn't ideal) to fetch `/drives/{id}/webUrl`, trims, returns the site URL.
 
 **Steps:**
 - [ ] **Step 1:** Write the three functions as a single `.ps1` that can be dot-sourced.
-- [ ] **Step 2:** Smoke-test via pwsh REPL: dot-source the file, call `Resolve-SiteUrlFromDriveId` with a known drive, verify it returns `https://fazla.sharepoint.com/sites/ServisOnboarding` (or whatever the live drive maps to).
+- [ ] **Step 2:** Smoke-test via pwsh REPL: dot-source the file, call `Resolve-SiteUrlFromDriveId` with a known drive, verify it returns `https://example.sharepoint.com/sites/ServisOnboarding` (or whatever the live drive maps to).
 - [ ] **Step 3:** Commit with message `feat(ps): shared PnP helpers for recycle-bin ops`.
 
 No Python tests here — this file is exercised indirectly via the other two scripts. Add a `# shellcheck disable` equivalent comment if any linter complains about the dot-source-only pattern.
@@ -129,7 +129,7 @@ No Python tests here — this file is exercised indirectly via the other two scr
 
 **Files:**
 - Create: `scripts/ps/recycle-restore.ps1`
-- Modify: `src/fazla_od/mutate/delete.py`
+- Modify: `src/m365ctl/mutate/delete.py`
 - Modify: `tests/test_mutate_delete.py`
 
 ### Step 1: The PS script
@@ -142,7 +142,7 @@ param(
     [Parameter(Mandatory=$true)][string]$SiteUrl,
     [Parameter(Mandatory=$true)][string]$LeafName,
     [Parameter(Mandatory=$true)][string]$DirName,
-    [string]$PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx"
+    [string]$PfxPath = "$HOME/.config/m365ctl/m365ctl.pfx"
 )
 ```
 
@@ -152,7 +152,7 @@ Logic: dot-source helpers, connect, `Find-RecycleBinItem`, `Restore-PnPRecycleBi
 {
   "recycle_bin_item_id": "abc-123",
   "restored_name": "hello.txt",
-  "restored_parent_path": "/Shared Documents/_fazla_smoke"
+  "restored_parent_path": "/Shared Documents/_m365ctl_smoke"
 }
 ```
 
@@ -184,7 +184,7 @@ Existing test `test_restore_notsupported_wraps_with_manual_instructions` needs t
 
 **Files:**
 - Create: `scripts/ps/recycle-purge.ps1`
-- Modify: `src/fazla_od/mutate/clean.py`
+- Modify: `src/m365ctl/mutate/clean.py`
 - Modify: `tests/test_mutate_clean.py`
 
 Symmetric to Task 2. Differences:
@@ -224,13 +224,13 @@ Adapt `test_purge_404_wraps_with_manual_instructions` for the new behaviour, sam
 
 ### Steps
 
-- [ ] **Step 1:** Live smoke — stage `_fazla_smoke2/hello2.txt` via Graph direct (same pattern as Plan 4 Task 13 Step 2). Run:
+- [ ] **Step 1:** Live smoke — stage `_m365ctl_smoke2/hello2.txt` via Graph direct (same pattern as Plan 4 Task 13 Step 2). Run:
     ```bash
     ./bin/od-delete --scope me --drive-id $D --item-id $I --confirm
     DELETE_OP=$(tail -1 logs/ops/$(date -u +%F).jsonl | python -c 'import sys,json; print(json.loads(sys.stdin.read())["op_id"])')
     ./bin/od-undo $DELETE_OP --confirm
     ```
-    Expected: `[<uuid>] ok (reverse of $DELETE_OP)`. Verify the file reappears in `/_fazla_smoke2/` via `od-search --scope me "hello2.txt"`.
+    Expected: `[<uuid>] ok (reverse of $DELETE_OP)`. Verify the file reappears in `/_m365ctl_smoke2/` via `od-search --scope me "hello2.txt"`.
 - [ ] **Step 2:** Re-delete, then purge via hand-crafted `--from-plan`:
     ```bash
     ./bin/od-delete --scope me --drive-id $D --item-id $I --confirm
@@ -271,14 +271,14 @@ Adapt `test_purge_404_wraps_with_manual_instructions` for the new behaviour, sam
 
 ### Commits
 
-- `52319c7` / `6ba6f55` — Task 1: `_FazlaRecycleHelpers.ps1` (+ review fixups).
+- `52319c7` / `6ba6f55` — Task 1: `_m365ctlRecycleHelpers.ps1` (+ review fixups).
 - `ecf4663` / `83308f9` — Task 2: restore fallback (+ data-recovery hazard fix: raise on unknown library suffix).
-- `dc2ce07` — Cross-cutting refactor: shared `invoke_pwsh` and `lookup_site_url_from_drive_id` in `fazla_od/mutate/_pwsh.py`.
+- `dc2ce07` — Cross-cutting refactor: shared `invoke_pwsh` and `lookup_site_url_from_drive_id` in `m365ctl/mutate/_pwsh.py`.
 - `4ddc796` — Task 3: purge fallback.
 - `7475988` — Task 4: docs + initial completion log.
 - `a6409aa` — Close final-review gaps: add tests for lookup-fallback-through paths; warn on recycle-bin ceiling; fix latent `GraphError` constructor bug in `_pwsh.py`.
 - `7207b29` — Live-smoke fix: thread delete `before` through the reverse op's args; normalize Graph-path `/drives/<id>/root:` prefix to site-relative for PnP's `-DirName`.
-- `8dc0502` — Live-smoke fix: drop `-PfxPath cfg.cert_path` override (PEM key, not PFX); PS default at `~/.config/fazla-od/fazla-od.pfx` is correct.
+- `8dc0502` — Live-smoke fix: drop `-PfxPath cfg.cert_path` override (PEM key, not PFX); PS default at `~/.config/m365ctl/m365ctl.pfx` is correct.
 - `d0a2949` — Live-smoke fix: recover purge `before` block from prior `od-delete` audit record so `Find-RecycleBinItem` has a real `LeafName`/`DirName` to match.
 
 ### Test delta
@@ -290,18 +290,18 @@ Full-suite run at HEAD: `216 passed, 1 skipped`. The one skip is the live-gated 
 
 ### Design deviations from the original plan
 
-- Moved `_lookup_site_url` into `fazla_od/mutate/_pwsh.py` as `lookup_site_url_from_drive_id` (public in module) rather than keeping it in `delete.py`. Avoids a cross-mutate-module import when Task 3's `clean.py` needed the same helper. Same semantics; function now raises `GraphError("unknownLibrarySuffix", ...)` on unrecognized library suffix instead of the originally-implemented silent `rsplit` heuristic — the silent heuristic was a data-recovery hazard (wrong site URL → wrong recycle bin → could restore a different file with the same name).
+- Moved `_lookup_site_url` into `m365ctl/mutate/_pwsh.py` as `lookup_site_url_from_drive_id` (public in module) rather than keeping it in `delete.py`. Avoids a cross-mutate-module import when Task 3's `clean.py` needed the same helper. Same semantics; function now raises `GraphError("unknownLibrarySuffix", ...)` on unrecognized library suffix instead of the originally-implemented silent `rsplit` heuristic — the silent heuristic was a data-recovery hazard (wrong site URL → wrong recycle bin → could restore a different file with the same name).
 - Extracted shared `invoke_pwsh` helper to avoid triplicate `subprocess.run(["pwsh", ...])` across `label.py`, `delete.py`, `clean.py`. Unplanned but code-review-driven.
 - `Find-RecycleBinItem` ambiguity handling: the plan said "throws with a specific error code (`NoMatch` / `AmbiguousMatch`)" AND "On ambiguity, log all matches to stderr, pick the newest." Resolved to the second form — `AmbiguousMatch` is a `Write-Warning`; only `NoMatch` throws. Rationale: the most-recent delete is almost certainly the undo target, and failing-closed on ambiguity would block common restores.
 
 ### Live smoke — executed 2026-04-24
 
-File: `_fazla_smoke2/hello2.txt` staged in the primary operator's personal OneDrive (`drive_id = b!3FSdMpv3t0Kf…pm_ga`, `item_id = 01KEZPQAHEAAZT7HM6BJG2DKB4VKTUZQCT`). Three commits (`7207b29`, `8dc0502`, `d0a2949`) were required to close bugs surfaced only by the live run — all now fixed and covered by new tests.
+File: `_m365ctl_smoke2/hello2.txt` staged in the primary operator's personal OneDrive (`drive_id = b!3FSdMpv3t0Kf…pm_ga`, `item_id = 01KEZPQAHEAAZT7HM6BJG2DKB4VKTUZQCT`). Three commits (`7207b29`, `8dc0502`, `d0a2949`) were required to close bugs surfaced only by the live run — all now fixed and covered by new tests.
 
 - **Step 1 — `od-delete` + `od-undo` restore round-trip:** ✅
   - Delete op: `8eaaaeaf-d060-4496-ae4b-b8a2325ddff9` → `[…] ok (recycled)`.
   - Undo op: `0b8b5af8-365e-4b6a-bf23-ec576524e802` → `[…] ok (reverse of 8eaaaeaf-…)`.
-  - Post-restore verification via `GET /drives/{id}/root:/_fazla_smoke2/hello2.txt`: item present, same `item_id`.
+  - Post-restore verification via `GET /drives/{id}/root:/_m365ctl_smoke2/hello2.txt`: item present, same `item_id`.
 
 - **Step 2 — re-delete + purge + undo-on-purge:** ✅
   - Re-delete op: `24ed444a-8632-4305-aefb-245acb7f87c6` → `[…] ok (recycled)`.
@@ -328,7 +328,7 @@ Worth calling out explicitly — these weren't visible from unit-tests alone:
 
 2. **Graph path format mismatches PnP `DirName`.** `before.parent_path` recorded at delete time is `/drives/<id>/root:/<path>`; PnP's recycle-bin `DirName` is site-relative (e.g. `personal/<user>/Documents/<path>`). The `-like "*$DirName"` match failed. Fix (`7207b29`): added `normalize_recycle_dir_name` in `_pwsh.py` that strips everything up to and including `root:`.
 
-3. **`-PfxPath` was overridden with the PEM key** (`cfg.cert_path` is `.key`, not `.pfx`). PS tried to load `.key` as a certificate and failed. Fix (`8dc0502`): drop the override; the PS default at `~/.config/fazla-od/fazla-od.pfx` is the right path.
+3. **`-PfxPath` was overridden with the PEM key** (`cfg.cert_path` is `.key`, not `.pfx`). PS tried to load `.key` as a certificate and failed. Fix (`8dc0502`): drop the override; the PS default at `~/.config/m365ctl/m365ctl.pfx` is the right path.
 
 4. **Purge had no way to recover `before.name` when the item was already in the recycle bin.** `cli/clean.py` fell back to empty meta on the 404, sending `-LeafName ""` to PS. Fix (`d0a2949`): new audit helper `find_most_recent_delete_before` walks the log for a matching prior `od-delete` start record and uses its `before` block. Operator-facing warning surfaced when no such record exists.
 

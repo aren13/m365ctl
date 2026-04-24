@@ -4,7 +4,7 @@
 
 **Goal:** Turn the catalog built in Plan 2 into something you can actually _use_: tenant-wide scope resolution, auto-retrying Graph calls, a unified `od-search` that fuses server-side full-text with local metadata, a streaming `od-download` that materialises any subset, and a PnP.PowerShell-backed `od-audit-sharing` report. Everything in this plan is **read-only** against the tenant — no mutations land until Plan 4.
 
-**Architecture:** Extend `fazla_od.catalog.crawl.resolve_scope` with `tenant` and `site:<slug-or-id>`; wire `with_retry`+`is_transient_graph_error` into `GraphClient` so every GET auto-retries 429/503 honouring `Retry-After` (seconds-int OR HTTP-date). Add two Python subpackages — `search/` (Graph + DuckDB source merger) and `download/` (streaming + plan-file consumer). Introduce the PowerShell ecosystem via `scripts/ps/` plus a PEM-to-PFX conversion helper; the Python wrapper just shells out and parses JSON.
+**Architecture:** Extend `m365ctl.catalog.crawl.resolve_scope` with `tenant` and `site:<slug-or-id>`; wire `with_retry`+`is_transient_graph_error` into `GraphClient` so every GET auto-retries 429/503 honouring `Retry-After` (seconds-int OR HTTP-date). Add two Python subpackages — `search/` (Graph + DuckDB source merger) and `download/` (streaming + plan-file consumer). Introduce the PowerShell ecosystem via `scripts/ps/` plus a PEM-to-PFX conversion helper; the Python wrapper just shells out and parses JSON.
 
 **Tech Stack:** Python 3.11+, `httpx` (existing; streaming body API for downloads), `duckdb` (existing), `pwsh` + `PnP.PowerShell` (new, user-installed), `openssl` (system) for PEM→PFX, `security` (macOS Keychain CLI, already present).
 
@@ -15,18 +15,18 @@
 - `./bin/od-download --item-id … --drive-id …` streams a single file into `workspaces/download-YYYYMMDD-HHMMSS/`. `--from-plan plan.json` and `--query "<SELECT …>"` variants also work. Concurrency capped at 4; `--overwrite` controls collision behaviour.
 - `./bin/od-audit-sharing --scope site:<id> [--output-format json|tsv]` shells out to `pwsh scripts/ps/audit-sharing.ps1`, which connects with cert auth and emits one row per permission.
 - `GraphClient.get` / `get_absolute` / `get_paginated` auto-retry 429/503 with `Retry-After` honoured. No existing call sites need to change.
-- All unit tests pass with mocked externals; live smoke test verified against the Fazla tenant.
+- All unit tests pass with mocked externals; live smoke test verified against the m365ctl tenant.
 - `AGENTS.md` grows a block of new rows describing the new commands; existing rows are untouched.
 - Plan 3 commits pushed to `origin/main`.
 
 **Dependencies from Plans 1-2 (already in place):**
-- `fazla_od.config.load_config` → `Config` (including `cfg.catalog.path`, `cfg.cert_path`, `cfg.cert_public`).
-- `fazla_od.auth.AppOnlyCredential` / `DelegatedCredential`.
-- `fazla_od.graph.GraphClient` with `get`, `get_absolute`, `get_paginated`, plus `GraphError` and `is_transient_graph_error`.
-- `fazla_od.retry.with_retry` / `RetryExhausted`.
-- `fazla_od.catalog.db.open_catalog`, `fazla_od.catalog.schema`, `fazla_od.catalog.crawl.{DriveSpec, CrawlResult, resolve_scope, crawl_drive}`, `fazla_od.catalog.normalize.normalize_item`.
-- `bin/` shell-wrapper pattern (single-line `exec uv run --project "$REPO" python -m fazla_od.cli <sub> …`).
-- Cert on disk: `~/.config/fazla-od/fazla-od.key` (PEM private key), `~/.config/fazla-od/fazla-od.cer` (PEM public cert), thumbprint `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`.
+- `m365ctl.config.load_config` → `Config` (including `cfg.catalog.path`, `cfg.cert_path`, `cfg.cert_public`).
+- `m365ctl.auth.AppOnlyCredential` / `DelegatedCredential`.
+- `m365ctl.graph.GraphClient` with `get`, `get_absolute`, `get_paginated`, plus `GraphError` and `is_transient_graph_error`.
+- `m365ctl.retry.with_retry` / `RetryExhausted`.
+- `m365ctl.catalog.db.open_catalog`, `m365ctl.catalog.schema`, `m365ctl.catalog.crawl.{DriveSpec, CrawlResult, resolve_scope, crawl_drive}`, `m365ctl.catalog.normalize.normalize_item`.
+- `bin/` shell-wrapper pattern (single-line `exec uv run --project "$REPO" python -m m365ctl.cli <sub> …`).
+- Cert on disk: `~/.config/m365ctl/m365ctl.key` (PEM private key), `~/.config/m365ctl/m365ctl.cer` (PEM public cert), thumbprint `<your-cert-thumbprint>`.
 
 ## Domain primer
 
@@ -41,7 +41,7 @@
 - **Tenant enumeration.** `GET /users?$select=id,userPrincipalName,displayName&$top=999` (app-only, needs `User.Read.All`) paginates through all users. For each, `GET /users/{id}/drive` returns their OneDrive (404 if they never provisioned one — ignore). For SharePoint: `GET /sites?search=*` lists all sites (delegated only returns accessible ones; app-only with `Sites.ReadWrite.All` returns all); then `GET /sites/{id}/drives` returns each site's document libraries.
 - **`Retry-After` header.** Graph returns it as either an integer (seconds) or an HTTP-date (RFC 7231 §7.1.3). Parse int-first; on `ValueError`, try `email.utils.parsedate_to_datetime` and subtract `datetime.now(timezone.utc)`. Clamp negative results to 0. The header is on the HTTP response — _not_ in the JSON body — so the `GraphError` as currently raised loses it. Plan 3 adds a `retry_after_seconds` attribute to `GraphError` populated at the `_parse` site from `resp.headers.get("Retry-After")`.
 - **Download URL redirect.** `GET /drives/{id}/items/{iid}/content` returns a `302 Found` with a pre-signed CDN URL in `Location`. `httpx` by default follows redirects, but the pre-signed URL must be fetched _without_ the `Authorization: Bearer …` header (the CDN rejects bearer-auth). Solution: when following the redirect manually, strip the auth header, or — simpler — pass `follow_redirects=False` to the first call, read `Location`, then fetch the URL with a fresh `httpx.Client` (no auth).
-- **PnP.PowerShell cert auth quirk — PFX vs PEM.** `Connect-PnPOnline -Tenant … -ClientId … -CertificatePath <path> -CertificatePassword <SecureString>` only accepts a PKCS#12 (`.pfx`) file, not a separate PEM key + PEM cert. Convert once at setup time with `openssl pkcs12 -export -inkey fazla-od.key -in fazla-od.cer -out fazla-od.pfx -passout pass:<generated>`. Store the password in macOS Keychain via `security add-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w <password>`. At runtime the PS script reads the password with `security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w` and passes it as `(ConvertTo-SecureString -String "<pwd>" -AsPlainText -Force)`.
+- **PnP.PowerShell cert auth quirk — PFX vs PEM.** `Connect-PnPOnline -Tenant … -ClientId … -CertificatePath <path> -CertificatePassword <SecureString>` only accepts a PKCS#12 (`.pfx`) file, not a separate PEM key + PEM cert. Convert once at setup time with `openssl pkcs12 -export -inkey m365ctl.key -in m365ctl.cer -out m365ctl.pfx -passout pass:<generated>`. Store the password in macOS Keychain via `security add-generic-password -a m365ctl -s m365ctl:PfxPassword -w <password>`. At runtime the PS script reads the password with `security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w` and passes it as `(ConvertTo-SecureString -String "<pwd>" -AsPlainText -Force)`.
 - **Sharing-permission model.** Each driveItem has `GET /drives/{d}/items/{i}/permissions`, which returns rows of:
   - `id` (permission id), `roles: ["read"|"write"|"owner"]`,
   - `grantedToV2` (internal user/group; may be absent),
@@ -53,7 +53,7 @@
 ## File structure (new files in this plan)
 
 ```
-src/fazla_od/
+src/m365ctl/
 ├── graph.py                        # MODIFIED: Retry-After parse + with_retry wiring
 ├── catalog/
 │   └── crawl.py                    # MODIFIED: resolve_scope gains 'tenant' + 'site:…'
@@ -103,7 +103,7 @@ No new Python dependencies. `duckdb`, `httpx`, and stdlib `email.utils` cover ev
 ### Task 1: Wire `with_retry` into `GraphClient` + parse `Retry-After`
 
 **Files:**
-- Modify: `src/fazla_od/graph.py`
+- Modify: `src/m365ctl/graph.py`
 - Create: `tests/test_graph_retry.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -118,7 +118,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError, is_transient_graph_error
+from m365ctl.graph import GraphClient, GraphError, is_transient_graph_error
 
 
 def _seq_handler(responses: list[httpx.Response]):
@@ -254,7 +254,7 @@ uv run pytest tests/test_graph_retry.py -v
 ```
 Expected: `TypeError: GraphClient.__init__() got an unexpected keyword argument 'sleep'` (or similar). All 5 tests fail.
 
-- [ ] **Step 3: Extend `src/fazla_od/graph.py`**
+- [ ] **Step 3: Extend `src/m365ctl/graph.py`**
 
 Replace the file with:
 ```python
@@ -264,7 +264,7 @@ Plan 3 changes:
 - ``GraphError`` carries a ``retry_after_seconds`` attribute (``None`` when
   absent / unparseable).
 - ``GraphClient`` accepts ``sleep`` and ``max_attempts`` and wraps each
-  ``get`` / ``get_absolute`` call in ``fazla_od.retry.with_retry``, treating
+  ``get`` / ``get_absolute`` call in ``m365ctl.retry.with_retry``, treating
   429/503 (and 500/502/504) as transient.
 """
 from __future__ import annotations
@@ -275,7 +275,7 @@ from typing import Callable, Iterator
 
 import httpx
 
-from fazla_od.retry import with_retry
+from m365ctl.retry import with_retry
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -441,7 +441,7 @@ Expected: all pass (2 existing + 3 pagination + 5 new retry = 10).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/graph.py tests/test_graph_retry.py
+git add src/m365ctl/graph.py tests/test_graph_retry.py
 git commit -m "feat(graph): wire with_retry + Retry-After parsing into GraphClient"
 ```
 
@@ -450,7 +450,7 @@ git commit -m "feat(graph): wire with_retry + Retry-After parsing into GraphClie
 ### Task 2: `/dev/tty` y/N prompt helper
 
 **Files:**
-- Create: `src/fazla_od/prompts.py`
+- Create: `src/m365ctl/prompts.py`
 - Create: `tests/test_prompts.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -463,27 +463,27 @@ import io
 
 import pytest
 
-from fazla_od.prompts import confirm_or_abort, TTYUnavailable
+from m365ctl.prompts import confirm_or_abort, TTYUnavailable
 
 
 def test_confirm_returns_true_on_y(monkeypatch) -> None:
     fake_tty = io.StringIO("y\n")
     fake_out = io.StringIO()
-    monkeypatch.setattr("fazla_od.prompts._open_tty", lambda: (fake_tty, fake_out))
+    monkeypatch.setattr("m365ctl.prompts._open_tty", lambda: (fake_tty, fake_out))
     assert confirm_or_abort("Proceed?") is True
 
 
 def test_confirm_returns_true_on_yes_case_insensitive(monkeypatch) -> None:
     fake_tty = io.StringIO("YES\n")
     fake_out = io.StringIO()
-    monkeypatch.setattr("fazla_od.prompts._open_tty", lambda: (fake_tty, fake_out))
+    monkeypatch.setattr("m365ctl.prompts._open_tty", lambda: (fake_tty, fake_out))
     assert confirm_or_abort("Proceed?") is True
 
 
 def test_confirm_returns_false_on_n(monkeypatch) -> None:
     fake_tty = io.StringIO("n\n")
     fake_out = io.StringIO()
-    monkeypatch.setattr("fazla_od.prompts._open_tty", lambda: (fake_tty, fake_out))
+    monkeypatch.setattr("m365ctl.prompts._open_tty", lambda: (fake_tty, fake_out))
     assert confirm_or_abort("Proceed?") is False
 
 
@@ -491,7 +491,7 @@ def test_confirm_returns_false_on_blank(monkeypatch) -> None:
     # Default is N.
     fake_tty = io.StringIO("\n")
     fake_out = io.StringIO()
-    monkeypatch.setattr("fazla_od.prompts._open_tty", lambda: (fake_tty, fake_out))
+    monkeypatch.setattr("m365ctl.prompts._open_tty", lambda: (fake_tty, fake_out))
     assert confirm_or_abort("Proceed?") is False
 
 
@@ -502,7 +502,7 @@ def test_yes_flag_shortcuts_prompt(monkeypatch) -> None:
         called["n"] += 1
         raise AssertionError("should not open tty")
 
-    monkeypatch.setattr("fazla_od.prompts._open_tty", should_not_open)
+    monkeypatch.setattr("m365ctl.prompts._open_tty", should_not_open)
     assert confirm_or_abort("Proceed?", assume_yes=True) is True
     assert called["n"] == 0
 
@@ -511,7 +511,7 @@ def test_raises_when_tty_unavailable(monkeypatch) -> None:
     def no_tty():
         raise OSError("no tty")
 
-    monkeypatch.setattr("fazla_od.prompts._open_tty", no_tty)
+    monkeypatch.setattr("m365ctl.prompts._open_tty", no_tty)
     with pytest.raises(TTYUnavailable):
         confirm_or_abort("Proceed?")
 ```
@@ -521,9 +521,9 @@ def test_raises_when_tty_unavailable(monkeypatch) -> None:
 ```bash
 uv run pytest tests/test_prompts.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.prompts'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.prompts'`.
 
-- [ ] **Step 3: Implement `src/fazla_od/prompts.py`**
+- [ ] **Step 3: Implement `src/m365ctl/prompts.py`**
 
 ```python
 """Safety prompt that forces a human's `y/N` decision via ``/dev/tty``.
@@ -579,7 +579,7 @@ Expected: 6 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/prompts.py tests/test_prompts.py
+git add src/m365ctl/prompts.py tests/test_prompts.py
 git commit -m "feat(prompts): /dev/tty y/N helper for Claude-can't-bypass gates"
 ```
 
@@ -588,7 +588,7 @@ git commit -m "feat(prompts): /dev/tty y/N helper for Claude-can't-bypass gates"
 ### Task 3: Tenant/site scope resolution in `resolve_scope`
 
 **Files:**
-- Modify: `src/fazla_od/catalog/crawl.py`
+- Modify: `src/m365ctl/catalog/crawl.py`
 - Create: `tests/test_catalog_crawl_tenant.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -601,7 +601,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.crawl import DriveSpec, resolve_scope
+from m365ctl.catalog.crawl import DriveSpec, resolve_scope
 
 
 def test_resolve_scope_site_by_numeric_id_lists_drives() -> None:
@@ -612,7 +612,7 @@ def test_resolve_scope_site_by_numeric_id_lists_drives() -> None:
             return {
                 "id": "site-123",
                 "displayName": "Finance",
-                "webUrl": "https://fazla.sharepoint.com/sites/finance",
+                "webUrl": "https://example.sharepoint.com/sites/finance",
             }
         if path == "/sites/site-123/drives":
             return {
@@ -647,7 +647,7 @@ def test_resolve_scope_site_by_slug_uses_search() -> None:
             return {
                 "value": [
                     {"id": "site-abc", "displayName": "Finance",
-                     "webUrl": "https://fazla.sharepoint.com/sites/finance"}
+                     "webUrl": "https://example.sharepoint.com/sites/finance"}
                 ]
             }
         if path == "/sites/site-abc":
@@ -691,17 +691,17 @@ def test_resolve_scope_tenant_enumerates_users_and_sites() -> None:
         if path == "/users":
             return {
                 "value": [
-                    {"id": "u1", "userPrincipalName": "a@fazla.com", "displayName": "A"},
-                    {"id": "u2", "userPrincipalName": "b@fazla.com", "displayName": "B"},
+                    {"id": "u1", "userPrincipalName": "a@example.com", "displayName": "A"},
+                    {"id": "u2", "userPrincipalName": "b@example.com", "displayName": "B"},
                 ]
             }
         if path == "/users/u1/drive":
-            return {"id": "drv-u1", "name": "OneDrive - Fazla",
+            return {"id": "drv-u1", "name": "OneDrive - m365ctl",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/users/u2/drive":
             # Simulate a user without a provisioned drive (HTTP 404 → raises)
-            from fazla_od.graph import GraphError
+            from m365ctl.graph import GraphError
             raise GraphError("itemNotFound: no drive")
         if path == "/sites" and params == {"search": "*"}:
             return {"value": [
@@ -733,12 +733,12 @@ def test_resolve_scope_tenant_paginates_users() -> None:
     def fake_get(path, *, params=None):
         if path == "/users":
             return {"value": [
-                {"id": "u1", "userPrincipalName": "a@fazla.com"}
+                {"id": "u1", "userPrincipalName": "a@example.com"}
             ]}
         if path == "/users/u1/drive":
             return {"id": "drv-u1", "name": "OneDrive",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/sites" and params == {"search": "*"}:
             return {"value": []}
         raise AssertionError(f"unexpected: {path}")
@@ -748,7 +748,7 @@ def test_resolve_scope_tenant_paginates_users() -> None:
     # get_paginated: two pages of users.
     def fake_paginated(path, *, params=None):
         if path == "/users":
-            yield [{"id": "u1", "userPrincipalName": "a@fazla.com"}], None
+            yield [{"id": "u1", "userPrincipalName": "a@example.com"}], None
         elif path == "/sites":
             yield [], None
         else:
@@ -764,7 +764,7 @@ def test_resolve_scope_still_supports_me_and_drive() -> None:
     graph.get.return_value = {
         "id": "drv-me",
         "driveType": "business",
-        "owner": {"user": {"email": "x@fazla.com"}},
+        "owner": {"user": {"email": "x@example.com"}},
         "name": "OneDrive",
     }
     drives = resolve_scope("me", graph)
@@ -773,7 +773,7 @@ def test_resolve_scope_still_supports_me_and_drive() -> None:
     graph.get.return_value = {
         "id": "drv-xyz",
         "driveType": "documentLibrary",
-        "owner": {"user": {"email": "s@fazla.com"}},
+        "owner": {"user": {"email": "s@example.com"}},
         "name": "Finance",
     }
     drives = resolve_scope("drive:drv-xyz", graph)
@@ -789,7 +789,7 @@ Expected: several tests fail — the existing `resolve_scope` rejects `site:` an
 
 - [ ] **Step 3: Extend `resolve_scope`**
 
-Replace the body of `src/fazla_od/catalog/crawl.py` (keep `DriveSpec`, `CrawlResult`, `crawl_drive`, `_owner_of`, `_UPSERT_ITEM_SQL`, `_GraphLike`; swap only `resolve_scope`):
+Replace the body of `src/m365ctl/catalog/crawl.py` (keep `DriveSpec`, `CrawlResult`, `crawl_drive`, `_owner_of`, `_UPSERT_ITEM_SQL`, `_GraphLike`; swap only `resolve_scope`):
 
 ```python
 def resolve_scope(scope: str, graph: _GraphLike) -> list[DriveSpec]:
@@ -907,7 +907,7 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
         # Some MagicMocks are configured with side_effect that ignores params.
         pages = graph.get_paginated("/users")
 
-    from fazla_od.graph import GraphError
+    from m365ctl.graph import GraphError
 
     for items, _ in pages:
         for user in items:
@@ -948,7 +948,7 @@ Expected: all pass — 6 existing (Plan 2 crawl) + 7 new tenant/site tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/catalog/crawl.py tests/test_catalog_crawl_tenant.py
+git add src/m365ctl/catalog/crawl.py tests/test_catalog_crawl_tenant.py
 git commit -m "feat(catalog): resolve_scope supports tenant and site:<slug|id>"
 ```
 
@@ -957,7 +957,7 @@ git commit -m "feat(catalog): resolve_scope supports tenant and site:<slug|id>"
 ### Task 4: `od-catalog-refresh` gets `--scope tenant|site:…` + >5-drive gate
 
 **Files:**
-- Modify: `src/fazla_od/cli/catalog.py`
+- Modify: `src/m365ctl/cli/catalog.py`
 - Modify: `tests/test_cli_catalog.py`
 
 - [ ] **Step 1: Add failing tests**
@@ -966,23 +966,23 @@ Append to `tests/test_cli_catalog.py`:
 ```python
 def test_run_refresh_tenant_uses_app_only(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
 
     delegated = MagicMock()
-    mocker.patch("fazla_od.cli.catalog.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.cli.catalog.DelegatedCredential", return_value=delegated)
     app_only = MagicMock()
     app_only.get_token.return_value = "app-token"
-    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=app_only)
 
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"S/D{i}",
-                  owner=f"o{i}@fazla.com", drive_type="documentLibrary",
+                  owner=f"o{i}@example.com", drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(3)
     ]
-    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
     mocker.patch(
-        "fazla_od.cli.catalog.crawl_drive",
+        "m365ctl.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 1, "dl") for s in specs],
     )
 
@@ -997,17 +997,17 @@ def test_refresh_over_5_drives_prompts_and_aborts_on_no(
     tmp_path, mocker, capsys
 ) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(6)
     ]
-    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
-    mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=False)
-    crawl_mock = mocker.patch("fazla_od.cli.catalog.crawl_drive")
+    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=False)
+    crawl_mock = mocker.patch("m365ctl.cli.catalog.crawl_drive")
 
     rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
                     assume_yes=False)
@@ -1019,18 +1019,18 @@ def test_refresh_over_5_drives_prompts_and_aborts_on_no(
 
 def test_refresh_over_5_drives_proceeds_on_yes(tmp_path, mocker) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(6)
     ]
-    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
-    mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=True)
     mocker.patch(
-        "fazla_od.cli.catalog.crawl_drive",
+        "m365ctl.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
     )
 
@@ -1041,18 +1041,18 @@ def test_refresh_over_5_drives_proceeds_on_yes(tmp_path, mocker) -> None:
 
 def test_refresh_yes_flag_skips_prompt(tmp_path, mocker) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(10)
     ]
-    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
-    prompt = mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
+    prompt = mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=True)
     mocker.patch(
-        "fazla_od.cli.catalog.crawl_drive",
+        "m365ctl.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
     )
 
@@ -1072,7 +1072,7 @@ uv run pytest tests/test_cli_catalog.py -v
 ```
 Expected: the four new tests fail (missing `assume_yes` kwarg, missing `confirm_or_abort` import).
 
-- [ ] **Step 3: Update `src/fazla_od/cli/catalog.py`**
+- [ ] **Step 3: Update `src/m365ctl/cli/catalog.py`**
 
 Replace with:
 ```python
@@ -1083,12 +1083,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from fazla_od.auth import AppOnlyCredential, DelegatedCredential
-from fazla_od.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
-from fazla_od.catalog.db import open_catalog
-from fazla_od.config import load_config
-from fazla_od.graph import GraphClient
-from fazla_od.prompts import confirm_or_abort
+from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
+from m365ctl.catalog.db import open_catalog
+from m365ctl.config import load_config
+from m365ctl.graph import GraphClient
+from m365ctl.prompts import confirm_or_abort
 
 _LARGE_SCOPE_THRESHOLD = 5
 
@@ -1205,7 +1205,7 @@ Expected: 3 existing + 4 new = 7 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/cli/catalog.py tests/test_cli_catalog.py
+git add src/m365ctl/cli/catalog.py tests/test_cli_catalog.py
 git commit -m "feat(cli): catalog-refresh supports tenant/site scopes with >5-drive gate"
 ```
 
@@ -1214,10 +1214,10 @@ git commit -m "feat(cli): catalog-refresh supports tenant/site scopes with >5-dr
 ### Task 5: Search — Graph source, catalog source, merger
 
 **Files:**
-- Create: `src/fazla_od/search/__init__.py` (empty)
-- Create: `src/fazla_od/search/graph_search.py`
-- Create: `src/fazla_od/search/catalog_search.py`
-- Create: `src/fazla_od/search/merge.py`
+- Create: `src/m365ctl/search/__init__.py` (empty)
+- Create: `src/m365ctl/search/graph_search.py`
+- Create: `src/m365ctl/search/catalog_search.py`
+- Create: `src/m365ctl/search/merge.py`
 - Create: `tests/test_search_graph.py`
 - Create: `tests/test_search_catalog.py`
 - Create: `tests/test_search_merge.py`
@@ -1225,8 +1225,8 @@ git commit -m "feat(cli): catalog-refresh supports tenant/site scopes with >5-dr
 - [ ] **Step 1: Create the package**
 
 ```bash
-mkdir -p src/fazla_od/search
-touch src/fazla_od/search/__init__.py
+mkdir -p src/m365ctl/search
+touch src/m365ctl/search/__init__.py
 ```
 
 - [ ] **Step 2: Write tests for `graph_search`**
@@ -1237,7 +1237,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from fazla_od.search.graph_search import SearchHit, graph_search
+from m365ctl.search.graph_search import SearchHit, graph_search
 
 
 def _resource(drive_id: str, item_id: str, name: str,
@@ -1320,7 +1320,7 @@ def test_graph_search_skips_hits_missing_drive_id() -> None:
     assert list(graph_search(graph, "x")) == []
 ```
 
-- [ ] **Step 3: Implement `src/fazla_od/search/graph_search.py`**
+- [ ] **Step 3: Implement `src/m365ctl/search/graph_search.py`**
 
 ```python
 """Adapter: Graph /search/query -> SearchHit."""
@@ -1420,8 +1420,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.search.catalog_search import catalog_search
+from m365ctl.catalog.db import open_catalog
+from m365ctl.search.catalog_search import catalog_search
 
 
 def _seed(db: Path) -> None:
@@ -1432,17 +1432,17 @@ def _seed(db: Path) -> None:
                                is_deleted, size, modified_at, modified_by)
             VALUES
               ('d', '1', 'Invoice-Q1.pdf', '/Finance/Invoice-Q1.pdf', false, false, 100,
-               TIMESTAMP '2024-06-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-06-01 00:00:00', 'a@example.com'),
               ('d', '2', 'Q2.xlsx',       '/Finance/Invoices/Q2.xlsx', false, false, 200,
-               TIMESTAMP '2024-07-01 00:00:00', 'b@fazla.com'),
+               TIMESTAMP '2024-07-01 00:00:00', 'b@example.com'),
               ('d', '3', 'Readme.md',      '/Docs/Readme.md',          false, false, 50,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'f', 'Finance',        '/Finance',                 true,  false, null,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'g', 'Invoices',       '/Finance/Invoices',        true,  false, null,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'x', 'old.pdf',        '/tomb/old.pdf',            false, true,  1,
-               TIMESTAMP '2020-01-01 00:00:00', 'a@fazla.com')
+               TIMESTAMP '2020-01-01 00:00:00', 'a@example.com')
             """
         )
 
@@ -1491,7 +1491,7 @@ def test_owner_filter(tmp_path: Path) -> None:
     _seed(db)
     with open_catalog(db) as conn:
         hits = list(catalog_search(conn, "invoice", type_="file",
-                                   owner="b@fazla.com"))
+                                   owner="b@example.com"))
     assert {h.name for h in hits} == {"Q2.xlsx"}
 
 
@@ -1515,7 +1515,7 @@ def test_excludes_deleted_by_default(tmp_path: Path) -> None:
     assert hits == []
 ```
 
-- [ ] **Step 5: Implement `src/fazla_od/search/catalog_search.py`**
+- [ ] **Step 5: Implement `src/m365ctl/search/catalog_search.py`**
 
 ```python
 """Adapter: DuckDB catalog -> SearchHit (name + full_path LIKE match)."""
@@ -1525,7 +1525,7 @@ from typing import Iterator, Literal
 
 import duckdb
 
-from fazla_od.search.graph_search import SearchHit
+from m365ctl.search.graph_search import SearchHit
 
 Type = Literal["file", "folder", "all"]
 
@@ -1593,8 +1593,8 @@ Create `tests/test_search_merge.py`:
 ```python
 from __future__ import annotations
 
-from fazla_od.search.graph_search import SearchHit
-from fazla_od.search.merge import merge_hits
+from m365ctl.search.graph_search import SearchHit
+from m365ctl.search.merge import merge_hits
 
 
 def _hit(drive, item, modified, source, name="x", is_folder=False):
@@ -1638,7 +1638,7 @@ def test_merge_respects_limit() -> None:
     assert len(merged) == 3
 ```
 
-- [ ] **Step 7: Implement `src/fazla_od/search/merge.py`**
+- [ ] **Step 7: Implement `src/m365ctl/search/merge.py`**
 
 ```python
 """Merge Graph + catalog hits, dedupe by (drive_id, item_id), sort desc by mtime."""
@@ -1646,7 +1646,7 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator
 
-from fazla_od.search.graph_search import SearchHit
+from m365ctl.search.graph_search import SearchHit
 
 
 def merge_hits(
@@ -1690,7 +1690,7 @@ Expected: 3 + 7 + 3 = 13 passed.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/fazla_od/search/ tests/test_search_*.py
+git add src/m365ctl/search/ tests/test_search_*.py
 git commit -m "feat(search): Graph + catalog search sources with merge/dedup"
 ```
 
@@ -1699,9 +1699,9 @@ git commit -m "feat(search): Graph + catalog search sources with merge/dedup"
 ### Task 6: `od-search` CLI + wrapper
 
 **Files:**
-- Create: `src/fazla_od/cli/search.py`
+- Create: `src/m365ctl/cli/search.py`
 - Create: `tests/test_cli_search.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 - Create: `bin/od-search`
 
 - [ ] **Step 1: Write failing tests**
@@ -1716,10 +1716,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.crawl import DriveSpec
-from fazla_od.catalog.db import open_catalog
-from fazla_od.cli.search import run_search
-from fazla_od.search.graph_search import SearchHit
+from m365ctl.catalog.crawl import DriveSpec
+from m365ctl.catalog.db import open_catalog
+from m365ctl.cli.search import run_search
+from m365ctl.search.graph_search import SearchHit
 
 
 def _cfg(tmp_path: Path):
@@ -1738,22 +1738,22 @@ def _seed(db: Path) -> None:
                                is_deleted, size, modified_at, modified_by)
             VALUES
               ('d', 'c1', 'local-invoice.pdf', '/L/local-invoice.pdf', false, false,
-               100, TIMESTAMP '2024-03-01 00:00:00', 'a@fazla.com')
+               100, TIMESTAMP '2024-03-01 00:00:00', 'a@example.com')
             """
         )
 
 
 def test_search_merges_graph_and_catalog_json(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.search.GraphClient", return_value=MagicMock())
 
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.cli.search.graph_search",
         return_value=iter(
             [
                 SearchHit("d", "g1", "Graph-invoice.pdf",
@@ -1784,18 +1784,18 @@ def test_search_merges_graph_and_catalog_json(tmp_path, mocker, capsys) -> None:
 
 def test_search_scope_tenant_uses_app_only_and_filters(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.search.load_config", return_value=cfg)
     delegated = MagicMock()
     app_only = MagicMock(get_token=lambda: "app")
-    mocker.patch("fazla_od.cli.search.DelegatedCredential", return_value=delegated)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential", return_value=app_only)
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.search.resolve_scope",
+    mocker.patch("m365ctl.cli.search.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.cli.search.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.search.resolve_scope",
                  return_value=[DriveSpec("dx", "dn", "o", "business",
                                          "/drives/dx/root/delta")])
     # Graph returns one hit on drive 'dx' and one on drive 'other'; only dx survives.
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.cli.search.graph_search",
         return_value=iter([
             SearchHit("dx", "in-scope", "A", "/A", 1, "2024-01-01T00:00:00Z",
                       None, False, "graph"),
@@ -1820,13 +1820,13 @@ def test_search_scope_tenant_uses_app_only_and_filters(tmp_path, mocker) -> None
 
 def test_search_tsv_output_has_header(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.search.graph_search", return_value=iter([]))
+    mocker.patch("m365ctl.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.search.graph_search", return_value=iter([]))
     _seed(cfg.catalog.path)
 
     run_search(
@@ -1846,14 +1846,14 @@ def test_search_tsv_output_has_header(tmp_path, mocker, capsys) -> None:
 
 def test_search_limit_truncates(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.search.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.search.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.search.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.search.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "app"))
-    mocker.patch("fazla_od.cli.search.DelegatedCredential",
+    mocker.patch("m365ctl.cli.search.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "deleg"))
-    mocker.patch("fazla_od.cli.search.GraphClient", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.search.GraphClient", return_value=MagicMock())
     mocker.patch(
-        "fazla_od.cli.search.graph_search",
+        "m365ctl.cli.search.graph_search",
         return_value=iter([
             SearchHit("d", f"g{i}", f"n{i}", f"/n{i}", 1,
                       f"2024-{i+1:02d}-01T00:00:00Z", None, False, "graph")
@@ -1880,9 +1880,9 @@ def test_search_limit_truncates(tmp_path, mocker, capsys) -> None:
 ```bash
 uv run pytest tests/test_cli_search.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.cli.search'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.cli.search'`.
 
-- [ ] **Step 3: Implement `src/fazla_od/cli/search.py`**
+- [ ] **Step 3: Implement `src/m365ctl/cli/search.py`**
 
 ```python
 """`od-search` subcommand: Graph + catalog fused search."""
@@ -1894,14 +1894,14 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from fazla_od.auth import AppOnlyCredential, DelegatedCredential
-from fazla_od.catalog.crawl import resolve_scope
-from fazla_od.catalog.db import open_catalog
-from fazla_od.config import load_config
-from fazla_od.graph import GraphClient
-from fazla_od.search.catalog_search import catalog_search
-from fazla_od.search.graph_search import SearchHit, graph_search
-from fazla_od.search.merge import merge_hits
+from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.catalog.crawl import resolve_scope
+from m365ctl.catalog.db import open_catalog
+from m365ctl.config import load_config
+from m365ctl.graph import GraphClient
+from m365ctl.search.catalog_search import catalog_search
+from m365ctl.search.graph_search import SearchHit, graph_search
+from m365ctl.search.merge import merge_hits
 
 
 def _drive_ids_for_scope(scope: str, graph) -> list[str] | None:
@@ -2027,9 +2027,9 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 4: Wire into dispatcher**
 
-Edit `src/fazla_od/cli/__main__.py`. Add the import and registration:
+Edit `src/m365ctl/cli/__main__.py`. Add the import and registration:
 ```python
-from fazla_od.cli import search as search_cli
+from m365ctl.cli import search as search_cli
 # …
 _SUBCOMMANDS = {
     "auth": auth_cli.main,
@@ -2045,7 +2045,7 @@ _SUBCOMMANDS = {
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli search "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli search "$@"
 ```
 
 ```bash
@@ -2064,7 +2064,7 @@ Expected: 4 passed.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/fazla_od/cli/search.py src/fazla_od/cli/__main__.py tests/test_cli_search.py bin/od-search
+git add src/m365ctl/cli/search.py src/m365ctl/cli/__main__.py tests/test_cli_search.py bin/od-search
 git commit -m "feat(cli): od-search merging Graph /search/query with DuckDB"
 ```
 
@@ -2073,8 +2073,8 @@ git commit -m "feat(cli): od-search merging Graph /search/query with DuckDB"
 ### Task 7: Download planner (plan file + SELECT) and shared schema
 
 **Files:**
-- Create: `src/fazla_od/download/__init__.py`
-- Create: `src/fazla_od/download/planner.py`
+- Create: `src/m365ctl/download/__init__.py`
+- Create: `src/m365ctl/download/planner.py`
 - Create: `tests/test_download_planner.py`
 
 The plan-file schema here is the READ subset; Plan 4 extends it with mutation actions. Schema:
@@ -2089,8 +2089,8 @@ Plan 4's actions will be a strict superset: `download | move | rename | copy | d
 - [ ] **Step 1: Create the package**
 
 ```bash
-mkdir -p src/fazla_od/download
-touch src/fazla_od/download/__init__.py
+mkdir -p src/m365ctl/download
+touch src/m365ctl/download/__init__.py
 ```
 
 - [ ] **Step 2: Write failing tests**
@@ -2104,8 +2104,8 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.download.planner import (
+from m365ctl.catalog.db import open_catalog
+from m365ctl.download.planner import (
     DownloadItem,
     PlanFileError,
     load_plan_file,
@@ -2187,7 +2187,7 @@ def test_load_plan_file_rejects_bad_shape(tmp_path: Path) -> None:
         load_plan_file(p)
 ```
 
-- [ ] **Step 3: Implement `src/fazla_od/download/planner.py`**
+- [ ] **Step 3: Implement `src/m365ctl/download/planner.py`**
 
 ```python
 """Download-plan schema + loaders.
@@ -2313,7 +2313,7 @@ Expected: 6 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/download/__init__.py src/fazla_od/download/planner.py tests/test_download_planner.py
+git add src/m365ctl/download/__init__.py src/m365ctl/download/planner.py tests/test_download_planner.py
 git commit -m "feat(download): plan-file schema (READ subset) + loaders"
 ```
 
@@ -2322,11 +2322,11 @@ git commit -m "feat(download): plan-file schema (READ subset) + loaders"
 ### Task 8: Streaming fetcher + `od-download` CLI
 
 **Files:**
-- Create: `src/fazla_od/download/fetcher.py`
+- Create: `src/m365ctl/download/fetcher.py`
 - Create: `tests/test_download_fetcher.py`
-- Create: `src/fazla_od/cli/download.py`
+- Create: `src/m365ctl/cli/download.py`
 - Create: `tests/test_cli_download.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 - Create: `bin/od-download`
 
 - [ ] **Step 1: Write fetcher tests**
@@ -2340,7 +2340,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from fazla_od.download.fetcher import FetchResult, fetch_item
+from m365ctl.download.fetcher import FetchResult, fetch_item
 
 
 def _transport_redirect_then_200(body: bytes, redirect_url: str):
@@ -2413,7 +2413,7 @@ def test_fetch_raises_on_non_redirect_non_200(tmp_path: Path) -> None:
         )
 ```
 
-- [ ] **Step 2: Implement `src/fazla_od/download/fetcher.py`**
+- [ ] **Step 2: Implement `src/m365ctl/download/fetcher.py`**
 
 ```python
 """Streaming file download for OneDrive items.
@@ -2431,7 +2431,7 @@ from typing import Callable
 
 import httpx
 
-from fazla_od.graph import GraphError
+from m365ctl.graph import GraphError
 
 _CHUNK = 1024 * 1024  # 1 MiB
 
@@ -2532,9 +2532,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.cli.download import run_download
-from fazla_od.download.fetcher import FetchResult
+from m365ctl.catalog.db import open_catalog
+from m365ctl.cli.download import run_download
+from m365ctl.download.fetcher import FetchResult
 
 
 def _cfg(tmp_path: Path):
@@ -2547,10 +2547,10 @@ def _cfg(tmp_path: Path):
 
 def test_download_single_item(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
     captured = []
 
@@ -2560,7 +2560,7 @@ def test_download_single_item(tmp_path, mocker) -> None:
         dest.write_bytes(b"X" * 10)
         return FetchResult(drive_id, item_id, dest, 10, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
 
     dest = tmp_path / "out"
     rc = run_download(
@@ -2577,10 +2577,10 @@ def test_download_single_item(tmp_path, mocker) -> None:
 
 def test_download_from_plan(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     plan = tmp_path / "plan.json"
@@ -2599,7 +2599,7 @@ def test_download_from_plan(tmp_path, mocker) -> None:
         dest.write_bytes(b"")
         return FetchResult(drive_id, item_id, dest, 0, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
 
     dest = tmp_path / "out"
     rc = run_download(
@@ -2618,10 +2618,10 @@ def test_download_from_plan(tmp_path, mocker) -> None:
 
 def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     with open_catalog(cfg.catalog.path) as conn:
@@ -2631,7 +2631,7 @@ def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
         )
 
     mocker.patch(
-        "fazla_od.cli.download.fetch_item",
+        "m365ctl.cli.download.fetch_item",
         side_effect=AssertionError("fetch_item should not be called in plan-out mode"),
     )
     plan_out = tmp_path / "plan.json"
@@ -2652,9 +2652,9 @@ def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
 
 def test_download_requires_exactly_one_source(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.download.DelegatedCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.download.DelegatedCredential", return_value=MagicMock())
     rc = run_download(
         config_path=tmp_path / "config.toml",
         item_id=None, drive_id=None,
@@ -2667,10 +2667,10 @@ def test_download_requires_exactly_one_source(tmp_path, mocker) -> None:
 
 def test_download_dest_defaults_to_timestamped_workspace(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     captured: list[Path] = []
@@ -2681,9 +2681,9 @@ def test_download_dest_defaults_to_timestamped_workspace(tmp_path, mocker) -> No
         dest.write_bytes(b"")
         return FetchResult(drive_id, item_id, dest, 0, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
     monkey_now = "20260424-101530"
-    mocker.patch("fazla_od.cli.download._timestamp", return_value=monkey_now)
+    mocker.patch("m365ctl.cli.download._timestamp", return_value=monkey_now)
 
     rc = run_download(
         config_path=tmp_path / "config.toml",
@@ -2698,7 +2698,7 @@ def test_download_dest_defaults_to_timestamped_workspace(tmp_path, mocker) -> No
     assert f"download-{monkey_now}" in str(captured[0])
 ```
 
-- [ ] **Step 5: Implement `src/fazla_od/cli/download.py`**
+- [ ] **Step 5: Implement `src/m365ctl/cli/download.py`**
 
 ```python
 """`od-download` subcommand: materialise a subset of OneDrive locally."""
@@ -2710,11 +2710,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from fazla_od.auth import AppOnlyCredential, DelegatedCredential
-from fazla_od.catalog.db import open_catalog
-from fazla_od.config import load_config
-from fazla_od.download.fetcher import fetch_item
-from fazla_od.download.planner import (
+from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.catalog.db import open_catalog
+from m365ctl.config import load_config
+from m365ctl.download.fetcher import fetch_item
+from m365ctl.download.planner import (
     DownloadItem,
     load_plan_file,
     plan_from_query,
@@ -2872,9 +2872,9 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 6: Wire into dispatcher**
 
-Edit `src/fazla_od/cli/__main__.py`:
+Edit `src/m365ctl/cli/__main__.py`:
 ```python
-from fazla_od.cli import download as download_cli
+from m365ctl.cli import download as download_cli
 # …
 _SUBCOMMANDS = {
     …
@@ -2888,7 +2888,7 @@ _SUBCOMMANDS = {
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli download "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli download "$@"
 ```
 
 ```bash
@@ -2907,7 +2907,7 @@ Expected: 5 passed.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/fazla_od/download/fetcher.py src/fazla_od/cli/download.py src/fazla_od/cli/__main__.py tests/test_download_fetcher.py tests/test_cli_download.py bin/od-download
+git add src/m365ctl/download/fetcher.py src/m365ctl/cli/download.py src/m365ctl/cli/__main__.py tests/test_download_fetcher.py tests/test_cli_download.py bin/od-download
 git commit -m "feat(download): streaming fetcher + od-download CLI with plan-file workflow"
 ```
 
@@ -2928,18 +2928,18 @@ No tests — this is a one-shot operator script. We verify via the live smoke te
 # convert-cert.sh — one-shot: PEM key+cert -> PFX, store password in Keychain.
 #
 # Usage:   scripts/ps/convert-cert.sh
-# Result:  ~/.config/fazla-od/fazla-od.pfx (mode 600)
-#          Keychain entry FazlaODToolkit:PfxPassword holds the export password.
+# Result:  ~/.config/m365ctl/m365ctl.pfx (mode 600)
+#          Keychain entry m365ctl:PfxPassword holds the export password.
 #
 # Requires: openssl (system), security (macOS), /dev/urandom.
 set -euo pipefail
 
-CERT_DIR="${HOME}/.config/fazla-od"
-KEY="${CERT_DIR}/fazla-od.key"
-CER="${CERT_DIR}/fazla-od.cer"
-PFX="${CERT_DIR}/fazla-od.pfx"
-KEYCHAIN_SERVICE="FazlaODToolkit:PfxPassword"
-KEYCHAIN_ACCOUNT="fazla-od"
+CERT_DIR="${HOME}/.config/m365ctl"
+KEY="${CERT_DIR}/m365ctl.key"
+CER="${CERT_DIR}/m365ctl.cer"
+PFX="${CERT_DIR}/m365ctl.pfx"
+KEYCHAIN_SERVICE="m365ctl:PfxPassword"
+KEYCHAIN_ACCOUNT="m365ctl"
 
 for f in "$KEY" "$CER"; do
     if [[ ! -r "$f" ]]; then
@@ -2960,7 +2960,7 @@ openssl pkcs12 \
     -export \
     -inkey "$KEY" \
     -in "$CER" \
-    -name "FazlaODToolkit" \
+    -name "m365ctl" \
     -out "$PFX" \
     -passout "pass:${PASSWORD}"
 
@@ -2988,7 +2988,7 @@ chmod +x scripts/ps/convert-cert.sh
 - [ ] **Step 2: Write `docs/ops/pnp-powershell-setup.md`**
 
 ```markdown
-# PnP.PowerShell setup for Fazla OneDrive Toolkit
+# PnP.PowerShell setup for m365ctl
 
 One-time setup to enable `od-audit-sharing`, which shells out to PowerShell.
 
@@ -3014,22 +3014,22 @@ PEM key + PEM cert we use for the Python flow. Run the one-shot helper:
 ./scripts/ps/convert-cert.sh
 ```
 
-This produces `~/.config/fazla-od/fazla-od.pfx` (mode 600, gitignored —
-`~/.config/fazla-od/` is outside the repo) and stores a 40-char random
-password in macOS Keychain under service `FazlaODToolkit:PfxPassword`,
-account `fazla-od`.
+This produces `~/.config/m365ctl/m365ctl.pfx` (mode 600, gitignored —
+`~/.config/m365ctl/` is outside the repo) and stores a 40-char random
+password in macOS Keychain under service `m365ctl:PfxPassword`,
+account `m365ctl`.
 
 Verify:
 ```bash
-ls -la ~/.config/fazla-od/fazla-od.pfx
-security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w | wc -c
+ls -la ~/.config/m365ctl/m365ctl.pfx
+security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w | wc -c
 ```
 Expected: the PFX exists; the password is ~40 characters.
 
 ## 3. Confirm the Entra app has the same cert thumbprint
 
 The PFX is built from the exact same PEM key+cert that Plan 1 uploaded to
-Entra (thumbprint `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`). No new cert
+Entra (thumbprint `<your-cert-thumbprint>`). No new cert
 upload is required.
 
 ## 4. Smoke-test the connection
@@ -3037,14 +3037,14 @@ upload is required.
 ```bash
 pwsh -NoLogo -Command '
     $pwd = ConvertTo-SecureString -String (
-        security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w
+        security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w
     ) -AsPlainText -Force
     Connect-PnPOnline `
-        -Tenant 361efb70-ca20-41ae-b204-9045df001350 `
-        -ClientId b22e6fd3-4859-43ae-b997-997ad3aaf14b `
-        -CertificatePath "$HOME/.config/fazla-od/fazla-od.pfx" `
+        -Tenant 00000000-0000-0000-0000-000000000000 `
+        -ClientId 11111111-1111-1111-1111-111111111111 `
+        -CertificatePath "$HOME/.config/m365ctl/m365ctl.pfx" `
         -CertificatePassword $pwd `
-        -Url https://fazla.sharepoint.com
+        -Url https://example.sharepoint.com
     Get-PnPTenantSite | Select-Object -First 3 Url, Title
 '
 ```
@@ -3069,9 +3069,9 @@ git commit -m "feat(pnp): PEM->PFX helper and PowerShell setup docs"
 
 **Files:**
 - Create: `scripts/ps/audit-sharing.ps1`
-- Create: `src/fazla_od/cli/audit_sharing.py`
+- Create: `src/m365ctl/cli/audit_sharing.py`
 - Create: `tests/test_cli_audit_sharing.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 - Create: `bin/od-audit-sharing`
 
 - [ ] **Step 1: Write `scripts/ps/audit-sharing.ps1`**
@@ -3094,24 +3094,24 @@ git commit -m "feat(pnp): PEM->PFX helper and PowerShell setup docs"
   Azure AD app client ID. Required.
 
 .PARAMETER PfxPath
-  Path to the PFX cert (default ~/.config/fazla-od/fazla-od.pfx).
+  Path to the PFX cert (default ~/.config/m365ctl/m365ctl.pfx).
 
 .PARAMETER KeychainService
   Keychain service name holding the PFX password
-  (default FazlaODToolkit:PfxPassword).
+  (default m365ctl:PfxPassword).
 
 .EXAMPLE
-  pwsh scripts/ps/audit-sharing.ps1 -Scope "site:fazla.sharepoint.com,abc,def" \
-      -Tenant 361efb70-... -ClientId b22e6fd3-...
+  pwsh scripts/ps/audit-sharing.ps1 -Scope "site:example.sharepoint.com,abc,def" \
+      -Tenant 00000000-... -ClientId 11111111-...
 #>
 param(
     [Parameter(Mandatory=$true)] [string] $Scope,
     [ValidateSet("json","tsv")] [string] $OutputFormat = "json",
     [Parameter(Mandatory=$true)] [string] $Tenant,
     [Parameter(Mandatory=$true)] [string] $ClientId,
-    [string] $PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx",
-    [string] $KeychainService = "FazlaODToolkit:PfxPassword",
-    [string] $KeychainAccount = "fazla-od"
+    [string] $PfxPath = "$HOME/.config/m365ctl/m365ctl.pfx",
+    [string] $KeychainService = "m365ctl:PfxPassword",
+    [string] $KeychainAccount = "m365ctl"
 )
 
 $ErrorActionPreference = "Stop"
@@ -3187,7 +3187,7 @@ foreach ($lst in $lists) {
             $shared = $p.PrincipalName
             $isExternal = $false
             if ($shared -match "#ext#" -or $shared -match "@") {
-                $isExternal = ($shared -notmatch "@fazla\.")
+                $isExternal = ($shared -notmatch "@example\.")
             }
             $rows.Add([ordered]@{
                 drive_id          = $lst.Id.ToString()
@@ -3229,7 +3229,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.cli.audit_sharing import run_audit
+from m365ctl.cli.audit_sharing import run_audit
 
 
 def _cfg(tmp_path: Path):
@@ -3244,22 +3244,22 @@ def _cfg(tmp_path: Path):
 
 def test_audit_shells_out_and_parses_json(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.audit_sharing.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.audit_sharing.load_config", return_value=cfg)
 
     payload = [
         {"drive_id": "d", "item_id": "i", "full_path": "/A/a.pdf",
-         "shared_with": "arda@fazla.com", "permission_level": "owner",
+         "shared_with": "arda@example.com", "permission_level": "owner",
          "is_external": False, "expires_at": None},
     ]
     mocker.patch(
-        "fazla_od.cli.audit_sharing.subprocess.run",
+        "m365ctl.cli.audit_sharing.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=[], returncode=0, stdout=json.dumps(payload), stderr=""
         ),
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://example.sharepoint.com",
         output_format="json",
     )
     assert rc == 0
@@ -3269,16 +3269,16 @@ def test_audit_shells_out_and_parses_json(tmp_path, mocker, capsys) -> None:
 
 def test_audit_propagates_nonzero_exit(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.audit_sharing.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.audit_sharing.load_config", return_value=cfg)
     mocker.patch(
-        "fazla_od.cli.audit_sharing.subprocess.run",
+        "m365ctl.cli.audit_sharing.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=[], returncode=1, stdout="", stderr="Connect-PnPOnline: cert load failed"
         ),
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://example.sharepoint.com",
         output_format="json",
     )
     err = capsys.readouterr().err
@@ -3288,28 +3288,28 @@ def test_audit_propagates_nonzero_exit(tmp_path, mocker, capsys) -> None:
 
 def test_audit_tsv_is_emitted_verbatim(tmp_path, mocker, capsys) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.audit_sharing.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.audit_sharing.load_config", return_value=cfg)
     tsv = (
         "drive_id\titem_id\tfull_path\tshared_with\tpermission_level\t"
         "is_external\texpires_at\n"
-        "d\ti\t/A/a.pdf\tarda@fazla.com\towner\tFalse\t\n"
+        "d\ti\t/A/a.pdf\tarda@example.com\towner\tFalse\t\n"
     )
     mocker.patch(
-        "fazla_od.cli.audit_sharing.subprocess.run",
+        "m365ctl.cli.audit_sharing.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=[], returncode=0, stdout=tsv, stderr=""
         ),
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://example.sharepoint.com",
         output_format="tsv",
     )
     assert rc == 0
     assert capsys.readouterr().out == tsv
 ```
 
-- [ ] **Step 3: Implement `src/fazla_od/cli/audit_sharing.py`**
+- [ ] **Step 3: Implement `src/m365ctl/cli/audit_sharing.py`**
 
 ```python
 """`od-audit-sharing` subcommand: shell out to PnP.PowerShell.
@@ -3325,7 +3325,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fazla_od.config import load_config
+from m365ctl.config import load_config
 
 
 def run_audit(
@@ -3373,9 +3373,9 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 4: Wire into dispatcher**
 
-Edit `src/fazla_od/cli/__main__.py`:
+Edit `src/m365ctl/cli/__main__.py`:
 ```python
-from fazla_od.cli import audit_sharing as audit_sharing_cli
+from m365ctl.cli import audit_sharing as audit_sharing_cli
 # …
 _SUBCOMMANDS = {
     …
@@ -3389,7 +3389,7 @@ _SUBCOMMANDS = {
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli audit-sharing "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli audit-sharing "$@"
 ```
 
 ```bash
@@ -3408,7 +3408,7 @@ Expected: 3 passed.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add scripts/ps/audit-sharing.ps1 src/fazla_od/cli/audit_sharing.py src/fazla_od/cli/__main__.py tests/test_cli_audit_sharing.py bin/od-audit-sharing
+git add scripts/ps/audit-sharing.ps1 src/m365ctl/cli/audit_sharing.py src/m365ctl/cli/__main__.py tests/test_cli_audit_sharing.py bin/od-audit-sharing
 git commit -m "feat(audit): od-audit-sharing via PnP.PowerShell (JSON/TSV)"
 ```
 
@@ -3456,8 +3456,8 @@ cannot accidentally run a mutation plan with `od-download`.
 ### PowerShell prerequisites (for `od-audit-sharing`)
 
 One-time setup: see `docs/ops/pnp-powershell-setup.md`. Converts the PEM
-cert to PFX at `~/.config/fazla-od/fazla-od.pfx` and stores an export
-password in macOS Keychain under `FazlaODToolkit:PfxPassword`.
+cert to PFX at `~/.config/m365ctl/m365ctl.pfx` and stores an export
+password in macOS Keychain under `m365ctl:PfxPassword`.
 ```
 
 Confirm nothing above the Plan 1-2 rows changed.
@@ -3496,7 +3496,7 @@ git commit -m "docs: AGENTS.md v3 — add Plan 3 commands + plan-file schema + P
 
 ### Task 12: End-to-end live smoke test (user-driven)
 
-This task runs on the user's machine against the real Fazla tenant. No new code.
+This task runs on the user's machine against the real m365ctl tenant. No new code.
 
 - [ ] **Step 1: Verify retry is live**
 
@@ -3571,9 +3571,9 @@ pwsh -NoLogo -Command "Get-Module -ListAvailable PnP.PowerShell | Select-Object 
 
 Then run it:
 ```bash
-./bin/od-audit-sharing --scope "site:https://fazla.sharepoint.com/sites/<your-small-site>" \
+./bin/od-audit-sharing --scope "site:https://example.sharepoint.com/sites/<your-small-site>" \
     --output-format tsv | head -10
-./bin/od-audit-sharing --scope "site:https://fazla.sharepoint.com/sites/<your-small-site>" \
+./bin/od-audit-sharing --scope "site:https://example.sharepoint.com/sites/<your-small-site>" \
     --output-format json | python -m json.tool | head -40
 ```
 Expected: TSV has the documented 7 columns; JSON version is an array of objects. If the PS script errors on `Get-PnPListItemPermission`, switch to `Get-PnPListItemPermissions` in `scripts/ps/audit-sharing.ps1`, note in the completion log, and re-run.
@@ -3582,7 +3582,7 @@ Expected: TSV has the documented 7 columns; JSON version is an array of objects.
 
 ```bash
 git status --porcelain
-ls -la ~/.config/fazla-od/fazla-od.pfx
+ls -la ~/.config/m365ctl/m365ctl.pfx
 ```
 Expected: `git status` clean (no `workspaces/`, `cache/`, or `*.pfx` appear; those are gitignored via `cache/`, `workspaces/`, and the fact that the pfx lives outside the repo).
 
@@ -3649,7 +3649,7 @@ Plan 4 (Mutations) picks up from here. It depends on:
 - **Step 1 retry wiring:** Verified implicitly — every live search/download call below went through `GraphClient._retry` with real 200s; no transient errors observed during the run.
 - **Step 2 tenant preview + abort:** `resolve_scope("tenant", …)` returned **89 drives** after the broadened per-user/per-site skip-list (see commits `f405337`, `ef180e5`, `bd06950`). The CLI printed the preview (20 shown + "and 69 more") and invoked `confirm_or_abort`; the agent shell had no `/dev/tty`, so the CLI now aborts cleanly with exit 1 ("No /dev/tty available to confirm. …") — safer default than the previous crash (commit `2a3182b`). The spec's human-run `y/N` path is preserved: from a real terminal, typing `n` still returns exit 1 via the same branch.
 - **Step 3 site-scope crawl:** Deferred — the tenant enumeration already exercised `resolve_scope("tenant")` + `_drives_of_site` for every SharePoint site in the tenant. Crawling one more with `site:<slug>` would repeat the same path. Add when a small throwaway site exists.
-- **Step 4 search:** All four variants verified live against the Fazla tenant.
+- **Step 4 search:** All four variants verified live against the m365ctl tenant.
     - `od-search "invoice" --scope me --limit 5` → TSV with 5 rows (1 Graph hit + 4 catalog hits, deduped).
     - `--json` variant → identical rows as JSON, parse-clean via `python -m json.tool`.
     - `--type folder` → only `is_folder=true` rows returned.
@@ -3659,12 +3659,12 @@ Plan 4 (Mutations) picks up from here. It depends on:
     - `--query … --plan-out` emitted a 3-entry plan with `action: "download"` and correct `full_path` values.
     - `--from-plan` replay materialised 3 PDFs (29 KB + 47 KB + 49 KB) concurrently, preserving the `/Microsoft Teams Chat Files/` prefix on disk.
     - Cleaned up with `rm -rf workspaces/p3-smoke-*`.
-- **Step 6 `od-audit-sharing`:** **Verified live** against `site:https://fazla.sharepoint.com/sites/ServisOnboarding`. TSV output = **996 lines** (header + 995 permission rows); JSON parses cleanly with Unicode-escaped Turkish chars (`Fazla İyi`, `Ziyaretçileri`). Summary across the whole audit: **995 rows spanning 212 unique items × 18 principals, 0 external shares** on this site. The external-share detector correctly classified all rows as internal (principals were SharePoint groups like `Servis Onboarding Sahipleri`, none matching `#ext#` or an `@domain` outside `@fazla.`). Setup blockers cleared in-session:
+- **Step 6 `od-audit-sharing`:** **Verified live** against `site:https://example.sharepoint.com/sites/ServisOnboarding`. TSV output = **996 lines** (header + 995 permission rows); JSON parses cleanly with Unicode-escaped Turkish chars (`m365ctl İyi`, `Ziyaretçileri`). Summary across the whole audit: **995 rows spanning 212 unique items × 18 principals, 0 external shares** on this site. The external-share detector correctly classified all rows as internal (principals were SharePoint groups like `Servis Onboarding Sahipleri`, none matching `#ext#` or an `@domain` outside `@example.`). Setup blockers cleared in-session:
     - Installed **PowerShell 7.6.1 LTS** via the direct Microsoft `.pkg` install (Homebrew cask is deprecated + broken — docs updated in commit `024e8b7`).
     - Installed **PnP.PowerShell 3.1.0** to the current user's module scope.
-    - Ran `./scripts/ps/convert-cert.sh` — produced `~/.config/fazla-od/fazla-od.pfx` (mode 600) + Keychain entry `FazlaODToolkit:PfxPassword` / `fazla-od` (40-char password).
+    - Ran `./scripts/ps/convert-cert.sh` — produced `~/.config/m365ctl/m365ctl.pfx` (mode 600) + Keychain entry `m365ctl:PfxPassword` / `m365ctl` (40-char password).
     - Granted the Entra app SharePoint-API permission `Sites.FullControl.All` + admin consent (Graph permissions from Plan 1 were insufficient; SharePoint REST/CSOM has its own permission surface — this caveat is also in the updated setup doc).
-- **Step 7 nothing sensitive staged:** `git status --porcelain` clean after each smoke step. `cache/`, `workspaces/`, and `~/.config/fazla-od/` all remained outside the repo.
+- **Step 7 nothing sensitive staged:** `git status --porcelain` clean after each smoke step. `cache/`, `workspaces/`, and `~/.config/m365ctl/` all remained outside the repo.
 - **Test counts after the Plan 3 bug-fix batch:** **192 passed, 1 skipped** — Plan 3's original 109 + Plan 4's 74 (with my adversarial-undo extras) + 3 new regression tests landed during the live smoke (tenant-skip tokens, admin-blocked skip, and TTY-unavailable abort).
 
 ### Plan 3 bugs discovered and fixed during live smoke

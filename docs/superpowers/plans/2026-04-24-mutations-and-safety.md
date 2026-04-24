@@ -4,13 +4,13 @@
 
 **Goal:** Ship every mutating OneDrive/SharePoint operation (`od-move`, `od-rename`, `od-copy`, `od-delete`, `od-clean`, `od-label`, `od-undo`) behind a uniformly enforced safety envelope — dry-run default, plan-file workflow, scope allow/deny enforcement, append-only audit log, and reversible-where-possible undo — so that tenant-wide mutations are safe for Claude to drive and for humans to trust.
 
-**Architecture:** Three new library modules under `fazla_od/`:
+**Architecture:** Three new library modules under `m365ctl/`:
 
 - `planfile.py` — schema + I/O for the shared JSON plan file consumed by `--from-plan` and emitted by `--plan-out`.
 - `audit.py` — append-only JSONL writer for `logs/ops/YYYY-MM-DD.jsonl` with an `op_id` generator (stdlib `uuid.uuid4`) and a `log_mutation()` helper that every mutating command calls *before* hitting Graph.
 - `safety.py` — `assert_scope_allowed()` that checks an item's drive against `config.scope.allow_drives`, its full path against `config.scope.deny_paths` (fnmatch glob), and enforces the `--unsafe-scope` + `/dev/tty` confirm escape hatch. Raises `ScopeViolation` on a rejected item.
 
-Mutations themselves live under `fazla_od/mutate/` (one module per verb) and `fazla_od/cli/` (one file per command). Every verb follows the same pattern: **selection → filter-through-safety → plan build → (dry-run emit OR execute each op, logging before the Graph call, recording after)**. `with_retry` from Plan 2 is wired into a new `GraphClient.patch/post/delete` surface exclusively for mutating endpoints; read-endpoint auto-retry stays Plan 3's concern.
+Mutations themselves live under `m365ctl/mutate/` (one module per verb) and `m365ctl/cli/` (one file per command). Every verb follows the same pattern: **selection → filter-through-safety → plan build → (dry-run emit OR execute each op, logging before the Graph call, recording after)**. `with_retry` from Plan 2 is wired into a new `GraphClient.patch/post/delete` surface exclusively for mutating endpoints; read-endpoint auto-retry stays Plan 3's concern.
 
 **Tech Stack:** Python 3.11+, `httpx`, `duckdb`, stdlib `uuid`, `fnmatch`, `json`; same `msal`-backed auth from Plan 1; PowerShell (`pwsh` + `PnP.PowerShell`) reused from Plan 3 for `od-label`.
 
@@ -25,16 +25,16 @@ Mutations themselves live under `fazla_od/mutate/` (one module per verb) and `fa
 
 **Dependencies from Plans 1 and 2 (already in place):**
 
-- `fazla_od.config.load_config` + `Config` + `ScopeConfig` (uses `allow_drives`, `deny_paths`, `unsafe_requires_flag`).
-- `fazla_od.auth.AppOnlyCredential` / `DelegatedCredential`.
-- `fazla_od.graph.GraphClient`, `GraphError`, `is_transient_graph_error`.
-- `fazla_od.retry.with_retry`, `RetryExhausted`.
-- `fazla_od.catalog.db.open_catalog` + `catalog.queries` (used for pattern expansion).
+- `m365ctl.config.load_config` + `Config` + `ScopeConfig` (uses `allow_drives`, `deny_paths`, `unsafe_requires_flag`).
+- `m365ctl.auth.AppOnlyCredential` / `DelegatedCredential`.
+- `m365ctl.graph.GraphClient`, `GraphError`, `is_transient_graph_error`.
+- `m365ctl.retry.with_retry`, `RetryExhausted`.
+- `m365ctl.catalog.db.open_catalog` + `catalog.queries` (used for pattern expansion).
 - `bin/` shell-wrapper pattern.
 
 **Dependencies from Plan 3 (assumed landed before Plan 4 starts):**
 
-- Tenant/site scope resolution. Plan 4 accepts `--scope tenant|site:<slug>` verbatim but the resolver lives in `fazla_od.catalog.crawl` (extended by Plan 3).
+- Tenant/site scope resolution. Plan 4 accepts `--scope tenant|site:<slug>` verbatim but the resolver lives in `m365ctl.catalog.crawl` (extended by Plan 3).
 - PnP.PowerShell first-install workflow + cert-to-PFX conversion. Plan 4's `od-label` runs the same `pwsh` invocations but does not re-document the setup.
 - Auto-retry wiring into `GraphClient.get` / `get_paginated`. Plan 4 adds `.patch`, `.post`, `.delete` and wires `with_retry` into them; read-endpoint retry remains Plan 3's responsibility.
 
@@ -72,14 +72,14 @@ All against base `https://graph.microsoft.com/v1.0`.
 
 OneDrive `DELETE /drives/{id}/items/{iid}` is a **soft delete** — the item moves to the recycle bin and is restorable via `POST .../restore`. After the tenant retention policy elapses (default 93 days for OneDrive for Business), recycle-bin items are purged automatically. `od-clean recycle-bin` triggers that purge on demand for a given scope. Once purged, restoration requires Microsoft support and is out-of-scope for this toolkit — `od-undo` on a purged item emits a clear manual-restore instruction.
 
-### Sensitivity-label taxonomy in the Fazla tenant
+### Sensitivity-label taxonomy in the m365ctl tenant
 
-Admin-defined label taxonomy is assumed already in place in Entra. `od-label` consumes label **names** (strings) as opaque identifiers and passes them to the PnP.PowerShell cmdlets `Set-PnPFileSensitivityLabel` / `Remove-PnPFileSensitivityLabel`. The toolkit does **not** define, edit, or enumerate labels; it only applies/removes them. The list of live labels is obtained (read-only) via `Get-PnPLabel` invoked by `od-label --list`. Four labels are expected in the Fazla tenant at implementation time: `Public`, `Internal`, `Confidential`, `Highly Confidential`. Retention labels are applied with `Set-PnPFileComplianceLabel`; same input shape.
+Admin-defined label taxonomy is assumed already in place in Entra. `od-label` consumes label **names** (strings) as opaque identifiers and passes them to the PnP.PowerShell cmdlets `Set-PnPFileSensitivityLabel` / `Remove-PnPFileSensitivityLabel`. The toolkit does **not** define, edit, or enumerate labels; it only applies/removes them. The list of live labels is obtained (read-only) via `Get-PnPLabel` invoked by `od-label --list`. Four labels are expected in the m365ctl tenant at implementation time: `Public`, `Internal`, `Confidential`, `Highly Confidential`. Retention labels are applied with `Set-PnPFileComplianceLabel`; same input shape.
 
 ## File structure (new files in this plan)
 
 ```
-src/fazla_od/
+src/m365ctl/
 ├── planfile.py                 # shared plan JSON schema + read/write
 ├── audit.py                    # append-only JSONL audit log
 ├── safety.py                   # scope allow/deny + TTY confirm gate
@@ -150,7 +150,7 @@ tests/
 ### Task 1: Plan-file schema + I/O (`planfile.py`)
 
 **Files:**
-- Create: `src/fazla_od/planfile.py`
+- Create: `src/m365ctl/planfile.py`
 - Create: `tests/test_planfile.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -164,7 +164,7 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.planfile import (
+from m365ctl.planfile import (
     PLAN_SCHEMA_VERSION,
     Operation,
     Plan,
@@ -270,7 +270,7 @@ def test_load_plan_rejects_missing_op_fields(tmp_path: Path) -> None:
 
 
 def test_new_op_id_generates_uuid4() -> None:
-    from fazla_od.planfile import new_op_id
+    from m365ctl.planfile import new_op_id
     a, b = new_op_id(), new_op_id()
     assert a != b
     assert len(a) == 36 and a.count("-") == 4
@@ -281,11 +281,11 @@ def test_new_op_id_generates_uuid4() -> None:
 ```bash
 uv run pytest tests/test_planfile.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.planfile'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.planfile'`.
 
 - [ ] **Step 3: Implement `planfile.py`**
 
-Create `src/fazla_od/planfile.py`:
+Create `src/m365ctl/planfile.py`:
 ```python
 """Shared plan-file schema for mutating commands.
 
@@ -416,7 +416,7 @@ Expected: 6 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/planfile.py tests/test_planfile.py
+git add src/m365ctl/planfile.py tests/test_planfile.py
 git commit -m "feat(planfile): shared plan-file schema with JSON round-trip"
 ```
 
@@ -425,7 +425,7 @@ git commit -m "feat(planfile): shared plan-file schema with JSON round-trip"
 ### Task 2: Audit log (`audit.py`)
 
 **Files:**
-- Create: `src/fazla_od/audit.py`
+- Create: `src/m365ctl/audit.py`
 - Create: `tests/test_audit.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -440,7 +440,7 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.audit import (
+from m365ctl.audit import (
     AuditLogger,
     find_op_by_id,
     iter_audit_entries,
@@ -565,13 +565,13 @@ def test_audit_log_append_only(tmp_path: Path) -> None:
 ```bash
 uv run pytest tests/test_audit.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.audit'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.audit'`.
 
 - [ ] **Step 3: Implement `audit.py`**
 
-Create `src/fazla_od/audit.py`:
+Create `src/m365ctl/audit.py`:
 ```python
-"""Append-only JSONL audit log for fazla_od mutations.
+"""Append-only JSONL audit log for m365ctl mutations.
 
 Spec §7 rule 5: every mutating command writes an entry BEFORE calling
 Graph (phase='start') and a paired entry AFTER (phase='end'). The 'start'
@@ -697,7 +697,7 @@ Expected: 7 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/audit.py tests/test_audit.py
+git add src/m365ctl/audit.py tests/test_audit.py
 git commit -m "feat(audit): append-only JSONL ops log with start/end phases"
 ```
 
@@ -706,7 +706,7 @@ git commit -m "feat(audit): append-only JSONL ops log with start/end phases"
 ### Task 3: Safety module (`safety.py`) — allow/deny + TTY
 
 **Files:**
-- Create: `src/fazla_od/safety.py`
+- Create: `src/m365ctl/safety.py`
 - Create partial test file (extended in Task 9): `tests/test_safety.py` (initial subset)
 
 - [ ] **Step 1: Write failing tests (subset — full adversarial suite in Task 9)**
@@ -723,8 +723,8 @@ from unittest.mock import patch
 
 import pytest
 
-from fazla_od.config import Config, ScopeConfig
-from fazla_od.safety import (
+from m365ctl.config import Config, ScopeConfig
+from m365ctl.safety import (
     ScopeViolation,
     assert_scope_allowed,
     filter_by_scope,
@@ -753,7 +753,7 @@ def _cfg(
         unsafe_requires_flag=unsafe_requires_flag,
     )
     # Only the .scope field matters here; stub the rest.
-    from fazla_od.config import CatalogConfig, LoggingConfig
+    from m365ctl.config import CatalogConfig, LoggingConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=(tmp_path or Path("/tmp")) / "k",
@@ -809,14 +809,14 @@ def test_filter_by_scope_drops_items_outside_allow_drives(tmp_path: Path) -> Non
 def test_unsafe_scope_bypasses_allow_list_with_tty_yes(tmp_path: Path) -> None:
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("fazla_od.safety._confirm_via_tty", return_value=True):
+    with patch("m365ctl.safety._confirm_via_tty", return_value=True):
         assert_scope_allowed(item, cfg, unsafe_scope=True)  # no raise
 
 
 def test_unsafe_scope_without_tty_yes_still_raises(tmp_path: Path) -> None:
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("fazla_od.safety._confirm_via_tty", return_value=False):
+    with patch("m365ctl.safety._confirm_via_tty", return_value=False):
         with pytest.raises(ScopeViolation, match="declined"):
             assert_scope_allowed(item, cfg, unsafe_scope=True)
 
@@ -826,7 +826,7 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
     against an out-of-scope item always raises — no TTY prompt offered."""
     cfg = _cfg(allow=["d1"], unsafe_requires_flag=True, tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("fazla_od.safety._confirm_via_tty") as m:
+    with patch("m365ctl.safety._confirm_via_tty") as m:
         with pytest.raises(ScopeViolation):
             assert_scope_allowed(item, cfg, unsafe_scope=False)
         m.assert_not_called()  # never prompted — flag required upfront
@@ -837,11 +837,11 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
 ```bash
 uv run pytest tests/test_safety.py -v
 ```
-Expected: `ModuleNotFoundError: No module named 'fazla_od.safety'`.
+Expected: `ModuleNotFoundError: No module named 'm365ctl.safety'`.
 
 - [ ] **Step 3: Implement `safety.py`**
 
-Create `src/fazla_od/safety.py`:
+Create `src/m365ctl/safety.py`:
 ```python
 """Scope allow/deny enforcement + /dev/tty escape hatch.
 
@@ -864,7 +864,7 @@ from __future__ import annotations
 import fnmatch
 from typing import Iterable, Iterator, Protocol
 
-from fazla_od.config import Config
+from m365ctl.config import Config
 
 
 class _HasScopeFields(Protocol):
@@ -992,7 +992,7 @@ Expected: 8 passed. (The remaining adversarial tests land in Task 9.)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/safety.py tests/test_safety.py
+git add src/m365ctl/safety.py tests/test_safety.py
 git commit -m "feat(safety): scope allow/deny guardrail with /dev/tty confirm"
 ```
 
@@ -1001,7 +1001,7 @@ git commit -m "feat(safety): scope allow/deny guardrail with /dev/tty confirm"
 ### Task 4: Extend `GraphClient` with mutation verbs + retry
 
 **Files:**
-- Modify: `src/fazla_od/graph.py`
+- Modify: `src/m365ctl/graph.py`
 - Create: `tests/test_graph_mutations.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -1013,7 +1013,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError
+from m365ctl.graph import GraphClient, GraphError
 
 
 def test_patch_sends_json_body_with_bearer() -> None:
@@ -1107,7 +1107,7 @@ def test_patch_retries_on_429_then_succeeds() -> None:
 
 
 def test_patch_gives_up_after_max_attempts() -> None:
-    from fazla_od.retry import RetryExhausted
+    from m365ctl.retry import RetryExhausted
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -1134,7 +1134,7 @@ Expected: errors on `.patch`, `.delete`, `.post_raw`, `sleep=`, `max_retry_attem
 
 - [ ] **Step 3: Extend `graph.py`**
 
-Replace `src/fazla_od/graph.py` with:
+Replace `src/m365ctl/graph.py` with:
 ```python
 """Thin httpx-backed Microsoft Graph client.
 
@@ -1150,7 +1150,7 @@ from typing import Any, Callable, Iterator
 
 import httpx
 
-from fazla_od.retry import with_retry
+from m365ctl.retry import with_retry
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -1313,7 +1313,7 @@ Expected: 11 passed (2 + 3 + 6).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/graph.py tests/test_graph_mutations.py
+git add src/m365ctl/graph.py tests/test_graph_mutations.py
 git commit -m "feat(graph): patch/post_raw/delete verbs with automatic retry"
 ```
 
@@ -1322,22 +1322,22 @@ git commit -m "feat(graph): patch/post_raw/delete verbs with automatic retry"
 ### Task 5: `mutate/move.py` + `mutate/rename.py` + CLI (`od-move`, `od-rename`)
 
 **Files:**
-- Create: `src/fazla_od/mutate/__init__.py` (empty)
-- Create: `src/fazla_od/mutate/move.py`
-- Create: `src/fazla_od/mutate/rename.py`
-- Create: `src/fazla_od/cli/move.py`
-- Create: `src/fazla_od/cli/rename.py`
+- Create: `src/m365ctl/mutate/__init__.py` (empty)
+- Create: `src/m365ctl/mutate/move.py`
+- Create: `src/m365ctl/mutate/rename.py`
+- Create: `src/m365ctl/cli/move.py`
+- Create: `src/m365ctl/cli/rename.py`
 - Create: `tests/test_mutate_move.py`
 - Create: `tests/test_mutate_rename.py`
 - Create: `tests/test_cli_move.py`
 - Create: `tests/test_cli_rename.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Create the package**
 
 ```bash
-mkdir -p src/fazla_od/mutate
-touch src/fazla_od/mutate/__init__.py
+mkdir -p src/m365ctl/mutate
+touch src/m365ctl/mutate/__init__.py
 ```
 
 - [ ] **Step 2: Write failing tests for `mutate/move.py`**
@@ -1348,9 +1348,9 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.mutate.move import execute_move
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.mutate.move import execute_move
+from m365ctl.planfile import Operation
 
 
 def _op(**over) -> Operation:
@@ -1376,7 +1376,7 @@ def test_execute_move_issues_patch_and_logs_both_phases(tmp_path):
             },
         )
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),
@@ -1405,7 +1405,7 @@ def test_execute_move_start_record_persists_even_if_graph_raises(tmp_path):
             403, json={"error": {"code": "accessDenied", "message": "no"}}
         )
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),
@@ -1423,7 +1423,7 @@ def test_execute_move_start_record_persists_even_if_graph_raises(tmp_path):
 
 - [ ] **Step 3: Implement `mutate/move.py`**
 
-Create `src/fazla_od/mutate/move.py`:
+Create `src/m365ctl/mutate/move.py`:
 ```python
 """OneDrive MOVE via Graph PATCH .../items/{id}.
 
@@ -1436,9 +1436,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.graph import GraphClient, GraphError
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.graph import GraphClient, GraphError
+from m365ctl.planfile import Operation
 
 
 @dataclass(frozen=True)
@@ -1494,10 +1494,10 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.rename import execute_rename
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.graph import GraphClient
+from m365ctl.mutate.rename import execute_rename
+from m365ctl.planfile import Operation
 
 
 def test_execute_rename_issues_patch_with_new_name(tmp_path):
@@ -1523,7 +1523,7 @@ def test_execute_rename_issues_patch_with_new_name(tmp_path):
     assert entries[-1]["after"]["name"] == "new.txt"
 ```
 
-Create `src/fazla_od/mutate/rename.py`:
+Create `src/m365ctl/mutate/rename.py`:
 ```python
 """OneDrive RENAME via Graph PATCH .../items/{id} with {'name': ...}."""
 from __future__ import annotations
@@ -1531,9 +1531,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.graph import GraphClient, GraphError
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.graph import GraphClient, GraphError
+from m365ctl.planfile import Operation
 
 
 @dataclass(frozen=True)
@@ -1594,11 +1594,11 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from fazla_od.cli.move import run_move
+from m365ctl.cli.move import run_move
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -1616,13 +1616,13 @@ def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
 
 def test_single_item_dry_run_does_not_call_graph(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
     # Fake Graph: assert never called.
     mock_client = MagicMock()
-    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=mock_client)
+    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=mock_client)
     # Target lookup: stub the helper that resolves item metadata.
     mocker.patch(
-        "fazla_od.cli.move._lookup_item",
+        "m365ctl.cli.move._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/A/x", "name": "x",
                       "parent_path": "/A"},
@@ -1650,7 +1650,7 @@ def test_single_item_dry_run_does_not_call_graph(tmp_path, mocker, capsys):
 def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsys):
     """Spec §7 rule 2: bulk destructive requires a plan file."""
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
     rc = run_move(
         config_path=tmp_path / "config.toml",
         scope="drive:d1", item_id=None, drive_id=None,
@@ -1667,7 +1667,7 @@ def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsy
 def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
     """Counting mock transport — proves no glob re-expansion."""
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
 
     calls = {"n": 0}
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1677,15 +1677,15 @@ def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
                        "parentReference": {"id": "P", "path": "/B"},
                        "name": "x"})
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     real_client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),
         sleep=lambda s: None,
     )
-    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=real_client)
+    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=real_client)
     mocker.patch(
-        "fazla_od.cli.move._lookup_item",
+        "m365ctl.cli.move._lookup_item",
         side_effect=lambda graph, drive_id, item_id: {
             "drive_id": drive_id, "item_id": item_id,
             "full_path": f"/src/{item_id}", "name": item_id,
@@ -1694,7 +1694,7 @@ def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
     )
 
     # Write a plan with exactly 3 operations.
-    from fazla_od.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.planfile import PLAN_SCHEMA_VERSION
     plan = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",
@@ -1728,11 +1728,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from fazla_od.cli.rename import run_rename
+from m365ctl.cli.rename import run_rename
 
 
 def _stub_cfg(tmp_path: Path):
-    from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -1746,15 +1746,15 @@ def _stub_cfg(tmp_path: Path):
 
 def test_single_rename_dry_run_no_graph_call(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("fazla_od.cli.rename.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.rename.load_config", return_value=cfg)
     mocker.patch(
-        "fazla_od.cli.rename._lookup_item",
+        "m365ctl.cli.rename._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/x.txt", "name": "x.txt",
                       "parent_path": "/"},
     )
     client = MagicMock()
-    mocker.patch("fazla_od.cli.rename.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.cli.rename.build_graph_client", return_value=client)
 
     rc = run_rename(
         config_path=tmp_path / "config.toml",
@@ -1771,7 +1771,7 @@ def test_single_rename_dry_run_no_graph_call(tmp_path, mocker, capsys):
 
 - [ ] **Step 7: Implement `cli/move.py` and `cli/rename.py`**
 
-Create a shared helper file `src/fazla_od/cli/_common.py`:
+Create a shared helper file `src/m365ctl/cli/_common.py`:
 ```python
 """Shared helpers for mutating CLIs.
 
@@ -1789,11 +1789,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from fazla_od.auth import AppOnlyCredential, DelegatedCredential
-from fazla_od.catalog.db import open_catalog
-from fazla_od.config import Config
-from fazla_od.graph import GraphClient
-from fazla_od.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan
+from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.catalog.db import open_catalog
+from m365ctl.config import Config
+from m365ctl.graph import GraphClient
+from m365ctl.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan
 
 
 @dataclass(frozen=True)
@@ -1888,7 +1888,7 @@ def new_plan(*, source_cmd: str, scope: str,
     )
 ```
 
-Create `src/fazla_od/cli/move.py`:
+Create `src/m365ctl/cli/move.py`:
 ```python
 """`od-move` — move items between parents in OneDrive.
 
@@ -1901,8 +1901,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from fazla_od.audit import AuditLogger
-from fazla_od.cli._common import (
+from m365ctl.audit import AuditLogger
+from m365ctl.cli._common import (
     CandidateItem,
     build_graph_client,
     emit_plan,
@@ -1910,10 +1910,10 @@ from fazla_od.cli._common import (
     new_plan,
     require_plan_for_bulk,
 )
-from fazla_od.config import load_config
-from fazla_od.mutate.move import execute_move
-from fazla_od.planfile import Operation, load_plan, new_op_id
-from fazla_od.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
+from m365ctl.config import load_config
+from m365ctl.mutate.move import execute_move
+from m365ctl.planfile import Operation, load_plan, new_op_id
+from m365ctl.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
 
 
 def _lookup_item(graph, drive_id: str, item_id: str) -> dict:
@@ -2090,7 +2090,7 @@ def main(argv: list[str]) -> int:
     )
 ```
 
-Create `src/fazla_od/cli/rename.py` following the same pattern (single-item only; rename is never bulk in practice):
+Create `src/m365ctl/cli/rename.py` following the same pattern (single-item only; rename is never bulk in practice):
 ```python
 """`od-rename` — rename a single item (or a plan's worth)."""
 from __future__ import annotations
@@ -2099,13 +2099,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from fazla_od.audit import AuditLogger
-from fazla_od.cli._common import build_graph_client, emit_plan, new_plan
-from fazla_od.cli.move import _lookup_item  # reuse
-from fazla_od.config import load_config
-from fazla_od.mutate.rename import execute_rename
-from fazla_od.planfile import Operation, load_plan, new_op_id
-from fazla_od.safety import ScopeViolation, assert_scope_allowed
+from m365ctl.audit import AuditLogger
+from m365ctl.cli._common import build_graph_client, emit_plan, new_plan
+from m365ctl.cli.move import _lookup_item  # reuse
+from m365ctl.config import load_config
+from m365ctl.mutate.rename import execute_rename
+from m365ctl.planfile import Operation, load_plan, new_op_id
+from m365ctl.safety import ScopeViolation, assert_scope_allowed
 
 
 def run_rename(
@@ -2219,13 +2219,13 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 8: Wire into the dispatcher**
 
-Edit `src/fazla_od/cli/__main__.py` — extend `_SUBCOMMANDS`:
+Edit `src/m365ctl/cli/__main__.py` — extend `_SUBCOMMANDS`:
 ```python
-from fazla_od.cli import auth as auth_cli
-from fazla_od.cli import catalog as catalog_cli
-from fazla_od.cli import inventory as inventory_cli
-from fazla_od.cli import move as move_cli
-from fazla_od.cli import rename as rename_cli
+from m365ctl.cli import auth as auth_cli
+from m365ctl.cli import catalog as catalog_cli
+from m365ctl.cli import inventory as inventory_cli
+from m365ctl.cli import move as move_cli
+from m365ctl.cli import rename as rename_cli
 
 _SUBCOMMANDS = {
     "auth": auth_cli.main,
@@ -2247,8 +2247,8 @@ Expected: 7 passed (2 move mutate + 1 rename mutate + 3 cli move + 1 cli rename)
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/fazla_od/mutate/ src/fazla_od/cli/move.py src/fazla_od/cli/rename.py \
-        src/fazla_od/cli/_common.py src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/ src/m365ctl/cli/move.py src/m365ctl/cli/rename.py \
+        src/m365ctl/cli/_common.py src/m365ctl/cli/__main__.py \
         tests/test_mutate_move.py tests/test_mutate_rename.py \
         tests/test_cli_move.py tests/test_cli_rename.py
 git commit -m "feat(mutate): od-move and od-rename with plan-file + audit + safety"
@@ -2259,11 +2259,11 @@ git commit -m "feat(mutate): od-move and od-rename with plan-file + audit + safe
 ### Task 6: `od-copy` (async via `Location` polling)
 
 **Files:**
-- Create: `src/fazla_od/mutate/copy.py`
-- Create: `src/fazla_od/cli/copy.py`
+- Create: `src/m365ctl/mutate/copy.py`
+- Create: `src/m365ctl/cli/copy.py`
 - Create: `tests/test_mutate_copy.py`
 - Create: `tests/test_cli_copy.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Write failing tests for `mutate/copy.py`**
 
@@ -2273,10 +2273,10 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.copy import execute_copy
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.graph import GraphClient
+from m365ctl.mutate.copy import execute_copy
+from m365ctl.planfile import Operation
 
 
 def test_execute_copy_polls_location_until_complete(tmp_path):
@@ -2344,7 +2344,7 @@ def test_execute_copy_times_out(tmp_path):
 
 - [ ] **Step 2: Implement `mutate/copy.py`**
 
-Create `src/fazla_od/mutate/copy.py`:
+Create `src/m365ctl/mutate/copy.py`:
 ```python
 """OneDrive COPY via Graph POST .../items/{id}/copy (async).
 
@@ -2359,9 +2359,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.graph import GraphClient, GraphError
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.graph import GraphClient, GraphError
+from m365ctl.planfile import Operation
 
 
 @dataclass(frozen=True)
@@ -2457,7 +2457,7 @@ def execute_copy(
 
 - [ ] **Step 3: CLI for `od-copy`**
 
-Create `tests/test_cli_copy.py` mirroring `test_cli_move.py` (single-item dry-run; `--pattern --confirm` without `--from-plan` rejected; `--from-plan` executes one copy per op with counting transport). Create `src/fazla_od/cli/copy.py` structured like `cli/move.py`: selection (`--item-id/--drive-id` or `--pattern` or `--from-plan`) → safety filter → plan → emit or execute.
+Create `tests/test_cli_copy.py` mirroring `test_cli_move.py` (single-item dry-run; `--pattern --confirm` without `--from-plan` rejected; `--from-plan` executes one copy per op with counting transport). Create `src/m365ctl/cli/copy.py` structured like `cli/move.py`: selection (`--item-id/--drive-id` or `--pattern` or `--from-plan`) → safety filter → plan → emit or execute.
 
 - [ ] **Step 4: Register in dispatcher**
 
@@ -2473,8 +2473,8 @@ Expected: 5 passed (2 mutate + 3 cli).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/fazla_od/mutate/copy.py src/fazla_od/cli/copy.py \
-        src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/copy.py src/m365ctl/cli/copy.py \
+        src/m365ctl/cli/__main__.py \
         tests/test_mutate_copy.py tests/test_cli_copy.py
 git commit -m "feat(mutate): od-copy with async Location polling"
 ```
@@ -2484,11 +2484,11 @@ git commit -m "feat(mutate): od-copy with async Location polling"
 ### Task 7: `od-delete` (recycle-bin) + basic undo restore path
 
 **Files:**
-- Create: `src/fazla_od/mutate/delete.py`
-- Create: `src/fazla_od/cli/delete.py`
+- Create: `src/m365ctl/mutate/delete.py`
+- Create: `src/m365ctl/cli/delete.py`
 - Create: `tests/test_mutate_delete.py`
 - Create: `tests/test_cli_delete.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Tests for `mutate/delete.py`**
 
@@ -2498,10 +2498,10 @@ from __future__ import annotations
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.delete import execute_recycle_delete, execute_restore
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.graph import GraphClient
+from m365ctl.mutate.delete import execute_recycle_delete, execute_restore
+from m365ctl.planfile import Operation
 
 
 def _client(handler):
@@ -2551,7 +2551,7 @@ def test_restore_calls_restore_endpoint(tmp_path):
 
 - [ ] **Step 2: Implement `mutate/delete.py`**
 
-Create `src/fazla_od/mutate/delete.py`:
+Create `src/m365ctl/mutate/delete.py`:
 ```python
 """OneDrive DELETE (recycle) + RESTORE (from recycle).
 
@@ -2565,9 +2565,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.graph import GraphClient, GraphError
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.graph import GraphClient, GraphError
+from m365ctl.planfile import Operation
 
 
 @dataclass(frozen=True)
@@ -2636,7 +2636,7 @@ def execute_restore(
 
 - [ ] **Step 3: CLI for `od-delete`**
 
-Create `src/fazla_od/cli/delete.py` following the `od-move` pattern. Support single-item `--item-id --drive-id --confirm` and bulk `--pattern --plan-out` / `--from-plan --confirm`. Every delete calls `assert_scope_allowed` before firing; every delete logs through audit.
+Create `src/m365ctl/cli/delete.py` following the `od-move` pattern. Support single-item `--item-id --drive-id --confirm` and bulk `--pattern --plan-out` / `--from-plan --confirm`. Every delete calls `assert_scope_allowed` before firing; every delete logs through audit.
 
 Create `tests/test_cli_delete.py` with:
 - `test_dry_run_is_default_no_graph_call`
@@ -2654,8 +2654,8 @@ Expected: 6 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/mutate/delete.py src/fazla_od/cli/delete.py \
-        src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/delete.py src/m365ctl/cli/delete.py \
+        src/m365ctl/cli/__main__.py \
         tests/test_mutate_delete.py tests/test_cli_delete.py
 git commit -m "feat(mutate): od-delete routes to recycle bin; restore helper"
 ```
@@ -2665,11 +2665,11 @@ git commit -m "feat(mutate): od-delete routes to recycle bin; restore helper"
 ### Task 8: `od-clean` (recycle purge, old versions, stale shares)
 
 **Files:**
-- Create: `src/fazla_od/mutate/clean.py`
-- Create: `src/fazla_od/cli/clean.py`
+- Create: `src/m365ctl/mutate/clean.py`
+- Create: `src/m365ctl/cli/clean.py`
 - Create: `tests/test_mutate_clean.py`
 - Create: `tests/test_cli_clean.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Tests for `mutate/clean.py`**
 
@@ -2681,14 +2681,14 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from fazla_od.audit import AuditLogger
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.clean import (
+from m365ctl.audit import AuditLogger
+from m365ctl.graph import GraphClient
+from m365ctl.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
     revoke_stale_shares,
 )
-from fazla_od.planfile import Operation
+from m365ctl.planfile import Operation
 
 
 def _client(handler):
@@ -2780,7 +2780,7 @@ def test_revoke_stale_shares_only_touches_links_older_than_cutoff(tmp_path):
 
 - [ ] **Step 2: Implement `mutate/clean.py`**
 
-Create `src/fazla_od/mutate/clean.py`:
+Create `src/m365ctl/mutate/clean.py`:
 ```python
 """Specialised cleanup ops: recycle-bin purge, old-versions, stale-shares.
 
@@ -2794,9 +2794,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.graph import GraphClient, GraphError
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.graph import GraphClient, GraphError
+from m365ctl.planfile import Operation
 
 
 @dataclass(frozen=True)
@@ -2909,7 +2909,7 @@ def revoke_stale_shares(
 
 - [ ] **Step 3: `cli/clean.py`**
 
-Create `src/fazla_od/cli/clean.py` with three subcommands: `recycle-bin`, `old-versions`, `stale-shares`, each producing its own plan (catalog-driven where applicable, via `expand_pattern`) and respecting `--scope` / `--confirm` / `--from-plan` exactly like `od-move`.
+Create `src/m365ctl/cli/clean.py` with three subcommands: `recycle-bin`, `old-versions`, `stale-shares`, each producing its own plan (catalog-driven where applicable, via `expand_pattern`) and respecting `--scope` / `--confirm` / `--from-plan` exactly like `od-move`.
 
 Create `tests/test_cli_clean.py` with:
 - `test_recycle_bin_dry_run_emits_plan_of_recycled_items`
@@ -2927,8 +2927,8 @@ Expected: 7 passed (3 mutate + 4 cli).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/mutate/clean.py src/fazla_od/cli/clean.py \
-        src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/clean.py src/m365ctl/cli/clean.py \
+        src/m365ctl/cli/__main__.py \
         tests/test_mutate_clean.py tests/test_cli_clean.py
 git commit -m "feat(mutate): od-clean subcommands (recycle-bin, old-versions, stale-shares)"
 ```
@@ -2953,26 +2953,26 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from fazla_od.cli.move import run_move
+from m365ctl.cli.move import run_move
 
 
 def test_dry_run_is_default_no_mutation(tmp_path, mocker):
     """Spec §7 rule 1: mutating command without --confirm issues zero Graph calls."""
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
     calls = {"n": 0}
 
     def handler(request):
         calls["n"] += 1
         return httpx.Response(200, json={})
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
-    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=client)
     mocker.patch(
-        "fazla_od.cli.move._lookup_item",
+        "m365ctl.cli.move._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/x", "name": "x", "parent_path": "/"},
     )
@@ -2994,7 +2994,7 @@ def test_dry_run_is_default_no_mutation(tmp_path, mocker):
 def test_pattern_plus_confirm_is_rejected(tmp_path, mocker, capsys):
     """Spec §7 rule 2: bulk destructive requires plan file."""
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
     rc = run_move(
         config_path=tmp_path / "c.toml",
         scope="drive:d1", drive_id=None, item_id=None,
@@ -3013,10 +3013,10 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
     original pattern, exactly 2 Graph PATCHes must fire.
     """
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
 
     # Seed catalog with 100 items to prove non-expansion.
-    from fazla_od.catalog.db import open_catalog
+    from m365ctl.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         for i in range(100):
             conn.execute(
@@ -3037,19 +3037,19 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
                        "name": "x"},
         )
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
-    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=client)
     mocker.patch(
-        "fazla_od.cli.move._lookup_item",
+        "m365ctl.cli.move._lookup_item",
         side_effect=lambda g, d, i: {"drive_id": d, "item_id": i,
                                      "full_path": f"/junk/{i}", "name": i,
                                      "parent_path": "/junk"},
     )
 
-    from fazla_od.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.planfile import PLAN_SCHEMA_VERSION
     plan_payload = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",
@@ -3082,7 +3082,7 @@ def test_piped_stdin_cannot_auto_confirm_unsafe_scope(tmp_path, monkeypatch):
     Piping 'y\\n' to stdin must NOT pre-answer the prompt. We simulate
     /dev/tty absent (OSError) which makes _confirm_via_tty return False.
     """
-    from fazla_od.safety import ScopeViolation, assert_scope_allowed
+    from m365ctl.safety import ScopeViolation, assert_scope_allowed
 
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
@@ -3106,9 +3106,9 @@ def test_piped_stdin_cannot_auto_confirm_unsafe_scope(tmp_path, monkeypatch):
 def test_deny_paths_never_appear_in_plan_or_tsv(tmp_path, mocker, capsys):
     """Spec §7 rule 4: deny-paths filtered BEFORE plan emission."""
     cfg = _cfg(allow=["d1"], deny=["/Confidential/**"], tmp_path=tmp_path)
-    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
 
-    from fazla_od.catalog.db import open_catalog
+    from m365ctl.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "
@@ -3138,15 +3138,15 @@ def test_audit_start_line_persists_even_on_mid_mutation_crash(tmp_path):
 
     Simulate a connection failure after the start record hits disk.
     """
-    from fazla_od.audit import AuditLogger, iter_audit_entries
-    from fazla_od.mutate.move import execute_move
-    from fazla_od.planfile import Operation
+    from m365ctl.audit import AuditLogger, iter_audit_entries
+    from m365ctl.mutate.move import execute_move
+    from m365ctl.planfile import Operation
 
     def handler(request):
         # Simulate TCP reset mid-mutation.
         raise httpx.ConnectError("connection reset by peer")
 
-    from fazla_od.graph import GraphClient
+    from m365ctl.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
@@ -3183,12 +3183,12 @@ git commit -m "test(safety): adversarial suite covering spec §7 invariants 1-6"
 ### Task 10: `od-label` via PnP.PowerShell
 
 **Files:**
-- Create: `src/fazla_od/mutate/label.py`
-- Create: `src/fazla_od/cli/label.py`
-- Create: `scripts/ps/Set-FazlaLabel.ps1`
+- Create: `src/m365ctl/mutate/label.py`
+- Create: `src/m365ctl/cli/label.py`
+- Create: `scripts/ps/Set-m365ctlLabel.ps1`
 - Create: `tests/test_mutate_label.py`
 - Create: `tests/test_cli_label.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Tests for label module (subprocess mocked)**
 
@@ -3199,9 +3199,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.mutate.label import execute_label_apply, execute_label_remove
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.mutate.label import execute_label_apply, execute_label_remove
+from m365ctl.planfile import Operation
 
 
 def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
@@ -3209,13 +3209,13 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok", "label": "Confidential"})
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate.label.subprocess.run",
+    run = mocker.patch("m365ctl.mutate.label.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-1", action="label-apply", drive_id="d1",
                    item_id="i1", args={"label": "Confidential",
-                                        "site_url": "https://fazla.sharepoint.com/"},
+                                        "site_url": "https://example.sharepoint.com/"},
                    dry_run_result="")
     result = execute_label_apply(op, logger,
                                  before={"parent_path": "/", "name": "x",
@@ -3225,7 +3225,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     # pwsh invoked with the shared ps1 and args.
     cmd = run.call_args[0][0]
     assert cmd[0] == "pwsh"
-    assert any("Set-FazlaLabel.ps1" in a for a in cmd)
+    assert any("Set-m365ctlLabel.ps1" in a for a in cmd)
     assert "Confidential" in cmd
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-1"]
     assert entries[-1]["result"] == "ok"
@@ -3236,12 +3236,12 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Set-PnPFileSensitivityLabel : access denied"
-    mocker.patch("fazla_od.mutate.label.subprocess.run", return_value=completed)
+    mocker.patch("m365ctl.mutate.label.subprocess.run", return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-2", action="label-remove", drive_id="d1",
                    item_id="i1", args={"site_url":
-                                       "https://fazla.sharepoint.com/"},
+                                       "https://example.sharepoint.com/"},
                    dry_run_result="")
     result = execute_label_remove(op, logger,
                                   before={"parent_path": "/", "name": "x",
@@ -3253,7 +3253,7 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
 
 - [ ] **Step 2: Implement `mutate/label.py`**
 
-Create `src/fazla_od/mutate/label.py`:
+Create `src/m365ctl/mutate/label.py`:
 ```python
 """Sensitivity-label operations via PnP.PowerShell.
 
@@ -3271,10 +3271,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.planfile import Operation
 
-_PS1 = Path(__file__).resolve().parents[2].parent / "scripts" / "ps" / "Set-FazlaLabel.ps1"
+_PS1 = Path(__file__).resolve().parents[2].parent / "scripts" / "ps" / "Set-m365ctlLabel.ps1"
 
 
 @dataclass(frozen=True)
@@ -3342,7 +3342,7 @@ def execute_label_remove(
 
 - [ ] **Step 3: Write the PowerShell stub**
 
-Create `scripts/ps/Set-FazlaLabel.ps1`:
+Create `scripts/ps/Set-m365ctlLabel.ps1`:
 ```powershell
 <#
 .SYNOPSIS
@@ -3352,7 +3352,7 @@ Apply or remove a sensitivity label on a SharePoint file via PnP.PowerShell.
 'apply' or 'remove'.
 
 .PARAMETER SiteUrl
-Full site URL, e.g. 'https://fazla.sharepoint.com/sites/Finance'.
+Full site URL, e.g. 'https://example.sharepoint.com/sites/Finance'.
 
 .PARAMETER ServerRelativeUrl
 Server-relative file path, e.g. '/sites/Finance/Shared Documents/Q1.xlsx'.
@@ -3363,7 +3363,7 @@ Label display name (required for apply).
 .NOTES
 Plan 3 installs PnP.PowerShell and converts the cert to PFX. This script
 relies on both being already in place. It authenticates with certificate
-+ app-only against the Fazla tenant using env vars set by the caller
++ app-only against the m365ctl tenant using env vars set by the caller
 (FAZLA_OD_TENANT, FAZLA_OD_CLIENT_ID, FAZLA_OD_CERT_PFX).
 #>
 param(
@@ -3406,7 +3406,7 @@ finally {
 
 - [ ] **Step 4: `cli/label.py`**
 
-Create `src/fazla_od/cli/label.py` with two subcommands — `apply --label <name>` and `remove` — each taking `--item-id/--drive-id` or `--from-plan`. Must call `assert_scope_allowed` before shelling out. Must produce plan JSON with `action="label-apply"` / `action="label-remove"` when `--plan-out`.
+Create `src/m365ctl/cli/label.py` with two subcommands — `apply --label <name>` and `remove` — each taking `--item-id/--drive-id` or `--from-plan`. Must call `assert_scope_allowed` before shelling out. Must produce plan JSON with `action="label-apply"` / `action="label-remove"` when `--plan-out`.
 
 Create `tests/test_cli_label.py` covering dry-run default, `--confirm` required, `--from-plan` single pwsh invocation per op (subprocess mocked).
 
@@ -3420,8 +3420,8 @@ Expected: 5 passed (2 mutate + 3 cli).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/fazla_od/mutate/label.py src/fazla_od/cli/label.py \
-        scripts/ps/Set-FazlaLabel.ps1 src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/label.py src/m365ctl/cli/label.py \
+        scripts/ps/Set-m365ctlLabel.ps1 src/m365ctl/cli/__main__.py \
         tests/test_mutate_label.py tests/test_cli_label.py
 git commit -m "feat(mutate): od-label apply/remove via PnP.PowerShell"
 ```
@@ -3431,11 +3431,11 @@ git commit -m "feat(mutate): od-label apply/remove via PnP.PowerShell"
 ### Task 11: `od-undo` — reverse-op builder + executor
 
 **Files:**
-- Create: `src/fazla_od/mutate/undo.py`
-- Create: `src/fazla_od/cli/undo.py`
+- Create: `src/m365ctl/mutate/undo.py`
+- Create: `src/m365ctl/cli/undo.py`
 - Create: `tests/test_mutate_undo.py`
 - Create: `tests/test_cli_undo.py`
-- Modify: `src/fazla_od/cli/__main__.py`
+- Modify: `src/m365ctl/cli/__main__.py`
 
 - [ ] **Step 1: Tests for `mutate/undo.py`**
 
@@ -3449,8 +3449,8 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.mutate.undo import Irreversible, build_reverse_operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.mutate.undo import Irreversible, build_reverse_operation
 
 
 def _ap(logger: AuditLogger, op_id: str, cmd: str, args: dict,
@@ -3533,7 +3533,7 @@ def test_reverse_label_apply_is_remove(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L1", cmd="od-label(apply)",
         args={"label": "Confidential",
-              "site_url": "https://fazla.sharepoint.com/"},
+              "site_url": "https://example.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x"},
@@ -3541,7 +3541,7 @@ def test_reverse_label_apply_is_remove(tmp_path):
         result="ok")
     rev = build_reverse_operation(logger, "L1")
     assert rev.action == "label-remove"
-    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+    assert rev.args["site_url"] == "https://example.sharepoint.com/"
 
 
 def test_reverse_op_failed_originally_raises(tmp_path):
@@ -3562,7 +3562,7 @@ def test_reverse_unknown_op_id_raises(tmp_path):
 
 - [ ] **Step 2: Implement `mutate/undo.py`**
 
-Create `src/fazla_od/mutate/undo.py`:
+Create `src/m365ctl/mutate/undo.py`:
 ```python
 """Build reverse-ops from audit-log entries.
 
@@ -3583,8 +3583,8 @@ Irreversible:
 """
 from __future__ import annotations
 
-from fazla_od.audit import AuditLogger, find_op_by_id
-from fazla_od.planfile import Operation, new_op_id
+from m365ctl.audit import AuditLogger, find_op_by_id
+from m365ctl.planfile import Operation, new_op_id
 
 
 class Irreversible(RuntimeError):
@@ -3699,7 +3699,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
 
 - [ ] **Step 3: `cli/undo.py` that dispatches to the right execute_\* function**
 
-Create `src/fazla_od/cli/undo.py`:
+Create `src/m365ctl/cli/undo.py`:
 ```python
 """`od-undo <op_id>` — replay a reverse-op from the audit log."""
 from __future__ import annotations
@@ -3708,15 +3708,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from fazla_od.audit import AuditLogger
-from fazla_od.cli._common import build_graph_client
-from fazla_od.cli.move import _lookup_item
-from fazla_od.config import load_config
-from fazla_od.mutate.delete import execute_recycle_delete, execute_restore
-from fazla_od.mutate.label import execute_label_apply, execute_label_remove
-from fazla_od.mutate.move import execute_move
-from fazla_od.mutate.rename import execute_rename
-from fazla_od.mutate.undo import Irreversible, build_reverse_operation
+from m365ctl.audit import AuditLogger
+from m365ctl.cli._common import build_graph_client
+from m365ctl.cli.move import _lookup_item
+from m365ctl.config import load_config
+from m365ctl.mutate.delete import execute_recycle_delete, execute_restore
+from m365ctl.mutate.label import execute_label_apply, execute_label_remove
+from m365ctl.mutate.move import execute_move
+from m365ctl.mutate.rename import execute_rename
+from m365ctl.mutate.undo import Irreversible, build_reverse_operation
 
 
 def run_undo(*, config_path: Path, op_id: str, confirm: bool,
@@ -3797,8 +3797,8 @@ Expected: 11 passed (8 mutate + 3 cli).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fazla_od/mutate/undo.py src/fazla_od/cli/undo.py \
-        src/fazla_od/cli/__main__.py \
+git add src/m365ctl/mutate/undo.py src/m365ctl/cli/undo.py \
+        src/m365ctl/cli/__main__.py \
         tests/test_mutate_undo.py tests/test_cli_undo.py
 git commit -m "feat(mutate): od-undo with per-op reverse-op builder"
 ```
@@ -3819,7 +3819,7 @@ For each command, the wrapper is identical in shape. Example `bin/od-move`:
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli move "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli move "$@"
 ```
 
 Repeat substituting `move` for `rename`, `copy`, `delete`, `clean`, `label`, `undo`.
@@ -3908,11 +3908,11 @@ Expected: whoami shows delegated identity + app-only cert. Catalog refresh compl
 
 - [ ] **Step 2: Stage a test folder by hand**
 
-In the OneDrive web UI (or via an `od-move` against an existing file), create an empty folder `/_fazla_smoke/` and note its `item_id`. Put one tiny file into it, `hello.txt`, and note its `item_id`. Export both into shell vars:
+In the OneDrive web UI (or via an `od-move` against an existing file), create an empty folder `/_m365ctl_smoke/` and note its `item_id`. Put one tiny file into it, `hello.txt`, and note its `item_id`. Export both into shell vars:
 
 ```bash
-FOLDER_ID="..."   # /_fazla_smoke/ item id
-FILE_ID="..."     # /_fazla_smoke/hello.txt item id
+FOLDER_ID="..."   # /_m365ctl_smoke/ item id
+FILE_ID="..."     # /_m365ctl_smoke/hello.txt item id
 DRIVE_ID=$(./bin/od-inventory --sql "SELECT DISTINCT drive_id FROM items LIMIT 1" | tail -1)
 echo "drive=$DRIVE_ID folder=$FOLDER_ID file=$FILE_ID"
 ```
@@ -3929,7 +3929,7 @@ Expected: command prints `[<uuid>] ok`; audit log gains two lines (start + end).
 
 - [ ] **Step 4: Move to a sibling folder then move back**
 
-Create `/_fazla_smoke/sub/` (or note another folder id), then:
+Create `/_m365ctl_smoke/sub/` (or note another folder id), then:
 
 ```bash
 ./bin/od-move --drive-id "$DRIVE_ID" --item-id "$FILE_ID" \
@@ -3967,7 +3967,7 @@ Expected: delete succeeds (file disappears from OneDrive, lands in recycle); und
 ./bin/od-delete --drive-id "$DRIVE_ID" --item-id "$FILE_ID" --confirm
 # now purge from recycle bin
 ./bin/od-clean recycle-bin --scope drive:$DRIVE_ID \
-               --pattern "/_fazla_smoke/hello-renamed.txt" \
+               --pattern "/_m365ctl_smoke/hello-renamed.txt" \
                --plan-out /tmp/purge.json
 # review /tmp/purge.json (should list exactly the one item)
 ./bin/od-clean recycle-bin --from-plan /tmp/purge.json --confirm
@@ -4039,9 +4039,9 @@ Plan 5 reuses `safety.assert_scope_allowed` for `od-download` (no mutation but h
 
 - **Smoke test run:** 2026-04-24 (Arda's workstation, agentic driver).
 - **Unit tests:** 190 passed, 1 skipped (live-gated `test_auth.py::test_live_whoami`).
-- **Staging (Step 2):** Created `/_fazla_smoke/` folder, `/_fazla_smoke/sub/`, and `/_fazla_smoke/hello.txt` directly via Graph `POST /me/drive/root/children` and `PUT /content` (the toolkit has no create-folder verb — deliberate; folder creation is a Plan-5 or manual op).
+- **Staging (Step 2):** Created `/_m365ctl_smoke/` folder, `/_m365ctl_smoke/sub/`, and `/_m365ctl_smoke/hello.txt` directly via Graph `POST /me/drive/root/children` and `PUT /content` (the toolkit has no create-folder verb — deliberate; folder creation is a Plan-5 or manual op).
 - **Step 3 rename → ok.** `hello.txt` → `hello-renamed.txt`. One paired start/end in `logs/ops/2026-04-24.jsonl`. `before.name` and `after.name` both correct.
-- **Step 4 move → ok.** Moved into `/_fazla_smoke/sub/`. Graph returned new `parentReference.id` as expected.
+- **Step 4 move → ok.** Moved into `/_m365ctl_smoke/sub/`. Graph returned new `parentReference.id` as expected.
 - **Step 5 copy + undo(delete the copy) → ok.** Copy executed synchronously (Graph returned 200 with new item id; monitor-URL polling never triggered for this small file). `od-undo <copy_op_id>` built a `delete` against the new item id from `after.new_item_id` and deleted the copy cleanly. Two more paired audit entries.
 - **Step 6 recycle-delete → ok; undo(restore) → error.**
     - `od-delete` against the original item returned 204 and logged `ok (recycled)`.
@@ -4052,7 +4052,7 @@ Plan 5 reuses `safety.assert_scope_allowed` for `od-download` (no mutation but h
     - Second attempt ran the purge: Graph returned `itemNotFound: Item not found` on `POST .../permanentDelete`. **Another Graph-shape issue** — `permanentDelete` also wants the recycle-bin-specific id, not the original.
     - `od-undo <purge_op_id>` correctly raised `Irreversible` — not because the op was a purge (that branch never took because the purge errored), but via the generic "did not succeed originally (result='error')" guard. **Exit 2 matches spec.** Irreversibility gate verified.
 - **Step 8 audit log inspection:** 14 lines, 7 paired `start/end` sets covering all attempts above. `result` field correctly reflects ok/error for each. No orphaned start-without-end.
-- **Step 9 clean up:** `_fazla_smoke/` folder removed via direct Graph `DELETE /me/drive/items/{folder_id}` (soft-recycle). Workspaces clean. `git status --porcelain` clean after commits.
+- **Step 9 clean up:** `_m365ctl_smoke/` folder removed via direct Graph `DELETE /me/drive/items/{folder_id}` (soft-recycle). Workspaces clean. `git status --porcelain` clean after commits.
 - **Step 10 full-suite:** **190 passed, 1 skipped** on final run — 7 more passing than the plan's predicted 183, because Plan 3 Task 12 added 3 regression tests (`test_resolve_scope_tenant_skips_{resourcenotfound_mysite,notallowed_access_blocked}` and the pre-existing Task 11 adversarial extras).
 - **Step 11 completion log:** this section.
 - **Step 12 push:** held for user approval.
