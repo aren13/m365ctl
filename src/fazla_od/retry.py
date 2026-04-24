@@ -35,6 +35,21 @@ def with_retry(
     is_transient: Callable[[Exception], bool] = _default_is_transient,
     retry_after_of: Callable[[Exception], float | None] = _default_retry_after,
 ) -> T:
+    """Invoke ``fn`` with retry on transient failures.
+
+    Non-transient exceptions propagate immediately (no wrapping).
+
+    Exhaustion contract (intentionally asymmetric):
+
+    * If ``max_attempts <= 1``, no retry is attempted, and any raised
+      exception propagates directly - preserving its type and any attached
+      metadata (e.g. ``GraphError.retry_after_seconds``). Callers that set
+      ``max_attempts=1`` typically want to observe the native error rather
+      than a ``RetryExhausted`` wrapper.
+    * If ``max_attempts >= 2`` and every attempt fails transiently, the
+      final exception is wrapped in :class:`RetryExhausted` (chained via
+      ``raise ... from last_exc``), signalling that retry machinery gave up.
+    """
     last_exc: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:

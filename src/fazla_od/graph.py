@@ -9,6 +9,7 @@ Plan 3 changes:
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable, Iterator
@@ -93,10 +94,9 @@ class GraphClient:
             transport=transport,
             timeout=timeout,
         )
-        # time.sleep by default; tests inject a capturing list.append.
-        import time as _time
-
-        self._sleep = sleep if sleep is not None else _time.sleep
+        # ``sleep`` defaults to ``time.sleep``; tests inject a capturing
+        # ``list.append`` to assert on back-off delays without real sleeping.
+        self._sleep = sleep if sleep is not None else time.sleep
         self._max_attempts = max_attempts
 
     def _auth_headers(self) -> dict[str, str]:
