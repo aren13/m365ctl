@@ -212,6 +212,100 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
                            f"to {before.get('parent_folder_path', prior_parent)!r}",
         )
 
+    if cmd == "mail-draft-create":
+        new_id = after.get("id")
+        if not new_id:
+            raise Irreversible(
+                f"mail-draft-create op {op_id!r} has no after.id; cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.draft.delete",
+            drive_id=drive_id, item_id=new_id, args={},
+            dry_run_result=f"(undo of {op_id}) delete draft {new_id!r}",
+        )
+
+    if cmd == "mail-draft-update":
+        if not before:
+            raise Irreversible(
+                f"mail-draft-update op {op_id!r} has empty before; cannot undo"
+            )
+        restore_args: dict = {}
+        if "subject" in before:
+            restore_args["subject"] = before["subject"]
+        if "body" in before and isinstance(before["body"], dict):
+            restore_args["body"] = before["body"].get("content", "")
+            restore_args["body_type"] = before["body"].get("contentType", "text")
+        if "toRecipients" in before:
+            restore_args["to"] = [r.get("emailAddress", {}).get("address", "")
+                                  for r in before["toRecipients"]]
+        if "ccRecipients" in before:
+            restore_args["cc"] = [r.get("emailAddress", {}).get("address", "")
+                                  for r in before["ccRecipients"]]
+        return Operation(
+            op_id=new_op_id(), action="mail.draft.update",
+            drive_id=drive_id, item_id=start["item_id"],
+            args=restore_args,
+            dry_run_result=f"(undo of {op_id}) restore draft {start['item_id']!r}",
+        )
+
+    if cmd == "mail-draft-delete":
+        if not before or "subject" not in before:
+            raise Irreversible(
+                f"mail-draft-delete op {op_id!r} has no before.subject; "
+                f"cannot reconstruct the deleted draft"
+            )
+        body_block = before.get("body", {}) or {}
+        create_args: dict = {
+            "subject": before.get("subject", ""),
+            "body": body_block.get("content", ""),
+            "body_type": body_block.get("contentType", "text"),
+            "to": [r.get("emailAddress", {}).get("address", "")
+                   for r in before.get("toRecipients", []) or []],
+        }
+        if before.get("ccRecipients"):
+            create_args["cc"] = [r.get("emailAddress", {}).get("address", "")
+                                 for r in before["ccRecipients"]]
+        if before.get("bccRecipients"):
+            create_args["bcc"] = [r.get("emailAddress", {}).get("address", "")
+                                  for r in before["bccRecipients"]]
+        return Operation(
+            op_id=new_op_id(), action="mail.draft.create",
+            drive_id=drive_id, item_id="", args=create_args,
+            dry_run_result=f"(undo of {op_id}) recreate draft "
+                           f"{before.get('subject', '?')!r}",
+        )
+
+    if cmd == "mail-attach-add":
+        new_att = after.get("id")
+        if not new_att:
+            raise Irreversible(
+                f"mail-attach-add op {op_id!r} has no after.id; cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.attach.remove",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"attachment_id": new_att},
+            dry_run_result=f"(undo of {op_id}) remove attachment {new_att!r}",
+        )
+
+    if cmd == "mail-attach-remove":
+        if not before.get("content_bytes_b64"):
+            raise Irreversible(
+                f"mail-attach-remove op {op_id!r} has no before.content_bytes_b64; "
+                f"cannot recreate the attachment"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.attach.add",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={
+                "name": before.get("name", ""),
+                "content_type": before.get("content_type", "application/octet-stream"),
+                "content_bytes_b64": before["content_bytes_b64"],
+            },
+            dry_run_result=f"(undo of {op_id}) re-add attachment "
+                           f"{before.get('name', '?')!r}",
+        )
+
     raise Irreversible(f"no reverse-op known for mail cmd {cmd!r}")
 
 
@@ -292,3 +386,58 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
         "args": {"destination_id": b.get("parent_folder_id", ""),
                  "destination_path": b.get("parent_folder_path", "")},
     })
+
+    # Phase 5a — reversible compose verbs.
+    dispatcher.register("mail.draft.create", lambda b, a: {
+        "action": "mail.draft.delete", "args": {},
+    })
+    dispatcher.register("mail.draft.update", lambda b, a: {
+        "action": "mail.draft.update",
+        "args": {
+            "subject": b.get("subject", ""),
+            "body": (b.get("body", {}) or {}).get("content", ""),
+            "body_type": (b.get("body", {}) or {}).get("contentType", "text"),
+        },
+    })
+    dispatcher.register("mail.draft.delete", lambda b, a: {
+        "action": "mail.draft.create",
+        "args": {
+            "subject": b.get("subject", ""),
+            "body": (b.get("body", {}) or {}).get("content", ""),
+            "body_type": (b.get("body", {}) or {}).get("contentType", "text"),
+            "to": [r.get("emailAddress", {}).get("address", "")
+                   for r in b.get("toRecipients", []) or []],
+        },
+    })
+    dispatcher.register("mail.attach.add", lambda b, a: {
+        "action": "mail.attach.remove",
+        "args": {"attachment_id": a.get("id", "")},
+    })
+    dispatcher.register("mail.attach.remove", lambda b, a: {
+        "action": "mail.attach.add",
+        "args": {
+            "name": b.get("name", ""),
+            "content_type": b.get("content_type", "application/octet-stream"),
+            "content_bytes_b64": b.get("content_bytes_b64", ""),
+        },
+    })
+
+    # Phase 5a — irreversible compose verbs (outgoing mail cannot be recalled).
+    dispatcher.register_irreversible(
+        "mail.send",
+        "Sent mail cannot be recalled programmatically. "
+        "If the recipient hasn't opened the message yet, use the Outlook client's "
+        "'Recall this message' feature.",
+    )
+    dispatcher.register_irreversible(
+        "mail.reply",
+        "Sent replies cannot be recalled programmatically.",
+    )
+    dispatcher.register_irreversible(
+        "mail.reply.all",
+        "Sent reply-all messages cannot be recalled programmatically.",
+    )
+    dispatcher.register_irreversible(
+        "mail.forward",
+        "Sent forwards cannot be recalled programmatically.",
+    )

@@ -188,6 +188,31 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
         from m365ctl.mail.mutate.categorize import execute_categorize
         rev.args.setdefault("auth_mode", auth_mode)
         r = execute_categorize(rev, graph, logger, before={})
+
+    elif action == "mail.draft.create":
+        from m365ctl.mail.mutate.draft import execute_create_draft
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_create_draft(rev, graph, logger, before={})
+
+    elif action == "mail.draft.update":
+        from m365ctl.mail.mutate.draft import execute_update_draft
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_update_draft(rev, graph, logger, before={})
+
+    elif action == "mail.draft.delete":
+        from m365ctl.mail.mutate.draft import execute_delete_draft
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_delete_draft(rev, graph, logger, before={})
+
+    elif action == "mail.attach.add":
+        from m365ctl.mail.mutate.attach import execute_add_attachment_small
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_add_attachment_small(rev, graph, logger, before={})
+
+    elif action == "mail.attach.remove":
+        from m365ctl.mail.mutate.attach import execute_remove_attachment
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_remove_attachment(rev, graph, logger, before={})
     else:
         print(f"no mail executor wired for reverse action {action!r}", file=sys.stderr)
         return 2

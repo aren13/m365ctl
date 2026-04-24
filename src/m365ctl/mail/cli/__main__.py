@@ -50,6 +50,10 @@ _USAGE = (
     "  focus        set inferenceClassification\n"
     "  categorize   add / remove / set categories\n"
     "  delete       soft-delete messages (→ Deleted Items)\n"
+    "  draft        create/update/delete drafts (undoable)\n"
+    "  send         send draft or inline (IRREVERSIBLE)\n"
+    "  reply        reply to a message (IRREVERSIBLE — inline send)\n"
+    "  forward      forward a message (IRREVERSIBLE — inline send)\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -95,6 +99,14 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.categorize import main as f
     elif verb == "delete":
         from m365ctl.mail.cli.delete import main as f
+    elif verb == "draft":
+        from m365ctl.mail.cli.draft import main as f
+    elif verb == "send":
+        from m365ctl.mail.cli.send import main as f
+    elif verb == "reply":
+        from m365ctl.mail.cli.reply import main as f
+    elif verb == "forward":
+        from m365ctl.mail.cli.forward import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
