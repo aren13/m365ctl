@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from m365ctl.audit import AuditLogger, iter_audit_entries
-from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
-from m365ctl.graph import GraphClient
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+from m365ctl.common.graph import GraphClient
 from m365ctl.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
     revoke_stale_shares,
 )
-from m365ctl.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 
 def _client(handler):

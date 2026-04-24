@@ -5,12 +5,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from m365ctl.audit import AuditLogger
+from m365ctl.common.audit import AuditLogger
 from m365ctl.cli._common import build_graph_client, emit_plan, new_plan
-from m365ctl.config import load_config
+from m365ctl.common.config import load_config
 from m365ctl.mutate.label import execute_label_apply, execute_label_remove
-from m365ctl.planfile import Operation, load_plan, new_op_id
-from m365ctl.safety import ScopeViolation, assert_scope_allowed
+from m365ctl.common.planfile import Operation, load_plan, new_op_id
+from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 
 
 _ACTION_EXECUTORS = {

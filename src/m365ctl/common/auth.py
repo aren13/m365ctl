@@ -19,7 +19,7 @@ import msal
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
-from m365ctl.config import Config
+from m365ctl.common.config import Config
 
 GRAPH_SCOPES_APP_ONLY = ["https://graph.microsoft.com/.default"]
 GRAPH_SCOPES_DELEGATED = [

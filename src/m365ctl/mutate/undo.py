@@ -17,8 +17,8 @@ Irreversible:
 """
 from __future__ import annotations
 
-from m365ctl.audit import AuditLogger, find_op_by_id
-from m365ctl.planfile import Operation, new_op_id
+from m365ctl.common.audit import AuditLogger, find_op_by_id
+from m365ctl.common.planfile import Operation, new_op_id
 
 
 class Irreversible(RuntimeError):

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from m365ctl.config import Config, ConfigError, load_config
+from m365ctl.common.config import Config, ConfigError, load_config
 
 
 def _valid_toml(tmp_path: Path) -> Path:

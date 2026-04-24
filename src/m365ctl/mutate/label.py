@@ -4,9 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
 from m365ctl.mutate._pwsh import PS_SCRIPTS_DIR, invoke_pwsh
-from m365ctl.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 _PS1 = PS_SCRIPTS_DIR / "Set-FazlaLabel.ps1"
 

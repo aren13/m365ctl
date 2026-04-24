@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from m365ctl.config import load_config
+from m365ctl.common.config import load_config
 
 
 def run_audit(

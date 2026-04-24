@@ -4,13 +4,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from m365ctl.auth import (
+from m365ctl.common.auth import (
     AppOnlyCredential,
     AuthError,
     DelegatedCredential,
 )
-from m365ctl.config import load_config
-from m365ctl.graph import GraphClient
+from m365ctl.common.config import load_config
+from m365ctl.common.graph import GraphClient
 
 
 def run_login(config_path: Path) -> int:

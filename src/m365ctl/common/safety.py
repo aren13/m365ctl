@@ -19,7 +19,7 @@ from __future__ import annotations
 import fnmatch
 from typing import Iterable, Iterator, Protocol
 
-from m365ctl.config import Config
+from m365ctl.common.config import Config
 
 
 class _HasScopeFields(Protocol):

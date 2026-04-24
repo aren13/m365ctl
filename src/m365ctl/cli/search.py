@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.catalog.crawl import resolve_scope
 from m365ctl.catalog.db import open_catalog
-from m365ctl.config import load_config
-from m365ctl.graph import GraphClient
+from m365ctl.common.config import load_config
+from m365ctl.common.graph import GraphClient
 from m365ctl.search.catalog_search import catalog_search
 from m365ctl.search.graph_search import SearchHit, graph_search
 from m365ctl.search.merge import merge_hits

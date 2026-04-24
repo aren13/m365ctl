@@ -27,16 +27,16 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
-from m365ctl.config import Config
-from m365ctl.graph import GraphClient, GraphError
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.config import Config
+from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.mutate._pwsh import (
     PS_SCRIPTS_DIR,
     invoke_pwsh,
     lookup_site_url_from_drive_id,
     normalize_recycle_dir_name,
 )
-from m365ctl.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 _RESTORE_PS1 = PS_SCRIPTS_DIR / "recycle-restore.ps1"
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import httpx
 
-from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
 from m365ctl.mutate.move import execute_move
-from m365ctl.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 
 def _op(**over) -> Operation:
@@ -30,7 +30,7 @@ def test_execute_move_issues_patch_and_logs_both_phases(tmp_path):
             },
         )
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),
@@ -59,7 +59,7 @@ def test_execute_move_start_record_persists_even_if_graph_raises(tmp_path):
             403, json={"error": {"code": "accessDenied", "message": "no"}}
         )
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     client = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),

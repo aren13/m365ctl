@@ -4,9 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
-from m365ctl.graph import GraphClient, GraphError
-from m365ctl.planfile import Operation
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.graph import GraphClient, GraphError
+from m365ctl.common.planfile import Operation
 
 
 @dataclass(frozen=True)

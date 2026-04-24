@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.common.audit import AuditLogger, iter_audit_entries
 from m365ctl.mutate.label import execute_label_apply, execute_label_remove
-from m365ctl.planfile import Operation
+from m365ctl.common.planfile import Operation
 
 
 def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):

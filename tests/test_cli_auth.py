@@ -48,7 +48,7 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
 
 
 def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
-    from m365ctl.auth import AuthError
+    from m365ctl.common.auth import AuthError
 
     cfg = MagicMock()
     cfg.tenant_id = "t"

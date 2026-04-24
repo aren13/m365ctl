@@ -4,7 +4,7 @@ Plan 3 changes:
 - ``GraphError`` carries a ``retry_after_seconds`` attribute (``None`` when
   absent / unparseable).
 - ``GraphClient`` accepts ``sleep`` and ``max_attempts`` and wraps each
-  ``get`` / ``get_absolute`` call in ``m365ctl.retry.with_retry``, treating
+  ``get`` / ``get_absolute`` call in ``m365ctl.common.retry.with_retry``, treating
   429/503 (and 500/502/504) as transient.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Callable, Iterator
 
 import httpx
 
-from m365ctl.retry import with_retry
+from m365ctl.common.retry import with_retry
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 

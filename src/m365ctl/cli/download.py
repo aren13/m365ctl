@@ -7,9 +7,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.catalog.db import open_catalog
-from m365ctl.config import load_config
+from m365ctl.common.config import load_config
 from m365ctl.download.fetcher import fetch_item
 from m365ctl.download.planner import (
     DownloadItem,

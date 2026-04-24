@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 from m365ctl.cli.move import run_move
-from m365ctl.config import Config, ScopeConfig
-from m365ctl.safety import (
+from m365ctl.common.config import Config, ScopeConfig
+from m365ctl.common.safety import (
     ScopeViolation,
     assert_scope_allowed,
     filter_by_scope,
@@ -40,7 +40,7 @@ def _cfg(
         unsafe_requires_flag=unsafe_requires_flag,
     )
     # Only the .scope field matters here; stub the rest.
-    from m365ctl.config import CatalogConfig, LoggingConfig
+    from m365ctl.common.config import CatalogConfig, LoggingConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=(tmp_path or Path("/tmp")) / "k",
@@ -96,14 +96,14 @@ def test_filter_by_scope_drops_items_outside_allow_drives(tmp_path: Path) -> Non
 def test_unsafe_scope_bypasses_allow_list_with_tty_yes(tmp_path: Path) -> None:
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("m365ctl.safety._confirm_via_tty", return_value=True):
+    with patch("m365ctl.common.safety._confirm_via_tty", return_value=True):
         assert_scope_allowed(item, cfg, unsafe_scope=True)  # no raise
 
 
 def test_unsafe_scope_without_tty_yes_still_raises(tmp_path: Path) -> None:
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("m365ctl.safety._confirm_via_tty", return_value=False):
+    with patch("m365ctl.common.safety._confirm_via_tty", return_value=False):
         with pytest.raises(ScopeViolation, match="declined"):
             assert_scope_allowed(item, cfg, unsafe_scope=True)
 
@@ -113,7 +113,7 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
     against an out-of-scope item always raises — no TTY prompt offered."""
     cfg = _cfg(allow=["d1"], unsafe_requires_flag=True, tmp_path=tmp_path)
     item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
-    with patch("m365ctl.safety._confirm_via_tty") as m:
+    with patch("m365ctl.common.safety._confirm_via_tty") as m:
         with pytest.raises(ScopeViolation):
             assert_scope_allowed(item, cfg, unsafe_scope=False)
         m.assert_not_called()  # never prompted — flag required upfront
@@ -134,7 +134,7 @@ def test_dry_run_is_default_no_mutation(tmp_path, mocker):
         calls["n"] += 1
         return httpx.Response(200, json={})
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
@@ -199,7 +199,7 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
                        "name": "x"},
         )
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
@@ -211,7 +211,7 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
                                      "parent_path": "/junk"},
     )
 
-    from m365ctl.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan_payload = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",
@@ -303,14 +303,14 @@ def test_deny_paths_never_appear_in_plan_or_tsv(tmp_path, mocker, capsys):
 
 def test_audit_start_line_persists_even_on_mid_mutation_crash(tmp_path):
     """Spec §7 rule 5: audit 'start' is written BEFORE the Graph call."""
-    from m365ctl.audit import AuditLogger, iter_audit_entries
+    from m365ctl.common.audit import AuditLogger, iter_audit_entries
     from m365ctl.mutate.move import execute_move
-    from m365ctl.planfile import Operation
+    from m365ctl.common.planfile import Operation
 
     def handler(request):
         raise httpx.ConnectError("connection reset by peer")
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)

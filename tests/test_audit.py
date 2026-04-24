@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from m365ctl.audit import (
+from m365ctl.common.audit import (
     AuditLogger,
     find_most_recent_delete_before,
     find_op_by_id,

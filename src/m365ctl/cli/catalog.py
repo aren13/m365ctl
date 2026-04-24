@@ -5,12 +5,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from m365ctl.auth import AppOnlyCredential, DelegatedCredential
+from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
 from m365ctl.catalog.db import open_catalog
-from m365ctl.config import load_config
-from m365ctl.graph import GraphClient
-from m365ctl.prompts import TTYUnavailable, confirm_or_abort
+from m365ctl.common.config import load_config
+from m365ctl.common.graph import GraphClient
+from m365ctl.common.prompts import TTYUnavailable, confirm_or_abort
 
 _LARGE_SCOPE_THRESHOLD = 5
 

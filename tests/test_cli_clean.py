@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
 from m365ctl.cli.clean import run_clean
-from m365ctl.graph import GraphError
+from m365ctl.common.graph import GraphError
 from m365ctl.mutate.clean import CleanResult
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
-    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",

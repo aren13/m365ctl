@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from m365ctl.catalog.db import open_catalog
-from m365ctl.config import load_config
+from m365ctl.common.config import load_config
 
 
 def _emit(rows: list[dict[str, Any]], *, as_json: bool) -> None:

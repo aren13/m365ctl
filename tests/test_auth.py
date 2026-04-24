@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.auth import (
+from m365ctl.common.auth import (
     AppOnlyCredential,
     AuthError,
     CertInfo,
     DelegatedCredential,
     get_cert_info,
 )
-from m365ctl.config import Config, load_config
+from m365ctl.common.config import Config, load_config
 
 _SKIPIF_LIVE = pytest.mark.skipif(
     os.environ.get("FAZLA_OD_LIVE_TESTS") != "1",
@@ -54,7 +54,7 @@ def test_app_only_acquires_token_using_cert(
 ) -> None:
     # Stub the cert thumbprint helper -- we don't want to parse a fake cert here.
     mocker.patch(
-        "m365ctl.auth.get_cert_info",
+        "m365ctl.common.auth.get_cert_info",
         return_value=CertInfo(
             subject="CN=Test",
             thumbprint="ABCDEF",
@@ -77,7 +77,7 @@ def test_app_only_acquires_token_using_cert(
 
 def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
     mocker.patch(
-        "m365ctl.auth.get_cert_info",
+        "m365ctl.common.auth.get_cert_info",
         return_value=CertInfo("CN=x", "AB", "2028-01-01T00:00:00Z", 900),
     )
     mock_app = MagicMock()
@@ -117,7 +117,7 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
     }
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     printed: list[str] = []
     cred = DelegatedCredential(cfg, prompt=lambda msg: printed.append(msg))
@@ -133,7 +133,7 @@ def test_delegated_get_token_uses_cached_account(cfg: Config, mocker) -> None:
     mock_app.get_accounts.return_value = [{"username": "cached@fazla.com"}]
     mock_app.acquire_token_silent.return_value = {"access_token": "cached-t0k3n"}
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     token = cred.get_token()
@@ -146,7 +146,7 @@ def test_delegated_get_token_raises_when_not_logged_in(cfg: Config, mocker) -> N
     mock_app = MagicMock()
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
-    mocker.patch("m365ctl.auth._load_persistent_cache", return_value=None)
+    mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)
 
     cred = DelegatedCredential(cfg)
     with pytest.raises(AuthError, match="not logged in"):

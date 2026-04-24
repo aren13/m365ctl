@@ -8,7 +8,7 @@ from m365ctl.cli.label import run_label
 
 
 def _stub_cfg(tmp_path: Path):
-    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -89,7 +89,7 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
     run_mock = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
                             return_value=completed)
 
-    from m365ctl.planfile import PLAN_SCHEMA_VERSION
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan = {
         "version": PLAN_SCHEMA_VERSION,
         "created_at": "2026-04-24T10:00:00+00:00",

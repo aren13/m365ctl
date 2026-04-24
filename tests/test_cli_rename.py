@@ -7,7 +7,7 @@ from m365ctl.cli.rename import run_rename
 
 
 def _stub_cfg(tmp_path: Path):
-    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",

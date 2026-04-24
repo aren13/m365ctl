@@ -18,7 +18,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from m365ctl.graph import GraphClient, GraphError
+from m365ctl.common.graph import GraphClient, GraphError
 
 
 # Path to the repo's PowerShell scripts directory, for module-level

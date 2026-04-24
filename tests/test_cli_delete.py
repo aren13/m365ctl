@@ -10,7 +10,7 @@ from m365ctl.cli.delete import run_delete
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
-    from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+    from m365ctl.common.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
     return Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",
@@ -61,7 +61,7 @@ def test_confirm_required_for_single_delete_executes(tmp_path, mocker):
         assert request.method == "DELETE"
         return httpx.Response(204)
 
-    from m365ctl.graph import GraphClient
+    from m365ctl.common.graph import GraphClient
     real = GraphClient(
         token_provider=lambda: "t",
         transport=httpx.MockTransport(handler),

@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from m365ctl.audit import AuditLogger, find_most_recent_delete_before
+from m365ctl.common.audit import AuditLogger, find_most_recent_delete_before
 from m365ctl.cli._common import (
     CandidateItem,
     build_graph_client,
@@ -15,15 +15,15 @@ from m365ctl.cli._common import (
     require_plan_for_bulk,
 )
 from m365ctl.cli.move import _lookup_item
-from m365ctl.config import load_config
-from m365ctl.graph import GraphError
+from m365ctl.common.config import load_config
+from m365ctl.common.graph import GraphError
 from m365ctl.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
     revoke_stale_shares,
 )
-from m365ctl.planfile import Operation, load_plan, new_op_id
-from m365ctl.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
+from m365ctl.common.planfile import Operation, load_plan, new_op_id
+from m365ctl.common.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
 
 
 _ACTION_EXECUTORS = {

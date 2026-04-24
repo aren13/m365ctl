@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
 from m365ctl.mutate.undo import Irreversible, build_reverse_operation
 
 

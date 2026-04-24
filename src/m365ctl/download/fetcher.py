@@ -13,7 +13,7 @@ from typing import Callable
 
 import httpx
 
-from m365ctl.graph import GraphError
+from m365ctl.common.graph import GraphError
 
 _CHUNK = 1024 * 1024  # 1 MiB
 

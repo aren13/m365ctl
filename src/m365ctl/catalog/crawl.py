@@ -144,7 +144,7 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
     """All user OneDrives + all SharePoint site drives."""
     specs: list[DriveSpec] = []
 
-    from m365ctl.graph import GraphError
+    from m365ctl.common.graph import GraphError
 
     def _collect(path: str, *, params: dict | None = None) -> list[dict]:
         """Collect all items from a paginated Graph collection.

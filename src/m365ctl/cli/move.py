@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from m365ctl.audit import AuditLogger
+from m365ctl.common.audit import AuditLogger
 from m365ctl.cli._common import (
     CandidateItem,
     build_graph_client,
@@ -14,10 +14,10 @@ from m365ctl.cli._common import (
     new_plan,
     require_plan_for_bulk,
 )
-from m365ctl.config import load_config
+from m365ctl.common.config import load_config
 from m365ctl.mutate.move import execute_move
-from m365ctl.planfile import Operation, load_plan, new_op_id
-from m365ctl.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
+from m365ctl.common.planfile import Operation, load_plan, new_op_id
+from m365ctl.common.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
 
 
 def _lookup_item(graph, drive_id: str, item_id: str) -> dict:
