@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.common.config import Config, load_config
+from m365ctl.common.config import AuthMode, Config, load_config
 from m365ctl.common.safety import assert_mailbox_allowed
 
 
@@ -23,18 +23,19 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
                    help="Override allow_mailboxes via /dev/tty confirm (per mailbox).")
 
 
-def load_and_authorize(args: argparse.Namespace) -> tuple[Config, str, Any]:
+def load_and_authorize(
+    args: argparse.Namespace,
+) -> tuple[Config, AuthMode, DelegatedCredential | AppOnlyCredential]:
     """Load config, gate the requested mailbox, and return (cfg, auth_mode, credential)."""
     cfg = load_config(Path(args.config))
     mailbox_spec = args.mailbox
-    if mailbox_spec == "me":
-        auth_mode = cfg.default_auth
-    else:
-        auth_mode = "app-only"
+    auth_mode: AuthMode = cfg.default_auth if mailbox_spec == "me" else "app-only"
     assert_mailbox_allowed(
         mailbox_spec, cfg, auth_mode=auth_mode, unsafe_scope=args.unsafe_scope,
     )
-    cred = DelegatedCredential(cfg) if auth_mode == "delegated" else AppOnlyCredential(cfg)
+    cred: DelegatedCredential | AppOnlyCredential = (
+        DelegatedCredential(cfg) if auth_mode == "delegated" else AppOnlyCredential(cfg)
+    )
     return cfg, auth_mode, cred
 
 
