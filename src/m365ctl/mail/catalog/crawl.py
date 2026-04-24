@@ -277,9 +277,9 @@ def refresh_mailbox(
                 raw = graph.get(f"{ub}/mailFolders/{wk}")
             except GraphError:
                 continue  # mailbox doesn't have this well-known folder
-            row = seen_by_id.get(raw["id"])
-            if row is not None:
-                targets.append(row)
+            seen_row = seen_by_id.get(raw["id"])
+            if seen_row is not None:
+                targets.append(seen_row)
             else:
                 # Listing missed it (hidden / regional quirk) — synthesise.
                 targets.append({
