@@ -16,6 +16,7 @@ from fazla_od.cli._common import (
 )
 from fazla_od.cli.move import _lookup_item
 from fazla_od.config import load_config
+from fazla_od.graph import GraphError
 from fazla_od.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
@@ -78,7 +79,20 @@ def run_clean(
         for op in plan.operations:
             if op.action != action:
                 continue
-            meta = _lookup_item(graph, op.drive_id, op.item_id)
+            # recycle-purge targets items that are already in the recycle
+            # bin; GET /drives/{d}/items/{i} 404s on those. Fall back to a
+            # minimal metadata dict (drive_id only) so scope checks still
+            # enforce allow_drives, but path-based deny-list matches are
+            # naturally vacuous for an item we can't see.
+            try:
+                meta = _lookup_item(graph, op.drive_id, op.item_id)
+            except GraphError as exc:
+                if any(t in str(exc) for t in ("itemNotFound", "HTTP404")):
+                    meta = {"drive_id": op.drive_id, "item_id": op.item_id,
+                            "full_path": "(recycle bin)", "name": "",
+                            "parent_path": "(recycle bin)"}
+                else:
+                    raise
             try:
                 assert_scope_allowed(type("X", (), meta)(), cfg,
                                      unsafe_scope=unsafe_scope)
