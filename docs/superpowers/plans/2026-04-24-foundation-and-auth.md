@@ -62,7 +62,7 @@ Fazla-OneDrive/
 └── docs/
     ├── superpowers/
     │   ├── specs/
-    │   │   └── 2026-04-24-fazla-onedrive-toolkit-design.md    # already exists
+    │   │   └── 2026-04-24-m365ctl-design.md    # already exists
     │   └── plans/
     │       └── 2026-04-24-foundation-and-auth.md              # this file
 ```
@@ -138,7 +138,7 @@ git commit -m "chore: initial .gitignore"
 ### Task 2: Commit the approved spec and this plan
 
 **Files:**
-- Already exist: `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`, `docs/superpowers/plans/2026-04-24-foundation-and-auth.md`
+- Already exist: `docs/superpowers/specs/2026-04-24-m365ctl-design.md`, `docs/superpowers/plans/2026-04-24-foundation-and-auth.md`
 
 - [ ] **Step 1: Stage and commit**
 
@@ -214,7 +214,7 @@ target-version = "py311"
 
 CLI for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant.
 
-See `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md` for the full design.
+See `docs/superpowers/specs/2026-04-24-m365ctl-design.md` for the full design.
 
 ## Quick start (after Plan 1)
 
@@ -1440,7 +1440,7 @@ Notes for Claude Code (and any agentic assistant) operating this repo.
 
 ## What this is
 
-A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md`. Plans are under `docs/superpowers/plans/`.
+A CLI for admin-scoped control of the Fazla M365 tenant's OneDrive + SharePoint content via Microsoft Graph. The full design is in `docs/superpowers/specs/2026-04-24-m365ctl-design.md`. Plans are under `docs/superpowers/plans/`.
 
 ## Current CLI surface (Plan 1 complete)
 

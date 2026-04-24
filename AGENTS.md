@@ -15,10 +15,10 @@ sibling sub-package.
 
 ## Where to start
 
-1. `M365CTL-SPEC.md` — the parent spec. Canonical in Phase 0; Group 10 moves
-   it under `docs/superpowers/specs/2026-04-24-m365ctl-design.md`.
-2. `CONTRIBUTING.md` — dev setup, test commands, commit conventions.
-3. `docs/setup/first-run.md` — tenant setup prerequisites.
+1. `docs/superpowers/specs/2026-04-24-m365ctl-design.md` — the parent design spec (OneDrive track, architecture, safety model).
+2. `docs/superpowers/specs/2026-04-24-m365ctl-mail-module.md` — the Mail module spec (Phase 1 target).
+3. `CONTRIBUTING.md` — dev setup, test commands, commit conventions.
+4. `docs/setup/first-run.md` — tenant setup prerequisites.
 
 ## Package layout
 

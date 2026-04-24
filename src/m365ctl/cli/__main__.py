@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     if domain == "mail":
         print(
             "m365ctl: mail domain is not yet implemented - scaffold only. "
-            "See M365CTL-SPEC.md Phase 1 for delivery target.",
+            "See docs/superpowers/specs/2026-04-24-m365ctl-mail-module.md Phase 1 for delivery target.",
             file=sys.stderr,
         )
         return 2
