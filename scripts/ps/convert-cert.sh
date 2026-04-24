@@ -3,7 +3,7 @@
 #
 # Usage:   scripts/ps/convert-cert.sh
 # Result:  ~/.config/fazla-od/fazla-od.pfx (mode 600)
-#          Keychain entry FazlaODToolkit:PfxPassword holds the export password.
+#          Keychain entry m365ctl:PfxPassword holds the export password.
 #
 # Requires: openssl (system), security (macOS), /dev/urandom.
 set -euo pipefail
@@ -12,7 +12,7 @@ CERT_DIR="${HOME}/.config/fazla-od"
 KEY="${CERT_DIR}/fazla-od.key"
 CER="${CERT_DIR}/fazla-od.cer"
 PFX="${CERT_DIR}/fazla-od.pfx"
-KEYCHAIN_SERVICE="FazlaODToolkit:PfxPassword"
+KEYCHAIN_SERVICE="m365ctl:PfxPassword"
 KEYCHAIN_ACCOUNT="fazla-od"
 
 for f in "$KEY" "$CER"; do
@@ -34,7 +34,7 @@ openssl pkcs12 \
     -export \
     -inkey "$KEY" \
     -in "$CER" \
-    -name "FazlaODToolkit" \
+    -name "m365ctl" \
     -out "$PFX" \
     -passout "pass:${PASSWORD}"
 

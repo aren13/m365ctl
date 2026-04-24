@@ -42,13 +42,13 @@ PEM key + PEM cert we use for the Python flow. Run the one-shot helper:
 
 This produces `~/.config/fazla-od/fazla-od.pfx` (mode 600, gitignored —
 `~/.config/fazla-od/` is outside the repo) and stores a ~40-char random
-password in macOS Keychain under service `FazlaODToolkit:PfxPassword`,
+password in macOS Keychain under service `m365ctl:PfxPassword`,
 account `fazla-od`.
 
 Verify:
 ```bash
 ls -la ~/.config/fazla-od/fazla-od.pfx
-security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w | wc -c
+security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w | wc -c
 ```
 Expected: the PFX exists; the password is ~40 characters.
 
@@ -81,14 +81,14 @@ Fix (one-time, tenant admin required):
 
 If you don't need full control, `Sites.Manage.All` works for `od-audit-sharing` (read-only on permissions). `od-label` requires `Sites.FullControl.All` to set sensitivity labels.
 
-The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps/recycle-purge.ps1`, both dot-sourcing `scripts/ps/_FazlaRecycleHelpers.ps1`) call `Restore-PnPRecycleBinItem` and `Clear-PnPRecycleBinItem` respectively. These are covered by the same `Sites.FullControl.All` grant above — no additional permission is needed.
+The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps/recycle-purge.ps1`, both dot-sourcing `scripts/ps/_M365ctlRecycleHelpers.ps1`) call `Restore-PnPRecycleBinItem` and `Clear-PnPRecycleBinItem` respectively. These are covered by the same `Sites.FullControl.All` grant above — no additional permission is needed.
 
 ## 4. Smoke-test the connection
 
 ```bash
 pwsh -NoLogo -Command '
     $pwd = ConvertTo-SecureString -String (
-        security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w
+        security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w
     ) -AsPlainText -Force
     Connect-PnPOnline `
         -Tenant <your-tenant-id> `

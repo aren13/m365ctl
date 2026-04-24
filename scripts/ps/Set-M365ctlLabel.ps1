@@ -17,7 +17,7 @@ Label display name (required for apply).
 .NOTES
 Plan 3 installs PnP.PowerShell and converts the cert to PFX. This script
 relies on both being already in place. It authenticates with certificate
-+ app-only against the Fazla tenant using env vars set by the caller
++ app-only against the Microsoft 365 tenant using env vars set by the caller
 (FAZLA_OD_TENANT, FAZLA_OD_CLIENT_ID, FAZLA_OD_CERT_PFX).
 #>
 param(

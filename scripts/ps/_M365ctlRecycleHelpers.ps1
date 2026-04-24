@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  Shared PnP.PowerShell helpers for Fazla recycle-bin operations.
+  Shared PnP.PowerShell helpers for m365ctl recycle-bin operations.
 
 .DESCRIPTION
   This file is dot-sourced by the recycle-bin restore/purge scripts. It
   provides three helpers:
 
-    - Connect-FazlaSite         : Connect-PnPOnline wrapper with cert +
+    - Connect-M365ctlSite         : Connect-PnPOnline wrapper with cert +
                                   macOS Keychain auth.
     - Find-RecycleBinItem       : Locate a single recycle-bin item by
                                   LeafName + DirName, with most-recent-
@@ -16,19 +16,19 @@
                                   URL.
 
   Keychain defaults mirror scripts/ps/audit-sharing.ps1:
-    service = FazlaODToolkit:PfxPassword
+    service = m365ctl:PfxPassword
     account = fazla-od
 #>
 
 $ErrorActionPreference = "Stop"
 
-function Get-FazlaPfxPassword {
+function Get-M365ctlPfxPassword {
     <#
     .SYNOPSIS
       Read the PFX password from the macOS Keychain. Throws if missing.
     #>
     param(
-        [string] $KeychainService = "FazlaODToolkit:PfxPassword",
+        [string] $KeychainService = "m365ctl:PfxPassword",
         [string] $KeychainAccount = "fazla-od"
     )
     $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w
@@ -38,7 +38,7 @@ function Get-FazlaPfxPassword {
     return (ConvertTo-SecureString -String $raw -AsPlainText -Force)
 }
 
-function Connect-FazlaSite {
+function Connect-M365ctlSite {
     <#
     .SYNOPSIS
       Connect to a SharePoint/OneDrive site with cert + Keychain auth.
@@ -57,7 +57,7 @@ function Connect-FazlaSite {
       personal OneDrive /personal/... URL).
 
     .EXAMPLE
-      Connect-FazlaSite -Tenant $t -ClientId $c `
+      Connect-M365ctlSite -Tenant $t -ClientId $c `
                        -PfxPath "$HOME/.config/fazla-od/fazla-od.pfx" `
                        -SiteUrl "https://fazla.sharepoint.com/sites/Finance"
     #>
@@ -70,7 +70,7 @@ function Connect-FazlaSite {
     if (-not (Test-Path -LiteralPath $PfxPath)) {
         throw "PfxMissing: $PfxPath not found. Run ./scripts/ps/convert-cert.sh."
     }
-    $pfxSecret = Get-FazlaPfxPassword
+    $pfxSecret = Get-M365ctlPfxPassword
     Connect-PnPOnline `
         -Tenant $Tenant `
         -ClientId $ClientId `
@@ -174,7 +174,7 @@ function Resolve-SiteUrlFromDriveId {
     )
     $hostPrefix = $TenantHost.Split('.')[0]
     $adminUrl = "https://$hostPrefix-admin.sharepoint.com"
-    Connect-FazlaSite -Tenant $Tenant -ClientId $ClientId -PfxPath $PfxPath -SiteUrl $adminUrl
+    Connect-M365ctlSite -Tenant $Tenant -ClientId $ClientId -PfxPath $PfxPath -SiteUrl $adminUrl
     try {
         $resp = Invoke-PnPGraphMethod -Url "v1.0/drives/$DriveId" -Method Get
         $webUrl = [string]$resp.webUrl

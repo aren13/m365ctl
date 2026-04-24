@@ -19,7 +19,7 @@
 
 .PARAMETER KeychainService
   Keychain service name holding the PFX password
-  (default FazlaODToolkit:PfxPassword).
+  (default m365ctl:PfxPassword).
 
 .EXAMPLE
   pwsh scripts/ps/audit-sharing.ps1 -Scope "site:fazla.sharepoint.com,abc,def" \
@@ -31,7 +31,7 @@ param(
     [Parameter(Mandatory=$true)] [string] $Tenant,
     [Parameter(Mandatory=$true)] [string] $ClientId,
     [string] $PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx",
-    [string] $KeychainService = "FazlaODToolkit:PfxPassword",
+    [string] $KeychainService = "m365ctl:PfxPassword",
     [string] $KeychainAccount = "fazla-od"
 )
 

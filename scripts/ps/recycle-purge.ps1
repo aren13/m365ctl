@@ -3,7 +3,7 @@
   Permanently purge a single item from a SharePoint/OneDrive recycle bin via PnP.
 
 .DESCRIPTION
-  Dot-sources _FazlaRecycleHelpers.ps1, connects to the target site with
+  Dot-sources _M365ctlRecycleHelpers.ps1, connects to the target site with
   cert + Keychain auth, locates the most-recent recycle-bin item matching
   the supplied LeafName + DirName, purges it via Clear-PnPRecycleBinItem
   -Force, and emits a single JSON line on stdout with the purged metadata.
@@ -29,10 +29,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-. (Join-Path $PSScriptRoot "_FazlaRecycleHelpers.ps1")
+. (Join-Path $PSScriptRoot "_M365ctlRecycleHelpers.ps1")
 
 try {
-    Connect-FazlaSite -Tenant $Tenant -ClientId $ClientId `
+    Connect-M365ctlSite -Tenant $Tenant -ClientId $ClientId `
                      -PfxPath $PfxPath -SiteUrl $SiteUrl
     try {
         $rb = Find-RecycleBinItem -LeafName $LeafName -DirName $DirName

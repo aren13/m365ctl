@@ -8,7 +8,7 @@ from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_sta
 from m365ctl.onedrive.mutate._pwsh import PS_SCRIPTS_DIR, invoke_pwsh
 from m365ctl.common.planfile import Operation
 
-_PS1 = PS_SCRIPTS_DIR / "Set-FazlaLabel.ps1"
+_PS1 = PS_SCRIPTS_DIR / "Set-M365ctlLabel.ps1"
 
 # Shown when pwsh isn't on PATH so the od-label path mirrors the
 # recycle-bin fallback paths in delete.py / clean.py instead of letting a

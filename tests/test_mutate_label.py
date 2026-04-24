@@ -28,7 +28,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     run.assert_called_once()
     cmd = run.call_args[0][0]
     assert cmd[0] == "pwsh"
-    assert any("Set-FazlaLabel.ps1" in a for a in cmd)
+    assert any("Set-M365ctlLabel.ps1" in a for a in cmd)
     assert "Confidential" in cmd
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-1"]
     assert entries[-1]["result"] == "ok"
