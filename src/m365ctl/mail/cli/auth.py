@@ -1,11 +1,9 @@
-"""Stub for Phase 1 task — replaced by a later Group."""
+"""`m365ctl mail auth login|whoami` — shares the same token cache as od-auth."""
 from __future__ import annotations
-import sys
+
+from m365ctl.onedrive.cli.auth import main as od_auth_main
 
 
 def main(argv: list[str]) -> int:
-    print(
-        "m365ctl mail: verb not yet implemented (this task lands in a later Phase 1 group)",
-        file=sys.stderr,
-    )
-    return 2
+    # Shared delegated cache means mail-auth login === od-auth login.
+    return od_auth_main(argv)
