@@ -62,17 +62,15 @@ def lookup_site_url_from_drive_id(graph: GraphClient, drive_id: str) -> str:
     web_url = (body.get("webUrl") or "").rstrip("/")
     if not web_url:
         raise GraphError(
-            "noWebUrl",
-            f"drive {drive_id!r} has no webUrl; cannot derive site URL",
-            status_code=None,
+            f"noWebUrl: drive {drive_id!r} has no webUrl; "
+            "cannot derive site URL"
         )
     low = web_url.lower()
     for sfx in _WEB_URL_LIB_SUFFIXES:
         if low.endswith(sfx.lower()):
             return web_url[: -len(sfx)].rstrip("/")
     raise GraphError(
-        "unknownLibrarySuffix",
-        f"cannot derive site URL from webUrl {web_url!r}: expected suffix "
-        "/Shared%20Documents, /Shared Documents, or /Documents",
-        status_code=None,
+        f"unknownLibrarySuffix: cannot derive site URL from webUrl "
+        f"{web_url!r}: expected suffix /Shared%20Documents, "
+        "/Shared Documents, or /Documents"
     )

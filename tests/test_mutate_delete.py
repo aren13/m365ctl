@@ -164,6 +164,47 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
     assert entries[-1]["result"] == "ok"
 
 
+def test_restore_falls_through_to_manual_wrap_when_library_suffix_unknown(tmp_path):
+    """Graph /restore returns ODfB token AND site-URL lookup fails with
+    unknownLibrarySuffix; result preserves all three signals (original
+    Graph error, lookup error, manual-instructions wrap) without ever
+    shelling out to pwsh."""
+    def handler(request):
+        if request.url.path.endswith("/restore"):
+            return httpx.Response(
+                400,
+                json={"error": {"code": "notSupported",
+                                "message": "ODfB not supported"}},
+            )
+        if request.url.path == "/v1.0/drives/d1":
+            return httpx.Response(
+                200,
+                json={"id": "d1",
+                      "webUrl": "https://tenant.sharepoint.com/sites/Foo/SomeCustomLibraryName"},
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-rlf", action="restore", drive_id="d1",
+                   item_id="i1", args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    # Intentionally do NOT patch subprocess.run — the site-URL lookup
+    # raises before we ever try to shell out. If pwsh were reached the
+    # real binary (or its absence) would surface here.
+    result = execute_restore(op, _client(handler), logger,
+                             before={"parent_path": "/SomeCustomLibraryName/x",
+                                     "name": "x.txt"},
+                             cfg=cfg)
+
+    assert result.status == "error"
+    # Original Graph error preserved.
+    assert "notSupported" in result.error
+    # Lookup failure surfaced.
+    assert "unknownLibrarySuffix" in result.error
+    # Manual-instructions wrap landed — operator can still take manual action.
+    assert "Restore-PnPRecycleBinItem" in result.error
+
+
 def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
     """Graph returns notSupported; PS fallback runs but fails — stderr
     propagates into DeleteResult.error."""

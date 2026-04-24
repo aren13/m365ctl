@@ -107,6 +107,7 @@ function Find-RecycleBinItem {
     )
     $escapedDirName = [System.Management.Automation.WildcardPattern]::Escape($DirName)
     $all = Get-PnPRecycleBinItem -RowLimit 5000
+    if ($all.Count -ge 5000) { Write-Warning "RowLimitReached: recycle bin returned 5000 items; target may be beyond the ceiling. Consider expanding search or emptying older items." }
     $candidates = @($all | Where-Object {
         $_.LeafName -eq $LeafName -and $_.DirName -like "*$escapedDirName"
     } | Sort-Object -Property DeletedDate -Descending)

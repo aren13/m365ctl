@@ -206,6 +206,47 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
     assert entries[-1]["result"] == "ok"
 
 
+def test_purge_falls_through_to_manual_wrap_when_library_suffix_unknown(tmp_path):
+    """Graph /permanentDelete returns 404 AND site-URL lookup fails with
+    unknownLibrarySuffix; result preserves all three signals (original
+    Graph error, lookup error, manual-instructions wrap) without ever
+    shelling out to pwsh."""
+    def handler(request):
+        if request.url.path.endswith("/permanentDelete"):
+            return httpx.Response(
+                404,
+                json={"error": {"code": "itemNotFound",
+                                "message": "Item not found"}},
+            )
+        if request.url.path == "/v1.0/drives/d1":
+            return httpx.Response(
+                200,
+                json={"id": "d1",
+                      "webUrl": "https://tenant.sharepoint.com/sites/Foo/SomeCustomLibraryName"},
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-plf", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    # Intentionally do NOT patch subprocess.run — the site-URL lookup
+    # raises before we ever try to shell out.
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "(recycle bin)",
+                                            "name": "old.txt"},
+                                    cfg=cfg)
+
+    assert result.status == "error"
+    # Original Graph error preserved.
+    assert "itemNotFound" in result.error
+    # Lookup failure surfaced.
+    assert "unknownLibrarySuffix" in result.error
+    # Purge's manual-instructions wrap landed.
+    assert "Clear-PnPRecycleBinItem" in result.error
+
+
 def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
     """Graph returns 404; PS fallback runs but fails — stderr propagates
     into CleanResult.error without the legacy manual-wrap text."""
