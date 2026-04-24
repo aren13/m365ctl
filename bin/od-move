@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m m365ctl.onedrive.cli move "$@"
+exec uv run --project "$REPO" python -m m365ctl od move "$@"
