@@ -26,6 +26,10 @@ GRAPH_SCOPES_DELEGATED = [
     "Files.ReadWrite.All",
     "Sites.ReadWrite.All",
     "User.Read",
+    # Phase 1 — mail readers + future mutations.
+    "Mail.ReadWrite",
+    "Mail.Send",
+    "MailboxSettings.ReadWrite",
 ]
 
 _CACHE_DIR = Path.home() / ".config" / "m365ctl"
