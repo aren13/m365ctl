@@ -73,6 +73,21 @@ def test_reverse_recycle_delete_is_restore(tmp_path):
     assert rev.item_id == "i"
 
 
+def test_delete_reverse_op_packs_original_before_into_args(tmp_path):
+    """Audit-time `before` is threaded through rev.args so the undo
+    executor can feed name/parent_path to the PnP fallback even though
+    the item is in the recycle bin and no live lookup can recover it."""
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    _ap(logger, op_id="D2", cmd="od-delete",
+        args={}, drive_id="d", item_id="i",
+        before={"parent_path": "/drives/d/root:/F", "name": "x.txt"},
+        after={"parent_path": "(recycle bin)", "name": "x.txt",
+               "recycled_from": "/drives/d/root:/F"}, result="ok")
+    rev = build_reverse_operation(logger, "D2")
+    assert rev.args["orig_name"] == "x.txt"
+    assert rev.args["orig_parent_path"] == "/drives/d/root:/F"
+
+
 def test_reverse_recycle_purge_is_irreversible(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="P1", cmd="od-clean(recycle-bin)",

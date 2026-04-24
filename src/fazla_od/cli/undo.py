@@ -66,7 +66,17 @@ def run_undo(*, config_path: Path, op_id: str, confirm: bool,
     elif rev.action == "delete":
         r = execute_recycle_delete(rev, graph, logger, before=before)
     elif rev.action == "restore":
-        r = execute_restore(rev, graph, logger, before=before, cfg=cfg)
+        # The item is in the recycle bin — the live `_lookup_item` above
+        # 404s and `before` is the {"parent_path": "(unknown)", "name": ""}
+        # fallback. Prefer the delete op's recorded `before` (threaded
+        # through args by `build_reverse_operation`). The `or`-fallback
+        # keeps compatibility with audit records produced before this fix.
+        restore_before = {
+            "name": rev.args.get("orig_name") or before.get("name", ""),
+            "parent_path": (rev.args.get("orig_parent_path")
+                            or before.get("parent_path", "")),
+        }
+        r = execute_restore(rev, graph, logger, before=restore_before, cfg=cfg)
     elif rev.action == "label-apply":
         r = execute_label_apply(rev, logger, before=before)
     elif rev.action == "label-remove":

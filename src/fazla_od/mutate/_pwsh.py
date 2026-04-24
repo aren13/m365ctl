@@ -1,6 +1,7 @@
 """Shared helpers for shelling out to PnP.PowerShell scripts.
 
-Consolidates two pieces of infrastructure used by multiple mutate modules:
+Consolidates three pieces of infrastructure used by multiple mutate
+modules:
 
 * :func:`invoke_pwsh` — runs ``pwsh -NoProfile -File <script> <args>`` and
   returns ``(returncode, stdout, stderr)``. Callers patch
@@ -8,6 +9,9 @@ Consolidates two pieces of infrastructure used by multiple mutate modules:
 * :func:`lookup_site_url_from_drive_id` — resolves a Graph ``drive_id`` to
   the owning SharePoint/OneDrive site URL (by trimming the default-library
   suffix off ``webUrl``). Used by every PnP.PowerShell fallback path.
+* :func:`normalize_recycle_dir_name` — converts a Graph-style parent_path
+  (``/drives/<id>/root:/Folder``) to the site-relative tail PnP's
+  ``Find-RecycleBinItem -DirName`` wildcard match expects.
 """
 from __future__ import annotations
 
@@ -74,3 +78,31 @@ def lookup_site_url_from_drive_id(graph: GraphClient, drive_id: str) -> str:
         f"{web_url!r}: expected suffix /Shared%20Documents, "
         "/Shared Documents, or /Documents"
     )
+
+
+def normalize_recycle_dir_name(graph_path: str) -> str:
+    """Strip the Graph-path prefix (everything up to and including 'root:')
+    from a recorded parent_path, leaving a site-relative tail suitable for
+    PnP's recycle-bin ``DirName`` wildcard match.
+
+    PnP's ``Find-RecycleBinItem`` compares its ``-DirName`` wildcard
+    against the site-relative ``DirName`` field of each recycle-bin item
+    (e.g. ``personal/user_fazla_com/Documents/_fazla_smoke2``). If we pass
+    the full Graph path (``/drives/<id>/root:/_fazla_smoke2``) the ``-like
+    "*$DirName"`` match never fires and PnP reports ``NoMatch``.
+
+    Examples:
+      '/drives/b!.../root:/_fazla_smoke2' -> '_fazla_smoke2'
+      '/drive/root:/Folder/Sub'           -> 'Folder/Sub'
+      '/Folder/Sub'                       -> 'Folder/Sub'  (already normalized)
+      ''                                  -> ''
+    """
+    if not graph_path:
+        return ""
+    marker = "root:"
+    idx = graph_path.find(marker)
+    if idx >= 0:
+        tail = graph_path[idx + len(marker):]
+    else:
+        tail = graph_path
+    return tail.lstrip("/")

@@ -200,10 +200,53 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
     assert argv[argv.index("-ClientId") + 1] == "client-1"
     assert argv[argv.index("-SiteUrl") + 1] == "https://fazla.sharepoint.com/sites/Foo"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
-    assert argv[argv.index("-DirName") + 1] == "/Shared Documents/_fazla_smoke"
+    assert argv[argv.index("-DirName") + 1] == "Shared Documents/_fazla_smoke"
     # Audit-end recorded as ok.
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-p1"]
     assert entries[-1]["result"] == "ok"
+
+
+def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path, mocker):
+    """Symmetric to the restore test: the audit record's full Graph
+    ``parent_path`` (``/drives/<id>/root:/F``) must be normalized to the
+    site-relative tail before reaching PnP's ``-DirName`` wildcard match."""
+    def handler(request):
+        if request.url.path.endswith("/permanentDelete"):
+            return httpx.Response(
+                404, json={"error": {"code": "itemNotFound",
+                                     "message": "Item not found"}}
+            )
+        return httpx.Response(
+            200,
+            json={"id": "d1",
+                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+        )
+
+    completed = MagicMock()
+    completed.returncode = 0
+    completed.stdout = json.dumps({
+        "recycle_bin_item_id": "abc-123",
+        "purged_name": "old.txt",
+    })
+    completed.stderr = ""
+    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+                       return_value=completed)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-pn", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "/drives/abc/root:/_fazla_smoke2",
+                                            "name": "old.txt"},
+                                    cfg=cfg)
+
+    assert result.status == "ok"
+    run.assert_called_once()
+    argv = run.call_args[0][0]
+    assert argv[argv.index("-DirName") + 1] == "_fazla_smoke2"
+    assert argv[argv.index("-LeafName") + 1] == "old.txt"
 
 
 def test_purge_falls_through_to_manual_wrap_when_library_suffix_unknown(tmp_path):

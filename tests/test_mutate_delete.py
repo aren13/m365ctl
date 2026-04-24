@@ -164,6 +164,53 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
     assert entries[-1]["result"] == "ok"
 
 
+def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path, mocker):
+    """Audit-logged `before.parent_path` is the full Graph path
+    (``/drives/<id>/root:/_fazla_smoke2``). PnP's
+    ``Find-RecycleBinItem -DirName`` wildcard match expects the
+    site-relative tail — we must strip the ``root:`` prefix before
+    invoking the PS script, or PnP reports ``NoMatch``."""
+    def handler(request):
+        if request.url.path.endswith("/restore"):
+            return httpx.Response(
+                400,
+                json={"error": {"code": "notSupported",
+                                "message": "ODfB not supported"}},
+            )
+        return httpx.Response(
+            200,
+            json={"id": "d1",
+                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+        )
+
+    completed = MagicMock()
+    completed.returncode = 0
+    completed.stdout = json.dumps({
+        "recycle_bin_item_id": "abc-123",
+        "restored_name": "hello2.txt",
+        "restored_parent_path": "_fazla_smoke2",
+    })
+    completed.stderr = ""
+    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+                       return_value=completed)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-rn", action="restore", drive_id="d1",
+                   item_id="i1", args={}, dry_run_result="")
+    cfg = _stub_cfg(tmp_path)
+    result = execute_restore(op, _client(handler), logger,
+                             before={"parent_path": "/drives/abc/root:/_fazla_smoke2",
+                                     "name": "hello2.txt"},
+                             cfg=cfg)
+
+    assert result.status == "ok"
+    run.assert_called_once()
+    argv = run.call_args[0][0]
+    # The full Graph path never reaches PS; only the site-relative tail does.
+    assert argv[argv.index("-DirName") + 1] == "_fazla_smoke2"
+    assert argv[argv.index("-LeafName") + 1] == "hello2.txt"
+
+
 def test_restore_falls_through_to_manual_wrap_when_library_suffix_unknown(tmp_path):
     """Graph /restore returns ODfB token AND site-URL lookup fails with
     unknownLibrarySuffix; result preserves all three signals (original

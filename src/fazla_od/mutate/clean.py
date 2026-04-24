@@ -28,7 +28,11 @@ from typing import Any
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
 from fazla_od.config import Config
 from fazla_od.graph import GraphClient, GraphError
-from fazla_od.mutate._pwsh import invoke_pwsh, lookup_site_url_from_drive_id
+from fazla_od.mutate._pwsh import (
+    invoke_pwsh,
+    lookup_site_url_from_drive_id,
+    normalize_recycle_dir_name,
+)
 from fazla_od.planfile import Operation
 
 
@@ -80,7 +84,7 @@ def _purge_via_pnp(
     ``od-clean(recycle-bin)`` record.
     """
     leaf = before.get("name", "")
-    dir_name = before.get("parent_path", "")
+    dir_name = normalize_recycle_dir_name(before.get("parent_path", ""))
     code, out, err = invoke_pwsh(_PURGE_PS1, [
         "-Tenant", cfg.tenant_id,
         "-ClientId", cfg.client_id,

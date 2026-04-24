@@ -78,10 +78,17 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
         )
 
     if cmd == "od-delete":
+        # Thread the original delete's `before` block through args: at undo
+        # time the item is in the recycle bin, so a live Graph lookup 404s
+        # and leaves the executor with no name/parent_path to pass to the
+        # PnP fallback. The audit record captured these at delete time.
         return Operation(
             op_id=new_op_id(), action="restore",
             drive_id=drive_id, item_id=item_id,
-            args={},
+            args={
+                "orig_name": before.get("name", ""),
+                "orig_parent_path": before.get("parent_path", ""),
+            },
             dry_run_result=f"(undo of {op_id}) restore {before.get('name','?')} "
                            f"from recycle bin",
         )
