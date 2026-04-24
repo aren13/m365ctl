@@ -192,8 +192,8 @@ def run_clean(
         exec_fn = _ACTION_EXECUTORS[action]
         for op in plan.operations:
             meta = _lookup_item(graph, op.drive_id, op.item_id)
-            kwargs: dict = {"before": {"parent_path": meta["parent_path"],
-                                       "name": meta["name"]}}
+            kwargs = {"before": {"parent_path": meta["parent_path"],
+                                 "name": meta["name"]}}
             if action == "od.recycle-purge":
                 kwargs["cfg"] = cfg
             result = exec_fn(op, graph, logger, **kwargs)

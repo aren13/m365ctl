@@ -46,10 +46,12 @@ def _query_local(*, catalog_path: Path, mailbox_upn: str, query: str, limit: int
         return None  # signal "empty catalog"
     needle = f"%{query.lower()}%"
     with open_catalog(catalog_path) as conn:
-        (count,) = conn.execute(
+        row = conn.execute(
             "SELECT COUNT(*) FROM mail_messages WHERE mailbox_upn = ?",
             [mailbox_upn],
         ).fetchone()
+        assert row is not None
+        (count,) = row
         if count == 0:
             return None
         cur = conn.execute(

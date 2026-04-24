@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from m365ctl.common.audit import AuditLogger
 from m365ctl.onedrive.cli._common import build_graph_client
@@ -83,6 +84,7 @@ def run_undo(*, config_path: Path, op_id: str, confirm: bool,
         print(f"scope violation: {e}", file=sys.stderr)
         return 2
 
+    r: Any
     if suffix == "rename":
         r = execute_rename(rev, graph, logger, before=before)
     elif suffix == "move":

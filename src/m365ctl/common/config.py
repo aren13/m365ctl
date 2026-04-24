@@ -9,7 +9,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 AuthMode = Literal["delegated", "app-only"]
 _VALID_AUTH: tuple[AuthMode, ...] = ("delegated", "app-only")
@@ -71,7 +71,7 @@ class Config:
     )
 
 
-def _require(mapping: dict, key: str, source: str) -> object:
+def _require(mapping: dict[str, Any], key: str, source: str) -> Any:
     if key not in mapping:
         raise ConfigError(f"{source}: missing required field '{key}'")
     return mapping[key]

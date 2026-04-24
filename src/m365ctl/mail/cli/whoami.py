@@ -81,12 +81,12 @@ def run_whoami(config_path: Path) -> int:
         cat_path = cfg.mail.catalog_path
         if cat_path.exists():
             with open_catalog(cat_path) as conn:
-                s = summary(conn, mailbox_upn="me")
+                stats = summary(conn, mailbox_upn="me")
             print(
                 f"Mail catalog:          {cat_path} — "
-                f"{s['messages_total']} messages, "
-                f"{s['folders_total']} folders, "
-                f"refreshed {s['last_refreshed_at'] or '(never)'}"
+                f"{stats['messages_total']} messages, "
+                f"{stats['folders_total']} folders, "
+                f"refreshed {stats['last_refreshed_at'] or '(never)'}"
             )
         else:
             print(f"Mail catalog:          {cat_path} (not built — run `mail catalog refresh`)")

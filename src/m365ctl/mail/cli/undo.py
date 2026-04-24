@@ -13,7 +13,7 @@ from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.common.config import load_config
+from m365ctl.common.config import AuthMode, load_config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.mail.folders import get_folder
 from m365ctl.mail.mutate.folders import (
@@ -36,11 +36,11 @@ def _mailbox_spec_from_drive_id(drive_id: str) -> str:
     return "me" if drive_id == "me" else f"upn:{drive_id}"
 
 
-def _build_credential(cfg, auth_mode: str):
+def _build_credential(cfg, auth_mode: AuthMode):
     return DelegatedCredential(cfg) if auth_mode == "delegated" else AppOnlyCredential(cfg)
 
 
-def _lookup_folder_before(graph, *, mailbox_spec: str, auth_mode: str, folder_id: str) -> dict:
+def _lookup_folder_before(graph, *, mailbox_spec: str, auth_mode: AuthMode, folder_id: str) -> dict:
     """Fetch current folder state for a mail undo audit record. Best-effort.
 
     Returns a minimal dict suitable as ``before`` for an ``execute_*`` call.
@@ -77,7 +77,10 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
     # Reconstruct auth for the reverse op. Default to delegated; app-only would
     # have been set in the original op's args via CLI flow but audit log stores
     # auth_mode inside args.
-    auth_mode = rev.args.get("auth_mode", "delegated")
+    auth_mode_raw = rev.args.get("auth_mode", "delegated")
+    auth_mode: AuthMode = (
+        "app-only" if auth_mode_raw == "app-only" else "delegated"
+    )
     cred = _build_credential(cfg, auth_mode)
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)

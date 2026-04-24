@@ -90,10 +90,12 @@ CREATE TABLE IF NOT EXISTS mail_deltas (
 
 def apply_schema(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(_DDL_V1)
-    (already,) = conn.execute(
+    row = conn.execute(
         "SELECT COUNT(*) FROM mail_schema_meta WHERE version = ?",
         [CURRENT_SCHEMA_VERSION],
     ).fetchone()
+    assert row is not None
+    (already,) = row
     if already == 0:
         conn.execute(
             "INSERT INTO mail_schema_meta (version) VALUES (?)",

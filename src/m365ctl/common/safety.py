@@ -23,9 +23,20 @@ from m365ctl.common.config import Config
 
 
 class _HasScopeFields(Protocol):
-    drive_id: str
-    item_id: str
-    full_path: str
+    # Properties (not class-level annotations) so frozen dataclasses with
+    # the same field names can structurally match this Protocol — mypy
+    # treats class-level `field: T` as writable, which conflicts with
+    # frozen=True attrs.
+    @property
+    def drive_id(self) -> str: ...
+    @property
+    def item_id(self) -> str: ...
+    @property
+    def full_path(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def parent_path(self) -> str: ...
 
 
 class ScopeViolation(RuntimeError):

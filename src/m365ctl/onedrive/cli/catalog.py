@@ -75,14 +75,18 @@ def run_status(*, config_path: Path) -> int:
             "SELECT drive_id, display_name, owner, last_refreshed_at "
             "FROM drives ORDER BY drive_id"
         ).fetchall()
-        (item_total,) = conn.execute("SELECT COUNT(*) FROM items").fetchone()
-        (file_total,) = conn.execute(
+        item_row = conn.execute("SELECT COUNT(*) FROM items").fetchone()
+        file_row = conn.execute(
             "SELECT COUNT(*) FROM items WHERE is_folder = false AND is_deleted = false"
         ).fetchone()
-        (byte_total,) = conn.execute(
+        byte_row = conn.execute(
             "SELECT COALESCE(SUM(size), 0) FROM items "
             "WHERE is_folder = false AND is_deleted = false"
         ).fetchone()
+        assert item_row is not None and file_row is not None and byte_row is not None
+        (item_total,) = item_row
+        (file_total,) = file_row
+        (byte_total,) = byte_row
 
     print(f"Catalog: {cfg.catalog.path}")
     print(f"Drives: {len(drives)}")
