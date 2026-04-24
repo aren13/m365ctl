@@ -24,7 +24,6 @@ do by hand.
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,6 +31,7 @@ from typing import Any
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
 from fazla_od.config import Config
 from fazla_od.graph import GraphClient, GraphError
+from fazla_od.mutate._pwsh import invoke_pwsh, lookup_site_url_from_drive_id
 from fazla_od.planfile import Operation
 
 _RESTORE_PS1 = (
@@ -84,52 +84,9 @@ _ODFB_RESTORE_MANUAL = (
 # restore-endpoint case"; trigger the PnP.PowerShell fallback.
 _ODFB_RESTORE_TOKENS = ("notSupported", "BadRequest", "invalidRequest")
 
-# webUrl suffixes we strip to derive the site URL from a drive's webUrl. Order
-# matters: longer/more-specific first so we don't accidentally eat 'Documents'
-# from a library-named-literally-'Documents' while a '/Shared Documents' suffix
-# was the real thing.
-_WEB_URL_LIB_SUFFIXES = (
-    "/Shared%20Documents",
-    "/Shared Documents",
-    "/Documents",
-)
-
-
-def _lookup_site_url(graph: GraphClient, drive_id: str) -> str:
-    """Return the SharePoint/OneDrive site URL that owns ``drive_id``.
-
-    Calls ``GET /drives/{drive_id}``, reads ``webUrl``, and trims the
-    trailing default-library segment. The site URL is returned as-is
-    (URL-encoded spaces preserved in the host/path prefix) — callers
-    forward it straight to ``Connect-PnPOnline -Url ...``.
-    """
-    body = graph.get(f"/drives/{drive_id}")
-    web_url = (body.get("webUrl") or "").rstrip("/")
-    if not web_url:
-        raise GraphError(
-            "noWebUrl",
-            f"drive {drive_id!r} has no webUrl; cannot derive site URL",
-            status_code=None,
-        )
-    low = web_url.lower()
-    for sfx in _WEB_URL_LIB_SUFFIXES:
-        if low.endswith(sfx.lower()):
-            return web_url[: -len(sfx)].rstrip("/")
-    # No known library suffix. Refuse to guess: a wrong site URL combined
-    # with Find-RecycleBinItem's DirName wildcard match could resolve to a
-    # different file with the same name in a different recycle bin — a
-    # data-recovery hazard. Surface as an explicit failure so operators
-    # know to fall back to the SharePoint web UI.
-    raise GraphError(
-        "unknownLibrarySuffix",
-        f"cannot derive site URL from webUrl {web_url!r}: expected suffix "
-        "/Shared%20Documents, /Shared Documents, or /Documents",
-        status_code=None,
-    )
-
 
 def _restore_via_pnp(
-    op: Operation, before: dict[str, Any], cfg: Config, graph: GraphClient,
+    op: Operation, before: dict[str, Any], cfg: Config, site_url: str,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Shell out to scripts/ps/recycle-restore.ps1.
 
@@ -138,28 +95,23 @@ def _restore_via_pnp(
     PATH — callers treat that as "fallback unavailable" and revert to
     the manual-instructions message.
     """
-    site_url = _lookup_site_url(graph, op.drive_id)
     leaf = before.get("name", "")
     dir_name = before.get("parent_path", "")
-    proc = subprocess.run(
-        [
-            "pwsh", "-NoProfile", "-File", str(_RESTORE_PS1),
-            "-Tenant", cfg.tenant_id,
-            "-ClientId", cfg.client_id,
-            "-SiteUrl", site_url,
-            "-LeafName", leaf,
-            "-DirName", dir_name,
-            "-PfxPath", str(cfg.cert_path),
-        ],
-        capture_output=True, text=True, check=False,
-    )
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "").strip()
-        return None, err or f"pwsh exited with code {proc.returncode}"
+    code, out, err = invoke_pwsh(_RESTORE_PS1, [
+        "-Tenant", cfg.tenant_id,
+        "-ClientId", cfg.client_id,
+        "-SiteUrl", site_url,
+        "-LeafName", leaf,
+        "-DirName", dir_name,
+        "-PfxPath", str(cfg.cert_path),
+    ])
+    if code != 0:
+        msg = (err or out or "").strip()
+        return None, msg or f"pwsh exited with code {code}"
     try:
-        payload = json.loads(proc.stdout.strip().splitlines()[-1])
+        payload = json.loads(out.strip().splitlines()[-1])
     except (ValueError, IndexError) as e:
-        return None, f"could not parse PnP restore JSON: {e}: {proc.stdout!r}"
+        return None, f"could not parse PnP restore JSON: {e}: {out!r}"
     after = {
         "parent_path": payload.get("restored_parent_path", dir_name),
         "name": payload.get("restored_name", leaf),
@@ -192,8 +144,20 @@ def execute_restore(
     except GraphError as e:
         err = str(e)
         if any(t in err for t in _ODFB_RESTORE_TOKENS) and cfg is not None:
+            # Resolve site URL up front so _restore_via_pnp is trivially
+            # testable without a Graph mock. If the lookup itself fails
+            # (e.g. unknownLibrarySuffix), fall through to the legacy
+            # manual-instructions wrap so operators see why the fallback
+            # was skipped.
             try:
-                after, pnp_err = _restore_via_pnp(op, before, cfg, graph)
+                site_url = lookup_site_url_from_drive_id(graph, op.drive_id)
+            except GraphError as lookup_exc:
+                err = f"{err} | {lookup_exc} | {_ODFB_RESTORE_MANUAL}"
+                log_mutation_end(logger, op_id=op.op_id, after=None,
+                                 result="error", error=err)
+                return DeleteResult(op_id=op.op_id, status="error", error=err)
+            try:
+                after, pnp_err = _restore_via_pnp(op, before, cfg, site_url)
             except FileNotFoundError:
                 # pwsh not installed — fall back to legacy manual message.
                 err = f"{err} | {_ODFB_RESTORE_MANUAL}"

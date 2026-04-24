@@ -13,7 +13,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok", "label": "Confidential"})
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate.label.subprocess.run",
+    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -39,7 +39,7 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Set-PnPFileSensitivityLabel : access denied"
-    mocker.patch("fazla_od.mutate.label.subprocess.run", return_value=completed)
+    mocker.patch("fazla_od.mutate._pwsh.subprocess.run", return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-2", action="label-remove", drive_id="d1",

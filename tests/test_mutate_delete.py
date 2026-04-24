@@ -91,7 +91,7 @@ def test_restore_notsupported_wraps_with_manual_instructions(tmp_path, mocker):
         )
 
     # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
-    mocker.patch("fazla_od.mutate.delete.subprocess.run",
+    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                  side_effect=FileNotFoundError("pwsh: not found"))
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -132,7 +132,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
         "restored_parent_path": "/Shared Documents/_fazla_smoke",
     })
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate.delete.subprocess.run",
+    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -152,8 +152,8 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
     argv = run.call_args[0][0]
     assert argv[0] == "pwsh"
     assert any(a.endswith("recycle-restore.ps1") for a in argv)
-    assert "-Tenant" in argv and "tenant-1" in argv
-    assert "-ClientId" in argv and "client-1" in argv
+    assert argv[argv.index("-Tenant") + 1] == "tenant-1"
+    assert argv[argv.index("-ClientId") + 1] == "client-1"
     assert "-SiteUrl" in argv
     site_idx = argv.index("-SiteUrl") + 1
     assert argv[site_idx] == "https://fazla.sharepoint.com/sites/Foo"
@@ -184,7 +184,7 @@ def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Set-PnPRecycleBinItem: no match"
-    mocker.patch("fazla_od.mutate.delete.subprocess.run",
+    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                  return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")

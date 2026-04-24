@@ -32,7 +32,7 @@ def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
     )
     client = MagicMock()
     mocker.patch("fazla_od.cli.label.build_graph_client", return_value=client)
-    run_mock = mocker.patch("fazla_od.mutate.label.subprocess.run",
+    run_mock = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                             side_effect=AssertionError("subprocess must NOT run"))
 
     rc = run_label(
@@ -86,7 +86,7 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok"})
     completed.stderr = ""
-    run_mock = mocker.patch("fazla_od.mutate.label.subprocess.run",
+    run_mock = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
                             return_value=completed)
 
     from fazla_od.planfile import PLAN_SCHEMA_VERSION
