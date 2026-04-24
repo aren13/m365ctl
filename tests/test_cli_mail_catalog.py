@@ -75,6 +75,41 @@ def test_catalog_refresh_with_folder_resolves_path(tmp_path: Path) -> None:
     assert kwargs["folder_filter"] == "fld-resolved"
 
 
+def test_catalog_refresh_passes_max_rounds(tmp_path: Path) -> None:
+    cfg = _write_config(tmp_path)
+    with patch("m365ctl.mail.cli.catalog.DelegatedCredential") as cred_cls, \
+         patch("m365ctl.mail.cli.catalog.GraphClient") as graph_cls, \
+         patch("m365ctl.mail.cli.catalog.refresh_mailbox",
+               return_value=[]) as refresh_mock:
+        cred_cls.return_value.get_token.return_value = "tok"
+        graph_cls.return_value = MagicMock()
+        rc = cli_catalog.main([
+            "refresh", "--config", str(cfg), "--max-rounds", "2",
+        ])
+    assert rc == 0
+    kwargs = refresh_mock.call_args.kwargs
+    assert kwargs["max_rounds"] == 2
+
+
+def test_catalog_refresh_marks_truncated_in_output(tmp_path: Path, capsys) -> None:
+    cfg = _write_config(tmp_path)
+    fake_outcomes = [
+        CrawlOutcome(
+            "fld-inbox", "Inbox", 5, "delta-1", "ok", truncated=True,
+        ),
+    ]
+    with patch("m365ctl.mail.cli.catalog.DelegatedCredential") as cred_cls, \
+         patch("m365ctl.mail.cli.catalog.GraphClient") as graph_cls, \
+         patch("m365ctl.mail.cli.catalog.refresh_mailbox",
+               return_value=fake_outcomes):
+        cred_cls.return_value.get_token.return_value = "tok"
+        graph_cls.return_value = MagicMock()
+        rc = cli_catalog.main(["refresh", "--config", str(cfg)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[truncated" in out
+
+
 def test_catalog_status_prints_summary(tmp_path: Path, capsys) -> None:
     cfg = _write_config(tmp_path)
     # Pre-create the catalog with a row so status has something to print.

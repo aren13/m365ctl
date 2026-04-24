@@ -29,6 +29,10 @@ class CrawlOutcome:
     messages_seen: int
     delta_link: str | None
     status: str   # 'ok' | 'restarted'
+    truncated: bool = False
+    """True iff the per-folder ``max_rounds`` cap fired (drain stopped
+    before a deltaLink-empty round). The persisted deltaLink lets the
+    next ``mail catalog refresh`` resume from where this run stopped."""
 
 
 _UPSERT_FOLDER = """
@@ -127,7 +131,8 @@ def _drain_delta(
     folder_path: str,
     start_path: str,
     page_top: int,
-) -> tuple[int, str | None]:
+    max_rounds: int | None = None,
+) -> tuple[int, str | None, bool]:
     """Drain ``/messages/delta`` until a deltaLink-only round returns no items.
 
     Graph's mail delta works in **rounds** — each round ends with a
@@ -138,10 +143,16 @@ def _drain_delta(
     Page size is set via ``Prefer: odata.maxpagesize=N`` because Graph's
     ``/messages/delta`` ignores ``$top`` and falls back to its 10-item
     default (verified live, 2026-04-25).
+
+    When ``max_rounds`` is set, the loop stops after that many rounds and
+    returns ``truncated=True``. The latest deltaLink is still returned so
+    the caller can persist it and resume on the next refresh.
     """
     seen = 0
     cursor = start_path
     last_delta: str | None = None
+    truncated = False
+    rounds_seen = 0
     headers = {"Prefer": f"odata.maxpagesize={page_top}"}
     while True:
         round_items = 0
@@ -162,6 +173,7 @@ def _drain_delta(
                 round_delta = delta_link
         if round_delta:
             last_delta = round_delta
+        rounds_seen += 1
         # Stop when a round closed with a deltaLink and produced no new items.
         if round_delta is not None and round_items == 0:
             break
@@ -169,8 +181,13 @@ def _drain_delta(
         # exhausted nextLinks; bail out (shouldn't happen with delta).
         if round_delta is None:
             break
+        # Cap fired: stop after this round, even though it had items.
+        # The deltaLink we just persisted lets the next refresh resume.
+        if max_rounds is not None and rounds_seen >= max_rounds:
+            truncated = True
+            break
         cursor = round_delta
-    return seen, last_delta
+    return seen, last_delta, truncated
 
 
 def crawl_folder(
@@ -182,15 +199,17 @@ def crawl_folder(
     folder_path: str,
     initial_path: str,
     page_top: int = 200,
+    max_rounds: int | None = None,
 ) -> CrawlOutcome:
     stored = _stored_delta_link(conn, mailbox_upn=mailbox_upn, folder_id=folder_id)
     start_path = stored or initial_path
     status = "ok"
     try:
-        seen, delta_link = _drain_delta(
+        seen, delta_link, truncated = _drain_delta(
             graph, conn,
             mailbox_upn=mailbox_upn, folder_id=folder_id,
             folder_path=folder_path, start_path=start_path, page_top=page_top,
+            max_rounds=max_rounds,
         )
     except GraphError as exc:
         if not _is_sync_state_not_found(exc):
@@ -201,10 +220,11 @@ def crawl_folder(
             file=sys.stderr,
         )
         status = "restarted"
-        seen, delta_link = _drain_delta(
+        seen, delta_link, truncated = _drain_delta(
             graph, conn,
             mailbox_upn=mailbox_upn, folder_id=folder_id,
             folder_path=folder_path, start_path=initial_path, page_top=page_top,
+            max_rounds=max_rounds,
         )
 
     final_link = delta_link or stored
@@ -218,6 +238,7 @@ def crawl_folder(
         messages_seen=seen,
         delta_link=final_link,
         status=status,
+        truncated=truncated,
     )
 
 
@@ -230,6 +251,7 @@ def refresh_mailbox(
     auth_mode: AuthMode,
     folder_filter: str | None = None,
     page_top: int = 200,
+    max_rounds: int | None = None,
 ) -> list[CrawlOutcome]:
     """High-level orchestrator.
 
@@ -299,6 +321,7 @@ def refresh_mailbox(
                 folder_path=f["path"],
                 initial_path=f"{ub}/mailFolders/{f['id']}/messages/delta",
                 page_top=page_top,
+                max_rounds=max_rounds,
             )
         )
     return outcomes
