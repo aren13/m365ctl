@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -15,9 +16,25 @@ from m365ctl.common.auth import (
 )
 from m365ctl.common.config import Config, load_config
 
+
+def _live_tests_enabled() -> bool:
+    """Accepts M365CTL_LIVE_TESTS (preferred) or FAZLA_OD_LIVE_TESTS (deprecated)."""
+    new = os.environ.get("M365CTL_LIVE_TESTS")
+    legacy = os.environ.get("FAZLA_OD_LIVE_TESTS")
+    if new:
+        return new == "1"
+    if legacy:
+        print(
+            "m365ctl: FAZLA_OD_LIVE_TESTS is deprecated; set M365CTL_LIVE_TESTS=1 instead.",
+            file=sys.stderr,
+        )
+        return legacy == "1"
+    return False
+
+
 _SKIPIF_LIVE = pytest.mark.skipif(
-    os.environ.get("FAZLA_OD_LIVE_TESTS") != "1",
-    reason="live Graph test; set FAZLA_OD_LIVE_TESTS=1 to run",
+    not _live_tests_enabled(),
+    reason="live Graph test; set M365CTL_LIVE_TESTS=1 to run",
 )
 
 
