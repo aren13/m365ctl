@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-import msal
+import msal  # type: ignore[import-untyped]
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 

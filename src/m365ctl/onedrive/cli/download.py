@@ -74,6 +74,8 @@ def run_download(
     elif from_plan is not None:
         items = load_plan_file(from_plan)
     else:
+        # _sources_provided==1 guarantees both --item-id and --drive-id present here.
+        assert drive_id is not None and item_id is not None
         items = [plan_from_single(drive_id=drive_id, item_id=item_id,
                                   full_path=item_id)]  # single: use item_id as local name
 

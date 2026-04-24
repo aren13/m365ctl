@@ -40,7 +40,7 @@ def load_and_authorize(
 
 
 def _json_default(o: Any) -> Any:
-    if is_dataclass(o):
+    if is_dataclass(o) and not isinstance(o, type):
         return asdict(o)
     if isinstance(o, datetime):
         return o.isoformat()

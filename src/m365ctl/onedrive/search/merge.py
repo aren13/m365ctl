@@ -30,7 +30,7 @@ def merge_hits(
     # Reverse only among the (0, ts) group; (1, '') stays at end.
     head = [h for h in ordered if h.modified_at is not None]
     tail = [h for h in ordered if h.modified_at is None]
-    head.sort(key=lambda h: h.modified_at, reverse=True)  # type: ignore[arg-type]
+    head.sort(key=lambda h: h.modified_at or "", reverse=True)
     combined = head + tail
     if limit is not None:
         combined = combined[:limit]
