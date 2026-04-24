@@ -53,13 +53,13 @@ function Connect-M365ctlSite {
       Path to the PFX cert on disk.
 
     .PARAMETER SiteUrl
-      Target site URL (e.g. https://fazla.sharepoint.com/sites/Foo or a
+      Target site URL (e.g. https://contoso.sharepoint.com/sites/Foo or a
       personal OneDrive /personal/... URL).
 
     .EXAMPLE
       Connect-M365ctlSite -Tenant $t -ClientId $c `
                        -PfxPath "$HOME/.config/fazla-od/fazla-od.pfx" `
-                       -SiteUrl "https://fazla.sharepoint.com/sites/Finance"
+                       -SiteUrl "https://contoso.sharepoint.com/sites/Finance"
     #>
     param(
         [Parameter(Mandatory=$true)] [string] $Tenant,
@@ -149,7 +149,7 @@ function Resolve-SiteUrlFromDriveId {
       Graph drive id (e.g. 'b!...').
 
     .PARAMETER TenantHost
-      SharePoint tenant host, e.g. 'fazla.sharepoint.com'. Used to derive
+      SharePoint tenant host, e.g. 'contoso.sharepoint.com'. Used to derive
       the admin endpoint for the bootstrap connect.
 
     .PARAMETER Tenant
@@ -162,7 +162,7 @@ function Resolve-SiteUrlFromDriveId {
       Path to the PFX cert on disk.
 
     .EXAMPLE
-      Resolve-SiteUrlFromDriveId -DriveId 'b!abc...' -TenantHost 'fazla.sharepoint.com' `
+      Resolve-SiteUrlFromDriveId -DriveId 'b!abc...' -TenantHost 'contoso.sharepoint.com' `
           -Tenant $t -ClientId $c -PfxPath "$HOME/.config/fazla-od/fazla-od.pfx"
     #>
     param(

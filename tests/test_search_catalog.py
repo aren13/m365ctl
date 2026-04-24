@@ -14,17 +14,17 @@ def _seed(db: Path) -> None:
                                is_deleted, size, modified_at, modified_by)
             VALUES
               ('d', '1', 'Invoice-Q1.pdf', '/Finance/Invoice-Q1.pdf', false, false, 100,
-               TIMESTAMP '2024-06-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-06-01 00:00:00', 'a@example.com'),
               ('d', '2', 'Q2.xlsx',       '/Finance/Invoices/Q2.xlsx', false, false, 200,
-               TIMESTAMP '2024-07-01 00:00:00', 'b@fazla.com'),
+               TIMESTAMP '2024-07-01 00:00:00', 'b@example.com'),
               ('d', '3', 'Readme.md',      '/Docs/Readme.md',          false, false, 50,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'f', 'Finance',        '/Finance',                 true,  false, null,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'g', 'Invoices',       '/Finance/Invoices',        true,  false, null,
-               TIMESTAMP '2024-01-01 00:00:00', 'a@fazla.com'),
+               TIMESTAMP '2024-01-01 00:00:00', 'a@example.com'),
               ('d', 'x', 'old.pdf',        '/tomb/old.pdf',            false, true,  1,
-               TIMESTAMP '2020-01-01 00:00:00', 'a@fazla.com')
+               TIMESTAMP '2020-01-01 00:00:00', 'a@example.com')
             """
         )
 
@@ -73,7 +73,7 @@ def test_owner_filter(tmp_path: Path) -> None:
     _seed(db)
     with open_catalog(db) as conn:
         hits = list(catalog_search(conn, "invoice", type_="file",
-                                   owner="b@fazla.com"))
+                                   owner="b@example.com"))
     assert {h.name for h in hits} == {"Q2.xlsx"}
 
 

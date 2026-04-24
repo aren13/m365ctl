@@ -24,8 +24,8 @@ def _client(handler):
 def _stub_cfg(tmp_path: Path) -> Config:
     return Config(
         tenant_id="tenant-1", client_id="client-1",
-        cert_path=tmp_path / "fazla-od.pfx",
-        cert_public=tmp_path / "fazla-od.cer",
+        cert_path=tmp_path / "m365ctl.pfx",
+        cert_public=tmp_path / "m365ctl.cer",
         default_auth="app-only",
         scope=ScopeConfig(allow_drives=["d1"], allow_users=["*"],
                           deny_paths=[], unsafe_requires_flag=True),
@@ -87,7 +87,7 @@ def test_restore_notsupported_wraps_with_manual_instructions(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
@@ -121,7 +121,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -156,7 +156,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
     assert argv[argv.index("-ClientId") + 1] == "client-1"
     assert "-SiteUrl" in argv
     site_idx = argv.index("-SiteUrl") + 1
-    assert argv[site_idx] == "https://fazla.sharepoint.com/sites/Foo"
+    assert argv[site_idx] == "https://contoso.sharepoint.com/sites/Foo"
     assert "-LeafName" in argv
     assert argv[argv.index("-LeafName") + 1] == "hello.txt"
     # Audit-end recorded as ok.
@@ -180,7 +180,7 @@ def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_pat
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -265,7 +265,7 @@ def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()

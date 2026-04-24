@@ -26,7 +26,7 @@ def test_audit_shells_out_and_parses_json(tmp_path, mocker, capsys) -> None:
 
     payload = [
         {"drive_id": "d", "item_id": "i", "full_path": "/A/a.pdf",
-         "shared_with": "arda@fazla.com", "permission_level": "owner",
+         "shared_with": "arda@example.com", "permission_level": "owner",
          "is_external": False, "expires_at": None},
     ]
     mocker.patch(
@@ -37,7 +37,7 @@ def test_audit_shells_out_and_parses_json(tmp_path, mocker, capsys) -> None:
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://contoso.sharepoint.com",
         output_format="json",
     )
     assert rc == 0
@@ -56,7 +56,7 @@ def test_audit_propagates_nonzero_exit(tmp_path, mocker, capsys) -> None:
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://contoso.sharepoint.com",
         output_format="json",
     )
     err = capsys.readouterr().err
@@ -70,7 +70,7 @@ def test_audit_tsv_is_emitted_verbatim(tmp_path, mocker, capsys) -> None:
     tsv = (
         "drive_id\titem_id\tfull_path\tshared_with\tpermission_level\t"
         "is_external\texpires_at\n"
-        "d\ti\t/A/a.pdf\tarda@fazla.com\towner\tFalse\t\n"
+        "d\ti\t/A/a.pdf\tarda@example.com\towner\tFalse\t\n"
     )
     mocker.patch(
         "m365ctl.onedrive.cli.audit_sharing.subprocess.run",
@@ -80,7 +80,7 @@ def test_audit_tsv_is_emitted_verbatim(tmp_path, mocker, capsys) -> None:
     )
     rc = run_audit(
         config_path=tmp_path / "config.toml",
-        scope="site:https://fazla.sharepoint.com",
+        scope="site:https://contoso.sharepoint.com",
         output_format="tsv",
     )
     assert rc == 0

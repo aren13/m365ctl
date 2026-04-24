@@ -13,8 +13,8 @@ FILE_ITEM = {
         "mimeType": "application/pdf",
         "hashes": {"quickXorHash": "abc123=="},
     },
-    "createdBy": {"user": {"email": "alice@fazla.com"}},
-    "lastModifiedBy": {"user": {"email": "bob@fazla.com"}},
+    "createdBy": {"user": {"email": "alice@example.com"}},
+    "lastModifiedBy": {"user": {"email": "bob@example.com"}},
     "shared": {"scope": "users"},
     "eTag": '"{ETAG},1"',
 }
@@ -26,8 +26,8 @@ FOLDER_ITEM = {
     "lastModifiedDateTime": "2024-01-01T00:00:00Z",
     "parentReference": {"path": "/drive/root:/Documents"},
     "folder": {"childCount": 12},
-    "createdBy": {"user": {"email": "alice@fazla.com"}},
-    "lastModifiedBy": {"user": {"email": "alice@fazla.com"}},
+    "createdBy": {"user": {"email": "alice@example.com"}},
+    "lastModifiedBy": {"user": {"email": "alice@example.com"}},
 }
 
 DELETED_ITEM = {
@@ -49,8 +49,8 @@ def test_normalize_file_produces_expected_row() -> None:
     assert row["mime_type"] == "application/pdf"
     assert row["is_folder"] is False
     assert row["is_deleted"] is False
-    assert row["created_by"] == "alice@fazla.com"
-    assert row["modified_by"] == "bob@fazla.com"
+    assert row["created_by"] == "alice@example.com"
+    assert row["modified_by"] == "bob@example.com"
     assert row["has_sharing"] is True
     assert row["quick_xor_hash"] == "abc123=="
 

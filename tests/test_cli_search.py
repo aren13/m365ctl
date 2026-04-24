@@ -28,7 +28,7 @@ def _seed(db: Path) -> None:
                                is_deleted, size, modified_at, modified_by)
             VALUES
               ('d', 'c1', 'local-invoice.pdf', '/L/local-invoice.pdf', false, false,
-               100, TIMESTAMP '2024-03-01 00:00:00', 'a@fazla.com')
+               100, TIMESTAMP '2024-03-01 00:00:00', 'a@example.com')
             """
         )
 

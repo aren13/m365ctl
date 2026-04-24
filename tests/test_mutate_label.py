@@ -19,7 +19,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-1", action="label-apply", drive_id="d1",
                    item_id="i1", args={"label": "Confidential",
-                                        "site_url": "https://fazla.sharepoint.com/"},
+                                        "site_url": "https://contoso.sharepoint.com/"},
                    dry_run_result="")
     result = execute_label_apply(op, logger,
                                  before={"parent_path": "/", "name": "x",
@@ -43,7 +43,7 @@ def test_label_apply_handles_pwsh_missing(tmp_path, mocker):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-3", action="label-apply", drive_id="d1",
                    item_id="i1", args={"label": "Confidential",
-                                        "site_url": "https://fazla.sharepoint.com/"},
+                                        "site_url": "https://contoso.sharepoint.com/"},
                    dry_run_result="")
     result = execute_label_apply(op, logger,
                                  before={"parent_path": "/", "name": "x",
@@ -66,7 +66,7 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-2", action="label-remove", drive_id="d1",
                    item_id="i1", args={"site_url":
-                                       "https://fazla.sharepoint.com/"},
+                                       "https://contoso.sharepoint.com/"},
                    dry_run_result="")
     result = execute_label_remove(op, logger,
                                   before={"parent_path": "/", "name": "x",

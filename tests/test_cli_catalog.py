@@ -35,7 +35,7 @@ def test_run_refresh_me_uses_delegated_and_crawls(tmp_path, mocker, capsys) -> N
             DriveSpec(
                 drive_id="d1",
                 display_name="OneDrive",
-                owner="arda@fazla.com",
+                owner="arda@example.com",
                 drive_type="business",
                 graph_path="/me/drive/root/delta",
             )
@@ -77,7 +77,7 @@ def test_run_refresh_drive_uses_app_only(tmp_path, mocker, capsys) -> None:
             DriveSpec(
                 drive_id="dx",
                 display_name="Finance",
-                owner="owner@fazla.com",
+                owner="owner@example.com",
                 drive_type="documentLibrary",
                 graph_path="/drives/dx/root/delta",
             )
@@ -108,7 +108,7 @@ def test_run_status_prints_summary(tmp_path, mocker, capsys) -> None:
         conn.execute(
             "INSERT INTO drives (drive_id, display_name, owner, drive_type, "
             "delta_link, last_refreshed_at) VALUES "
-            "('d1','OneDrive','arda@fazla.com','business','dlink', CURRENT_TIMESTAMP)"
+            "('d1','OneDrive','arda@example.com','business','dlink', CURRENT_TIMESTAMP)"
         )
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, is_folder, is_deleted, size) "
@@ -139,7 +139,7 @@ def test_run_refresh_tenant_uses_app_only(tmp_path, mocker, capsys) -> None:
 
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"S/D{i}",
-                  owner=f"o{i}@fazla.com", drive_type="documentLibrary",
+                  owner=f"o{i}@example.com", drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(3)
     ]

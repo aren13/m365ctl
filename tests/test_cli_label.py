@@ -40,7 +40,7 @@ def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
         subcmd="apply",
         scope="drive:d1", drive_id="d1", item_id="i1",
         label="Confidential",
-        site_url="https://fazla.sharepoint.com/",
+        site_url="https://contoso.sharepoint.com/",
         server_relative_url=None,
         from_plan=None, plan_out=None,
         confirm=False, unsafe_scope=False,
@@ -59,7 +59,7 @@ def test_apply_requires_label(tmp_path, mocker, capsys):
         subcmd="apply",
         scope="drive:d1", drive_id="d1", item_id="i1",
         label=None,
-        site_url="https://fazla.sharepoint.com/",
+        site_url="https://contoso.sharepoint.com/",
         server_relative_url=None,
         from_plan=None, plan_out=None,
         confirm=False, unsafe_scope=False,
@@ -99,7 +99,7 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
             {"op_id": f"op-{i}", "action": "label-apply",
              "drive_id": "d1", "item_id": f"I{i}",
              "args": {"label": "Internal",
-                      "site_url": "https://fazla.sharepoint.com/"},
+                      "site_url": "https://contoso.sharepoint.com/"},
              "dry_run_result": ""} for i in range(3)
         ],
     }

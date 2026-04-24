@@ -101,5 +101,5 @@ Both flows run against the same Entra app; admin consent is granted for both.
 ```bash
 uv sync --extra dev
 uv run pytest          # unit + mocked
-FAZLA_OD_LIVE_TESTS=1 uv run pytest -m live    # hits real Graph
+M365CTL_LIVE_TESTS=1 uv run pytest -m live    # hits real Graph
 ```

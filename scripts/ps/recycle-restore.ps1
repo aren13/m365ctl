@@ -15,7 +15,7 @@
 .EXAMPLE
   pwsh -NoProfile -File scripts/ps/recycle-restore.ps1 `
       -Tenant $t -ClientId $c `
-      -SiteUrl 'https://fazla.sharepoint.com/sites/Finance' `
+      -SiteUrl 'https://contoso.sharepoint.com/sites/Finance' `
       -LeafName 'Q1.xlsx' -DirName '/Shared Documents/Finance'
 #>
 param(

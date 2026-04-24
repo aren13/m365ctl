@@ -103,7 +103,7 @@ def test_reverse_label_apply_is_remove(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L1", cmd="od-label(apply)",
         args={"label": "Confidential",
-              "site_url": "https://fazla.sharepoint.com/"},
+              "site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x"},
@@ -111,7 +111,7 @@ def test_reverse_label_apply_is_remove(tmp_path):
         result="ok")
     rev = build_reverse_operation(logger, "L1")
     assert rev.action == "label-remove"
-    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+    assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 
 
 def test_reverse_op_failed_originally_raises(tmp_path):
@@ -143,7 +143,7 @@ def test_reverse_move_without_parent_id_is_irreversible(tmp_path):
 def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L2", cmd="od-label(remove)",
-        args={"site_url": "https://fazla.sharepoint.com/"},
+        args={"site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x",
@@ -153,13 +153,13 @@ def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
     rev = build_reverse_operation(logger, "L2")
     assert rev.action == "label-apply"
     assert rev.args["label"] == "Internal"
-    assert rev.args["site_url"] == "https://fazla.sharepoint.com/"
+    assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 
 
 def test_reverse_label_remove_without_prior_label_is_irreversible(tmp_path):
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     _ap(logger, op_id="L3", cmd="od-label(remove)",
-        args={"site_url": "https://fazla.sharepoint.com/"},
+        args={"site_url": "https://contoso.sharepoint.com/"},
         drive_id="d", item_id="i",
         before={"parent_path": "/", "name": "x",
                 "server_relative_url": "/Documents/x"},  # no 'label' key

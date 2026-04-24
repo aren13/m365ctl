@@ -22,7 +22,7 @@
   (default m365ctl:PfxPassword).
 
 .EXAMPLE
-  pwsh scripts/ps/audit-sharing.ps1 -Scope "site:fazla.sharepoint.com,abc,def" \
+  pwsh scripts/ps/audit-sharing.ps1 -Scope "site:contoso.sharepoint.com,abc,def" \
       -Tenant <your-tenant-id> -ClientId <your-client-id>
 #>
 param(

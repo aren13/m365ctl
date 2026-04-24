@@ -110,7 +110,7 @@ def test_app_only_raises_on_msal_error(cfg: Config, mocker) -> None:
 
 
 @LIVE
-def test_live_app_only_against_fazla_tenant() -> None:
+def test_live_app_only_against_tenant() -> None:
     """Smoke test: real cert, real Entra. Requires config.toml + cert on disk."""
     cfg = load_config(Path("config.toml"))
     cred = AppOnlyCredential(cfg)
@@ -130,7 +130,7 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
     }
     mock_app.acquire_token_by_device_flow.return_value = {
         "access_token": "delegated-t0k3n",
-        "id_token_claims": {"preferred_username": "test@fazla.com"},
+        "id_token_claims": {"preferred_username": "test@example.com"},
     }
     mock_app.get_accounts.return_value = []
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
@@ -147,7 +147,7 @@ def test_delegated_login_uses_device_code_flow(cfg: Config, mocker) -> None:
 
 def test_delegated_get_token_uses_cached_account(cfg: Config, mocker) -> None:
     mock_app = MagicMock()
-    mock_app.get_accounts.return_value = [{"username": "cached@fazla.com"}]
+    mock_app.get_accounts.return_value = [{"username": "cached@example.com"}]
     mock_app.acquire_token_silent.return_value = {"access_token": "cached-t0k3n"}
     mocker.patch("msal.PublicClientApplication", return_value=mock_app)
     mocker.patch("m365ctl.common.auth._load_persistent_cache", return_value=None)

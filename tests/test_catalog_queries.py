@@ -22,13 +22,13 @@ def seeded_db(tmp_path: Path) -> Path:
             INSERT INTO items (drive_id, item_id, name, is_folder, is_deleted,
                                size, modified_at, modified_by, quick_xor_hash)
             VALUES
-              ('d', '1', 'big.mp4',   false, false, 5000000000, TIMESTAMP '2023-03-01 00:00:00', 'alice@fazla.com', 'H1'),
-              ('d', '2', 'medium.zip',false, false, 1000000000, TIMESTAMP '2024-01-01 00:00:00', 'alice@fazla.com', 'H2'),
-              ('d', '3', 'small.txt', false, false, 100,        TIMESTAMP '2025-06-01 00:00:00', 'bob@fazla.com',   NULL),
-              ('d', '4', 'dup-a',     false, false, 500,        TIMESTAMP '2024-10-01 00:00:00', 'bob@fazla.com',   'DUP'),
-              ('d', '5', 'dup-b',     false, false, 500,        TIMESTAMP '2024-10-02 00:00:00', 'bob@fazla.com',   'DUP'),
-              ('d', 'f', 'Folder',    true,  false, NULL,       TIMESTAMP '2024-01-01 00:00:00', 'alice@fazla.com', NULL),
-              ('d', 'x', 'deleted',   false, true,  99999,      TIMESTAMP '2020-01-01 00:00:00', 'alice@fazla.com', NULL)
+              ('d', '1', 'big.mp4',   false, false, 5000000000, TIMESTAMP '2023-03-01 00:00:00', 'alice@example.com', 'H1'),
+              ('d', '2', 'medium.zip',false, false, 1000000000, TIMESTAMP '2024-01-01 00:00:00', 'alice@example.com', 'H2'),
+              ('d', '3', 'small.txt', false, false, 100,        TIMESTAMP '2025-06-01 00:00:00', 'bob@example.com',   NULL),
+              ('d', '4', 'dup-a',     false, false, 500,        TIMESTAMP '2024-10-01 00:00:00', 'bob@example.com',   'DUP'),
+              ('d', '5', 'dup-b',     false, false, 500,        TIMESTAMP '2024-10-02 00:00:00', 'bob@example.com',   'DUP'),
+              ('d', 'f', 'Folder',    true,  false, NULL,       TIMESTAMP '2024-01-01 00:00:00', 'alice@example.com', NULL),
+              ('d', 'x', 'deleted',   false, true,  99999,      TIMESTAMP '2020-01-01 00:00:00', 'alice@example.com', NULL)
             """
         )
     return db
@@ -61,8 +61,8 @@ def test_by_owner_aggregates_size(seeded_db: Path) -> None:
     by = {r["owner"]: (r["file_count"], r["total_size"]) for r in rows}
     # alice: big(5e9) + medium(1e9) = 6e9, 2 files
     # bob: small(100) + dup-a(500) + dup-b(500) = 1100, 3 files
-    assert by["alice@fazla.com"] == (2, 6000000000)
-    assert by["bob@fazla.com"] == (3, 1100)
+    assert by["alice@example.com"] == (2, 6000000000)
+    assert by["bob@example.com"] == (3, 1100)
 
 
 def test_duplicates_groups_matching_hashes(seeded_db: Path) -> None:

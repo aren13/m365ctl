@@ -15,7 +15,7 @@ def test_resolve_scope_site_by_numeric_id_lists_drives() -> None:
             return {
                 "id": "site-123",
                 "displayName": "Finance",
-                "webUrl": "https://fazla.sharepoint.com/sites/finance",
+                "webUrl": "https://contoso.sharepoint.com/sites/finance",
             }
         if path == "/sites/site-123/drives":
             return {
@@ -50,7 +50,7 @@ def test_resolve_scope_site_by_slug_uses_search() -> None:
             return {
                 "value": [
                     {"id": "site-abc", "displayName": "Finance",
-                     "webUrl": "https://fazla.sharepoint.com/sites/finance"}
+                     "webUrl": "https://contoso.sharepoint.com/sites/finance"}
                 ]
             }
         if path == "/sites/site-abc":
@@ -94,14 +94,14 @@ def test_resolve_scope_tenant_enumerates_users_and_sites() -> None:
         if path == "/users":
             return {
                 "value": [
-                    {"id": "u1", "userPrincipalName": "a@fazla.com", "displayName": "A"},
-                    {"id": "u2", "userPrincipalName": "b@fazla.com", "displayName": "B"},
+                    {"id": "u1", "userPrincipalName": "a@example.com", "displayName": "A"},
+                    {"id": "u2", "userPrincipalName": "b@example.com", "displayName": "B"},
                 ]
             }
         if path == "/users/u1/drive":
-            return {"id": "drv-u1", "name": "OneDrive - Fazla",
+            return {"id": "drv-u1", "name": "OneDrive - Example",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/users/u2/drive":
             # Simulate a user without a provisioned drive (HTTP 404 → raises)
             from m365ctl.common.graph import GraphError
@@ -139,13 +139,13 @@ def test_resolve_scope_tenant_skips_notallowed_access_blocked() -> None:
     def fake_get(path, *, params=None):
         if path == "/users":
             return {"value": [
-                {"id": "u1", "userPrincipalName": "a@fazla.com"},
-                {"id": "u-blocked", "userPrincipalName": "blocked@fazla.com"},
+                {"id": "u1", "userPrincipalName": "a@example.com"},
+                {"id": "u-blocked", "userPrincipalName": "blocked@example.com"},
             ]}
         if path == "/users/u1/drive":
-            return {"id": "drv-u1", "name": "OneDrive - Fazla",
+            return {"id": "drv-u1", "name": "OneDrive - Example",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/users/u-blocked/drive":
             from m365ctl.common.graph import GraphError
             raise GraphError(
@@ -169,13 +169,13 @@ def test_resolve_scope_tenant_skips_resourcenotfound_mysite() -> None:
     def fake_get(path, *, params=None):
         if path == "/users":
             return {"value": [
-                {"id": "u1", "userPrincipalName": "a@fazla.com"},
-                {"id": "u-guest", "userPrincipalName": "g@fazla.com"},
+                {"id": "u1", "userPrincipalName": "a@example.com"},
+                {"id": "u-guest", "userPrincipalName": "g@example.com"},
             ]}
         if path == "/users/u1/drive":
-            return {"id": "drv-u1", "name": "OneDrive - Fazla",
+            return {"id": "drv-u1", "name": "OneDrive - Example",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/users/u-guest/drive":
             from m365ctl.common.graph import GraphError
             raise GraphError("ResourceNotFound: User's mysite not found.")
@@ -194,12 +194,12 @@ def test_resolve_scope_tenant_paginates_users() -> None:
     def fake_get(path, *, params=None):
         if path == "/users":
             return {"value": [
-                {"id": "u1", "userPrincipalName": "a@fazla.com"}
+                {"id": "u1", "userPrincipalName": "a@example.com"}
             ]}
         if path == "/users/u1/drive":
             return {"id": "drv-u1", "name": "OneDrive",
                     "driveType": "business",
-                    "owner": {"user": {"email": "a@fazla.com"}}}
+                    "owner": {"user": {"email": "a@example.com"}}}
         if path == "/sites" and params == {"search": "*"}:
             return {"value": []}
         raise AssertionError(f"unexpected: {path}")
@@ -209,7 +209,7 @@ def test_resolve_scope_tenant_paginates_users() -> None:
     # get_paginated: two pages of users.
     def fake_paginated(path, *, params=None):
         if path == "/users":
-            yield [{"id": "u1", "userPrincipalName": "a@fazla.com"}], None
+            yield [{"id": "u1", "userPrincipalName": "a@example.com"}], None
         elif path == "/sites":
             yield [], None
         else:
@@ -225,7 +225,7 @@ def test_resolve_scope_still_supports_me_and_drive() -> None:
     graph.get.return_value = {
         "id": "drv-me",
         "driveType": "business",
-        "owner": {"user": {"email": "x@fazla.com"}},
+        "owner": {"user": {"email": "x@example.com"}},
         "name": "OneDrive",
     }
     drives = resolve_scope("me", graph)
@@ -234,7 +234,7 @@ def test_resolve_scope_still_supports_me_and_drive() -> None:
     graph.get.return_value = {
         "id": "drv-xyz",
         "driveType": "documentLibrary",
-        "owner": {"user": {"email": "s@fazla.com"}},
+        "owner": {"user": {"email": "s@example.com"}},
         "name": "Finance",
     }
     drives = resolve_scope("drive:drv-xyz", graph)

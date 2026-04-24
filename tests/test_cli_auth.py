@@ -30,7 +30,7 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
 
     graph = MagicMock()
     graph.get.side_effect = [
-        {"displayName": "Arda Eren", "userPrincipalName": "arda@fazla.com"},
+        {"displayName": "Arda Eren", "userPrincipalName": "arda@example.com"},
         {"displayName": "m365ctl-test"},
     ]
     mocker.patch("m365ctl.onedrive.cli.auth.GraphClient", return_value=graph)
@@ -40,7 +40,7 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
 
     assert rc == 0
     assert "Arda Eren" in out
-    assert "arda@fazla.com" in out
+    assert "arda@example.com" in out
     assert "m365ctl-test" in out
     assert "ABCDEF" in out
     assert "728" in out

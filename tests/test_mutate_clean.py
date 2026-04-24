@@ -27,8 +27,8 @@ def _client(handler):
 def _stub_cfg(tmp_path: Path) -> Config:
     return Config(
         tenant_id="tenant-1", client_id="client-1",
-        cert_path=tmp_path / "fazla-od.pfx",
-        cert_public=tmp_path / "fazla-od.cer",
+        cert_path=tmp_path / "m365ctl.pfx",
+        cert_public=tmp_path / "m365ctl.cer",
         default_auth="app-only",
         scope=ScopeConfig(allow_drives=["d1"], allow_users=["*"],
                           deny_paths=[], unsafe_requires_flag=True),
@@ -131,7 +131,7 @@ def test_purge_404_wraps_with_manual_instructions(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
@@ -164,7 +164,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -198,7 +198,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
     assert any(a.endswith("recycle-purge.ps1") for a in argv)
     assert argv[argv.index("-Tenant") + 1] == "tenant-1"
     assert argv[argv.index("-ClientId") + 1] == "client-1"
-    assert argv[argv.index("-SiteUrl") + 1] == "https://fazla.sharepoint.com/sites/Foo"
+    assert argv[argv.index("-SiteUrl") + 1] == "https://contoso.sharepoint.com/sites/Foo"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
     assert argv[argv.index("-DirName") + 1] == "Shared Documents/_smoke"
     # Audit-end recorded as ok.
@@ -219,7 +219,7 @@ def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path,
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
@@ -302,7 +302,7 @@ def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
         return httpx.Response(
             200,
             json={"id": "d1",
-                  "webUrl": "https://fazla.sharepoint.com/sites/Foo/Shared%20Documents"},
+                  "webUrl": "https://contoso.sharepoint.com/sites/Foo/Shared%20Documents"},
         )
 
     completed = MagicMock()
