@@ -225,6 +225,43 @@ def get_message(
     )
 
 
+def find_by_internet_message_id(
+    graph: GraphClient,
+    *,
+    mailbox_spec: str,
+    auth_mode: AuthMode,
+    folder_id: str,
+    internet_message_id: str,
+) -> str | None:
+    """Locate a message by its RFC-822 ``internetMessageId`` within ``folder_id``.
+
+    Returns the message's current ``id`` (which Graph rotates when a message
+    crosses folder boundaries — see Phase 4.x soft-delete undo recovery), or
+    ``None`` when no matching message exists in the folder.
+
+    Used by the undo executor: when restoring a soft-deleted message the
+    audit-recorded id 404s because Graph assigned a new id at Deleted Items;
+    this helper resolves the rotated id via the preserved internet message id.
+    """
+    ub = user_base(mailbox_spec, auth_mode=auth_mode)
+    path = f"{ub}/mailFolders/{folder_id}/messages"
+    esc = internet_message_id.replace("'", "''")
+    params = {
+        "$filter": f"internetMessageId eq '{esc}'",
+        "$top": 1,
+        "$select": "id",
+    }
+    raw = graph.get(path, params=params)
+    items = raw.get("value", []) if isinstance(raw, dict) else []
+    if not items:
+        return None
+    first = items[0]
+    if not isinstance(first, dict):
+        return None
+    new_id = first.get("id")
+    return new_id if isinstance(new_id, str) and new_id else None
+
+
 def search_messages_graph(
     graph: GraphClient,
     *,

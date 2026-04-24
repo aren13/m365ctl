@@ -9,6 +9,7 @@ Called from the top-level ``m365ctl.cli.undo`` router when the audit record's
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
@@ -16,6 +17,7 @@ from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.common.config import AuthMode, load_config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.mail.folders import get_folder
+from m365ctl.mail.messages import find_by_internet_message_id, get_message
 from m365ctl.mail.mutate.folders import (
     execute_create_folder,
     execute_delete_folder,
@@ -142,13 +144,49 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
     elif action == "mail.move":
         from m365ctl.mail.mutate.move import execute_move
         rev.args.setdefault("auth_mode", auth_mode)
+        # Phase 4.x: when this mail.move is the inverse of a mail-delete-soft,
+        # the recorded item_id may have been rotated by Graph during the move
+        # to Deleted Items. If the literal id 404s and we have the recorded
+        # internetMessageId, look the message up in Deleted Items by that field
+        # and patch rev.item_id with the resolved (current) id before moving.
+        recorded_imid = rev.args.pop("internet_message_id", None)
         try:
-            from m365ctl.mail.messages import get_message
-            msg = get_message(graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode, message_id=rev.item_id)
+            msg = get_message(graph, mailbox_spec=mailbox_spec,
+                              auth_mode=auth_mode, message_id=rev.item_id)
             current_before = {
                 "parent_folder_id": msg.parent_folder_id,
                 "parent_folder_path": msg.parent_folder_path,
             }
+        except GraphError as exc:
+            if not recorded_imid:
+                # No fallback path; keep legacy best-effort behaviour and let
+                # execute_move surface the error from the rotated id.
+                current_before = {}
+            else:
+                resolved_id = find_by_internet_message_id(
+                    graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
+                    folder_id="deleteditems",
+                    internet_message_id=recorded_imid,
+                )
+                if not resolved_id:
+                    print(
+                        f"undo: message not found in Deleted Items "
+                        f"(internetMessageId={recorded_imid!r}); the message "
+                        f"may already be hard-deleted or moved manually. "
+                        f"Restore manually if needed. (original error: {exc})",
+                        file=sys.stderr,
+                    )
+                    return 1
+                rev = replace(rev, item_id=resolved_id)
+                try:
+                    msg = get_message(graph, mailbox_spec=mailbox_spec,
+                                      auth_mode=auth_mode, message_id=resolved_id)
+                    current_before = {
+                        "parent_folder_id": msg.parent_folder_id,
+                        "parent_folder_path": msg.parent_folder_path,
+                    }
+                except Exception:
+                    current_before = {}
         except Exception:
             current_before = {}
         r = execute_move(rev, graph, logger, before=current_before)
@@ -159,7 +197,6 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
         # before capture for the undo of THIS undo (i.e. if user later re-deletes the
         # restored message): fetch current parent so the next audit record is useful.
         try:
-            from m365ctl.mail.messages import get_message
             msg = get_message(
                 graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
                 message_id=rev.item_id,

@@ -42,6 +42,25 @@ def test_reverse_mail_delete_soft_emits_move_back(tmp_path):
     assert rev.args.get("destination_path") == "/Inbox"
 
 
+def test_reverse_mail_delete_soft_propagates_internet_message_id(tmp_path):
+    """Phase 4.x: reverse op carries the recorded internetMessageId so the
+    undo executor can recover the rotated id from Deleted Items."""
+    logger = _logger(tmp_path)
+    _record(
+        logger, op_id="op-del", cmd="mail-delete-soft",
+        drive_id="me", item_id="m1",
+        args={},
+        before={
+            "parent_folder_id": "inbox",
+            "parent_folder_path": "/Inbox",
+            "internet_message_id": "<abc@example.com>",
+        },
+        after={"parent_folder_id": "deleteditems-id", "deleted_from": "inbox"},
+    )
+    rev = build_reverse_mail_operation(logger, "op-del")
+    assert rev.args.get("internet_message_id") == "<abc@example.com>"
+
+
 def test_reverse_mail_delete_soft_rejects_missing_before_parent(tmp_path):
     logger = _logger(tmp_path)
     _record(

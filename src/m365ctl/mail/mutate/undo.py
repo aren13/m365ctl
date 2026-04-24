@@ -203,11 +203,20 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
                 f"(If the message was already in Deleted Items when deleted, "
                 f"the original folder is unrecoverable.)"
             )
+        # Phase 4.x: thread internet_message_id through reverse-op args so the
+        # undo executor can recover the rotated id from Deleted Items when
+        # Graph has assigned the message a new id post-move.
+        rev_args: dict = {
+            "destination_id": prior_parent,
+            "destination_path": before.get("parent_folder_path", ""),
+        }
+        recorded_imid = before.get("internet_message_id")
+        if recorded_imid:
+            rev_args["internet_message_id"] = recorded_imid
         return Operation(
             op_id=new_op_id(), action="mail.move",
             drive_id=drive_id, item_id=start["item_id"],
-            args={"destination_id": prior_parent,
-                  "destination_path": before.get("parent_folder_path", "")},
+            args=rev_args,
             dry_run_result=f"(undo of {op_id}) restore {start['item_id']!r} "
                            f"to {before.get('parent_folder_path', prior_parent)!r}",
         )
