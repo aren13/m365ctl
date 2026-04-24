@@ -10,7 +10,7 @@ from fazla_od.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
 from fazla_od.catalog.db import open_catalog
 from fazla_od.config import load_config
 from fazla_od.graph import GraphClient
-from fazla_od.prompts import confirm_or_abort
+from fazla_od.prompts import TTYUnavailable, confirm_or_abort
 
 _LARGE_SCOPE_THRESHOLD = 5
 
@@ -37,10 +37,21 @@ def run_refresh(*, config_path: Path, scope: str, assume_yes: bool = False) -> i
             print(f"  - {d.drive_id}  {d.display_name}  ({d.owner})")
         if len(drives) > 20:
             print(f"  ... and {len(drives) - 20} more")
-        proceed = confirm_or_abort(
-            f"Proceed with refreshing {len(drives)} drive(s)?",
-            assume_yes=assume_yes,
-        )
+        try:
+            proceed = confirm_or_abort(
+                f"Proceed with refreshing {len(drives)} drive(s)?",
+                assume_yes=assume_yes,
+            )
+        except TTYUnavailable:
+            # No controlling terminal (CI, agent sandbox, detached session).
+            # Fail safe: treat as abort rather than crashing. The operator
+            # can pass --yes to bypass the gate intentionally.
+            print(
+                "No /dev/tty available to confirm. Re-run with --yes to "
+                "proceed non-interactively. Aborted.",
+                file=sys.stderr,
+            )
+            return 1
         if not proceed:
             print("Aborted by user.", file=sys.stderr)
             return 1
