@@ -51,7 +51,7 @@ def test_resolve_scope_drive_by_id() -> None:
 
 def test_resolve_scope_rejects_unknown_scheme() -> None:
     with pytest.raises(ValueError, match="unknown scope"):
-        resolve_scope("site:Finance", MagicMock())
+        resolve_scope("bogus:Finance", MagicMock())
 
 
 def test_crawl_drive_inserts_items_and_stores_delta_link(tmp_path: Path) -> None:

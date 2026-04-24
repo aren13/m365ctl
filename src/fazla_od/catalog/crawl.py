@@ -32,33 +32,164 @@ class CrawlResult:
 def resolve_scope(scope: str, graph: _GraphLike) -> list[DriveSpec]:
     """Translate a scope string into one or more DriveSpecs.
 
-    Plan 2 supports only 'me' and 'drive:<id>'. 'site:<slug>' and 'tenant'
-    are Plan 3.
+    Supported forms:
+      - ``me``                → current user's OneDrive (delegated).
+      - ``drive:<id>``        → one specific drive (app-only).
+      - ``site:<slug-or-id>`` → all drives of one SharePoint site (app-only).
+      - ``tenant``            → every user drive + every SharePoint library
+                                (app-only, paginated).
+
+    Missing user drives (users who never provisioned OneDrive) are silently
+    skipped under ``tenant`` rather than aborting the crawl.
     """
     if scope == "me":
         meta = graph.get("/me/drive")
-        return [
-            DriveSpec(
-                drive_id=meta["id"],
-                display_name=meta.get("name", "OneDrive"),
-                owner=_owner_of(meta),
-                drive_type=meta.get("driveType", "unknown"),
-                graph_path="/me/drive/root/delta",
-            )
-        ]
+        return [_drive_from_meta(meta, graph_path="/me/drive/root/delta")]
+
     if scope.startswith("drive:"):
         drive_id = scope.split(":", 1)[1]
         meta = graph.get(f"/drives/{drive_id}")
         return [
-            DriveSpec(
-                drive_id=meta["id"],
-                display_name=meta.get("name", drive_id),
-                owner=_owner_of(meta),
-                drive_type=meta.get("driveType", "unknown"),
-                graph_path=f"/drives/{drive_id}/root/delta",
+            _drive_from_meta(
+                meta, graph_path=f"/drives/{drive_id}/root/delta"
             )
         ]
+
+    if scope.startswith("site:"):
+        ident = scope.split(":", 1)[1]
+        site = _resolve_site(ident, graph)
+        return _drives_of_site(site, graph)
+
+    if scope == "tenant":
+        return _enumerate_tenant(graph)
+
     raise ValueError(f"unknown scope: {scope!r}")
+
+
+def _drive_from_meta(meta: dict, *, graph_path: str) -> DriveSpec:
+    return DriveSpec(
+        drive_id=meta["id"],
+        display_name=meta.get("name", meta["id"]),
+        owner=_owner_of(meta),
+        drive_type=meta.get("driveType", "unknown"),
+        graph_path=graph_path,
+    )
+
+
+def _resolve_site(ident: str, graph: _GraphLike) -> dict:
+    """Return the site dict for ``ident`` (display-name slug or raw id).
+
+    We try ``/sites/<ident>`` first — if ident is a full site-id or a
+    hostname:/sites/<x> triple, that works. On 404 we fall back to search.
+    """
+    # Search is cheap and handles slugs; try it first unless the ident looks
+    # like a site-id (contains a comma, the SharePoint site-id shape is
+    # ``<host>,<spSiteId>,<spWebId>``) or a numeric-ish GUID-like token.
+    looks_like_id = "," in ident or ident.count("-") >= 2 or ident.startswith("site-")
+    if looks_like_id:
+        try:
+            return graph.get(f"/sites/{ident}")
+        except Exception:
+            pass  # fall through to search
+
+    hits = graph.get("/sites", params={"search": ident}).get("value", [])
+    if not hits:
+        raise ValueError(f"no site matches site:{ident!r}")
+    if len(hits) > 1:
+        names = ", ".join(h.get("displayName", h.get("id", "?")) for h in hits)
+        raise ValueError(
+            f"site:{ident!r} is ambiguous — matched {len(hits)} sites: {names}"
+        )
+    # Re-fetch by id so the shape is consistent (search response omits fields).
+    return graph.get(f"/sites/{hits[0]['id']}")
+
+
+def _drives_of_site(site: dict, graph: _GraphLike) -> list[DriveSpec]:
+    site_name = site.get("displayName") or site.get("name") or site["id"]
+    drives = graph.get(f"/sites/{site['id']}/drives").get("value", [])
+    specs: list[DriveSpec] = []
+    for d in drives:
+        owner_block = d.get("owner") or {}
+        user = owner_block.get("user") or {}
+        group = owner_block.get("group") or {}
+        owner = (
+            user.get("email")
+            or user.get("displayName")
+            or group.get("displayName")
+            or "unknown"
+        )
+        specs.append(
+            DriveSpec(
+                drive_id=d["id"],
+                display_name=f"{site_name} / {d.get('name', d['id'])}",
+                owner=owner,
+                drive_type=d.get("driveType", "documentLibrary"),
+                graph_path=f"/drives/{d['id']}/root/delta",
+            )
+        )
+    return specs
+
+
+def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
+    """All user OneDrives + all SharePoint site drives."""
+    specs: list[DriveSpec] = []
+
+    from fazla_od.graph import GraphError
+
+    def _collect(path: str, *, params: dict | None = None) -> list[dict]:
+        """Collect all items from a paginated Graph collection.
+
+        Prefer ``get_paginated`` when it yields at least one page; otherwise
+        fall back to a single ``get`` (reading ``value``). This keeps tests
+        that stub only ``graph.get`` working while still supporting real
+        pagination in production.
+        """
+        gathered: list[dict] = []
+        try:
+            try:
+                pages = (
+                    graph.get_paginated(path, params=params)
+                    if params is not None
+                    else graph.get_paginated(path)
+                )
+            except TypeError:
+                pages = graph.get_paginated(path)
+            for items, _ in pages:
+                gathered.extend(items)
+        except Exception:
+            gathered = []
+        if gathered:
+            return gathered
+        resp = (
+            graph.get(path, params=params)
+            if params is not None
+            else graph.get(path)
+        )
+        return list(resp.get("value", []))
+
+    # Users → their OneDrive (skip 404s for unprovisioned users).
+    for user in _collect(
+        "/users",
+        params={"$select": "id,userPrincipalName,displayName", "$top": 999},
+    ):
+        uid = user.get("id")
+        if not uid:
+            continue
+        try:
+            meta = graph.get(f"/users/{uid}/drive")
+        except GraphError as exc:
+            if "itemNotFound" in str(exc) or "HTTP404" in str(exc):
+                continue
+            raise
+        specs.append(
+            _drive_from_meta(meta, graph_path=f"/drives/{meta['id']}/root/delta")
+        )
+
+    # Sites → each site's drives.
+    for site in _collect("/sites", params={"search": "*"}):
+        site_full = graph.get(f"/sites/{site['id']}")
+        specs.extend(_drives_of_site(site_full, graph))
+    return specs
 
 
 def _owner_of(drive_meta: dict) -> str:
