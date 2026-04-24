@@ -136,6 +136,48 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
         )
         rev.args.setdefault("auth_mode", auth_mode)
         r = execute_remove_category(rev, graph, logger, before=before_cat)
+    elif action == "mail.move":
+        from m365ctl.mail.mutate.move import execute_move
+        rev.args.setdefault("auth_mode", auth_mode)
+        try:
+            from m365ctl.mail.messages import get_message
+            msg = get_message(graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode, message_id=rev.item_id)
+            current_before = {
+                "parent_folder_id": msg.parent_folder_id,
+                "parent_folder_path": msg.parent_folder_path,
+            }
+        except Exception:
+            current_before = {}
+        r = execute_move(rev, graph, logger, before=current_before)
+
+    elif action == "mail.delete.soft":
+        print(
+            f"mail undo: cmd for this op was mail-copy; inverse is mail.delete.soft "
+            f"on the copy {rev.item_id!r}. Phase 4 adds programmatic delete-soft; "
+            f"for now remove the copy via Outlook UI.",
+            file=sys.stderr,
+        )
+        return 2
+
+    elif action == "mail.flag":
+        from m365ctl.mail.mutate.flag import execute_flag
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_flag(rev, graph, logger, before={})
+
+    elif action == "mail.read":
+        from m365ctl.mail.mutate.read import execute_read
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_read(rev, graph, logger, before={})
+
+    elif action == "mail.focus":
+        from m365ctl.mail.mutate.focus import execute_focus
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_focus(rev, graph, logger, before={})
+
+    elif action == "mail.categorize":
+        from m365ctl.mail.mutate.categorize import execute_categorize
+        rev.args.setdefault("auth_mode", auth_mode)
+        r = execute_categorize(rev, graph, logger, before={})
     else:
         print(f"no mail executor wired for reverse action {action!r}", file=sys.stderr)
         return 2

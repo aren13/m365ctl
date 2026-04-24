@@ -128,6 +128,72 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
                            f"(message links cannot be restored)",
         )
 
+    if cmd == "mail-move":
+        prior_parent = before.get("parent_folder_id")
+        if not prior_parent:
+            raise Irreversible(
+                f"mail-move op {op_id!r} has no before.parent_folder_id; cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.move",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"destination_id": prior_parent,
+                  "destination_path": before.get("parent_folder_path", "")},
+            dry_run_result=f"(undo of {op_id}) move back to "
+                           f"{before.get('parent_folder_path', prior_parent)!r}",
+        )
+
+    if cmd == "mail-copy":
+        new_id = after.get("new_message_id")
+        if not new_id:
+            raise Irreversible(
+                f"mail-copy op {op_id!r} has no after.new_message_id; cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.delete.soft",
+            drive_id=drive_id, item_id=new_id, args={},
+            dry_run_result=f"(undo of {op_id}) soft-delete the copy {new_id!r}",
+        )
+
+    if cmd == "mail-flag":
+        return Operation(
+            op_id=new_op_id(), action="mail.flag",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"status": before.get("status", "notFlagged"),
+                  "start_at": before.get("start_at"),
+                  "due_at": before.get("due_at")},
+            dry_run_result=f"(undo of {op_id}) restore flag "
+                           f"{before.get('status', 'notFlagged')!r}",
+        )
+
+    if cmd == "mail-read":
+        return Operation(
+            op_id=new_op_id(), action="mail.read",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"is_read": bool(before.get("is_read", False))},
+            dry_run_result=f"(undo of {op_id}) set is_read back to "
+                           f"{before.get('is_read', False)}",
+        )
+
+    if cmd == "mail-focus":
+        return Operation(
+            op_id=new_op_id(), action="mail.focus",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"inference_classification":
+                  before.get("inference_classification", "focused")},
+            dry_run_result=f"(undo of {op_id}) restore focus "
+                           f"{before.get('inference_classification', '?')!r}",
+        )
+
+    if cmd == "mail-categorize":
+        return Operation(
+            op_id=new_op_id(), action="mail.categorize",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"categories": list(before.get("categories", []))},
+            dry_run_result=f"(undo of {op_id}) restore categories "
+                           f"{before.get('categories', [])}",
+        )
+
     raise Irreversible(f"no reverse-op known for mail cmd {cmd!r}")
 
 
@@ -178,3 +244,34 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
         "mail.folder.delete",
         "Folder restore from Deleted Items requires manual intervention until Phase 4+.",
     )
+    dispatcher.register("mail.move", lambda b, a: {
+        "action": "mail.move",
+        "args": {"destination_id": b.get("parent_folder_id", "")},
+    })
+    dispatcher.register("mail.copy", lambda b, a: {
+        "action": "mail.delete.soft", "args": {},
+    })
+    dispatcher.register("mail.flag", lambda b, a: {
+        "action": "mail.flag",
+        "args": {"status": b.get("status", "notFlagged"),
+                 "start_at": b.get("start_at"),
+                 "due_at": b.get("due_at")},
+    })
+    dispatcher.register("mail.read", lambda b, a: {
+        "action": "mail.read",
+        "args": {"is_read": bool(b.get("is_read", False))},
+    })
+    dispatcher.register("mail.focus", lambda b, a: {
+        "action": "mail.focus",
+        "args": {"inference_classification": b.get("inference_classification", "focused")},
+    })
+    dispatcher.register("mail.categorize", lambda b, a: {
+        "action": "mail.categorize",
+        "args": {"categories": list(b.get("categories", []))},
+    })
+    # Phase 4 lands the actual execute_soft_delete; Phase 3 registers a
+    # placeholder so preflight (is_registered) returns True and the mail-undo
+    # CLI can route to the deferral branch.
+    dispatcher.register("mail.delete.soft", lambda b, a: {
+        "action": "mail.delete.soft", "args": {},
+    })
