@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import httpx
+
+from fazla_od.audit import AuditLogger
+from fazla_od.graph import GraphClient
+from fazla_od.mutate.clean import (
+    purge_recycle_bin_item,
+    remove_old_versions,
+    revoke_stale_shares,
+)
+from fazla_od.planfile import Operation
+
+
+def _client(handler):
+    return GraphClient(token_provider=lambda: "t",
+                       transport=httpx.MockTransport(handler),
+                       sleep=lambda s: None)
+
+
+def test_recycle_bin_purge_is_explicit_command(tmp_path):
+    """Only od-clean calls permanentDelete; od-delete never does."""
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        return httpx.Response(204)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-1", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "(recycle bin)",
+                                            "name": "old.txt"})
+    assert result.status == "ok"
+    assert any("permanentDelete" in p for _, p in calls)
+
+
+def test_remove_old_versions_keeps_n_most_recent(tmp_path):
+    now = datetime.now(timezone.utc)
+    versions = [
+        {"id": f"v{i}", "lastModifiedDateTime":
+         (now - timedelta(days=i)).isoformat().replace("+00:00", "Z")}
+        for i in range(5)
+    ]
+    deleted: list[str] = []
+
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"value": versions})
+        if request.method == "DELETE":
+            deleted.append(request.url.path.rsplit("/", 1)[-1])
+            return httpx.Response(204)
+        return httpx.Response(405)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-2", action="version-delete",
+                   drive_id="d1", item_id="i1",
+                   args={"keep": 2}, dry_run_result="")
+    result = remove_old_versions(op, _client(handler), logger,
+                                 before={"parent_path": "/", "name": "x"})
+    assert result.status == "ok"
+    assert set(deleted) == {"v2", "v3", "v4"}
+
+
+def test_revoke_stale_shares_only_touches_links_older_than_cutoff(tmp_path):
+    now = datetime.now(timezone.utc)
+    perms = [
+        {"id": "p-fresh",
+         "link": {"createdDateTime":
+                  (now - timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+                  "scope": "anonymous", "type": "view"}},
+        {"id": "p-stale",
+         "link": {"createdDateTime":
+                  (now - timedelta(days=400)).isoformat().replace("+00:00", "Z"),
+                  "scope": "anonymous", "type": "view"}},
+        {"id": "p-owner", "roles": ["owner"]},
+    ]
+    deleted: list[str] = []
+
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"value": perms})
+        if request.method == "DELETE":
+            deleted.append(request.url.path.rsplit("/", 1)[-1])
+            return httpx.Response(204)
+        return httpx.Response(405)
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-3", action="share-revoke",
+                   drive_id="d1", item_id="i1",
+                   args={"older_than_days": 90}, dry_run_result="")
+    result = revoke_stale_shares(op, _client(handler), logger,
+                                 before={"parent_path": "/", "name": "x"})
+    assert result.status == "ok"
+    assert deleted == ["p-stale"]
