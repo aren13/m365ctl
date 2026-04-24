@@ -32,6 +32,9 @@ allow-lists, audit log, and undo on every mutation.
 - Out-of-office + signature management.
 - Triage DSL for bulk rules.
 - Export to EML / MBOX.
+- **Catalog (Phase 7):** `mail catalog refresh` mirrors folders + messages
+  into `cache/mail.duckdb` via Graph `/delta`; `mail catalog status` and
+  `mail search --local` query the cache offline.
 
 ## Quickstart
 
