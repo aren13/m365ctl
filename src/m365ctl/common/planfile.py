@@ -21,12 +21,23 @@ from typing import Any, Literal
 PLAN_SCHEMA_VERSION = 1
 
 Action = Literal[
+    # Current, namespaced.
+    "od.move", "od.rename", "od.copy", "od.delete", "od.restore",
+    "od.label-apply", "od.label-remove", "od.download",
+    "od.version-delete", "od.share-revoke", "od.recycle-purge",
+    # Legacy bare — accepted on read for pre-refactor plans.
     "move", "rename", "copy", "delete", "restore",
     "label-apply", "label-remove", "download",
     "version-delete", "share-revoke", "recycle-purge",
 ]
 
 _VALID_ACTIONS: frozenset[str] = frozenset({
+    # Current, namespaced.
+    "od.move", "od.rename", "od.copy", "od.delete", "od.restore",
+    "od.label-apply", "od.label-remove", "od.download",
+    "od.version-delete", "od.share-revoke", "od.recycle-purge",
+    # Legacy bare actions — accepted on read for pre-refactor plans; never
+    # emitted by new code.
     "move", "rename", "copy", "delete", "restore",
     "label-apply", "label-remove", "download",
     "version-delete", "share-revoke", "recycle-purge",

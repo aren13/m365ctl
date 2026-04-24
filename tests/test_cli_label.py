@@ -96,7 +96,7 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
         "source_cmd": "od-label apply ...",
         "scope": "drive:d1",
         "operations": [
-            {"op_id": f"op-{i}", "action": "label-apply",
+            {"op_id": f"op-{i}", "action": "od.label-apply",
              "drive_id": "d1", "item_id": f"I{i}",
              "args": {"label": "Internal",
                       "site_url": "https://contoso.sharepoint.com/"},

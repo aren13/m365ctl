@@ -119,7 +119,7 @@ def run_move(
     ops = [
         Operation(
             op_id=new_op_id(),
-            action="move",
+            action="od.move",
             drive_id=item.drive_id,
             item_id=item.item_id,
             args={

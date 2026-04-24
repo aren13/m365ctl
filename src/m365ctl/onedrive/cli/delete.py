@@ -93,7 +93,7 @@ def run_delete(
     ops = [
         Operation(
             op_id=new_op_id(),
-            action="delete",
+            action="od.delete",
             drive_id=item.drive_id,
             item_id=item.item_id,
             args={},

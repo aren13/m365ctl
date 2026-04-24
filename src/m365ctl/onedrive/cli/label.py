@@ -14,8 +14,8 @@ from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 
 
 _ACTION_EXECUTORS = {
-    "label-apply": execute_label_apply,
-    "label-remove": execute_label_remove,
+    "od.label-apply": execute_label_apply,
+    "od.label-remove": execute_label_remove,
 }
 
 
@@ -62,7 +62,7 @@ def run_label(
     cfg = load_config(config_path)
     logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
 
-    action = "label-apply" if subcmd == "apply" else "label-remove"
+    action = "od.label-apply" if subcmd == "apply" else "od.label-remove"
 
     if from_plan is not None:
         if not confirm:
@@ -99,7 +99,7 @@ def run_label(
         print("od-label: provide --drive-id, --item-id, --site-url (or --from-plan)",
               file=sys.stderr)
         return 2
-    if action == "label-apply" and not label:
+    if action == "od.label-apply" and not label:
         print("od-label apply: --label is required", file=sys.stderr)
         return 2
 
@@ -114,7 +114,7 @@ def run_label(
         return 2
 
     args_payload: dict = {"site_url": site_url}
-    if action == "label-apply":
+    if action == "od.label-apply":
         args_payload["label"] = label
     op = Operation(
         op_id=new_op_id(), action=action,
@@ -122,7 +122,7 @@ def run_label(
         args=args_payload,
         dry_run_result=(
             f"would apply label {label!r} to {meta['full_path']}"
-            if action == "label-apply"
+            if action == "od.label-apply"
             else f"would remove label from {meta['full_path']}"
         ),
     )

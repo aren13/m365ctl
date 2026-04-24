@@ -71,7 +71,7 @@ def run_rename(
         return 2
 
     op = Operation(
-        op_id=new_op_id(), action="rename",
+        op_id=new_op_id(), action="od.rename",
         drive_id=drive_id, item_id=item_id,
         args={"new_name": new_name},
         dry_run_result=f"would rename {meta['full_path']} -> "

@@ -43,7 +43,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
 
     if cmd == "od-rename":
         return Operation(
-            op_id=new_op_id(), action="rename",
+            op_id=new_op_id(), action="od.rename",
             drive_id=drive_id, item_id=item_id,
             args={"new_name": before["name"]},
             dry_run_result=f"(undo of {op_id}) rename back to {before['name']!r}",
@@ -57,7 +57,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
                 f"{before.get('parent_path', '?')!r} to a drive-item id)."
             )
         return Operation(
-            op_id=new_op_id(), action="move",
+            op_id=new_op_id(), action="od.move",
             drive_id=drive_id, item_id=item_id,
             args={"new_parent_item_id": before["parent_id"]},
             dry_run_result=f"(undo of {op_id}) move back to "
@@ -71,7 +71,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
                 f"copy op {op_id!r} has no recorded new_item_id — cannot undo"
             )
         return Operation(
-            op_id=new_op_id(), action="delete",
+            op_id=new_op_id(), action="od.delete",
             drive_id=after.get("target_drive_id", drive_id),
             item_id=new_item,
             args={},
@@ -84,7 +84,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
         # and leaves the executor with no name/parent_path to pass to the
         # PnP fallback. The audit record captured these at delete time.
         return Operation(
-            op_id=new_op_id(), action="restore",
+            op_id=new_op_id(), action="od.restore",
             drive_id=drive_id, item_id=item_id,
             args={
                 "orig_name": before.get("name", ""),
@@ -109,7 +109,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
                 f"cannot build reverse-op"
             )
         return Operation(
-            op_id=new_op_id(), action="label-remove",
+            op_id=new_op_id(), action="od.label-remove",
             drive_id=drive_id, item_id=item_id,
             args={"site_url": site_url},
             dry_run_result=f"(undo of {op_id}) remove label "
@@ -129,7 +129,7 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
                 f"cannot build reverse-op"
             )
         return Operation(
-            op_id=new_op_id(), action="label-apply",
+            op_id=new_op_id(), action="od.label-apply",
             drive_id=drive_id, item_id=item_id,
             args={"site_url": site_url, "label": prior_label},
             dry_run_result=f"(undo of {op_id}) re-apply {prior_label!r}",

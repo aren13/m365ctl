@@ -54,7 +54,7 @@ def test_recycle_bin_dry_run_emits_plan_of_recycled_items(tmp_path, mocker):
     assert rc == 0
     plan = json.loads(plan_out.read_text())
     actions = [op["action"] for op in plan["operations"]]
-    assert actions == ["recycle-purge", "recycle-purge"]
+    assert actions == ["od.recycle-purge", "od.recycle-purge"]
 
 
 def test_old_versions_plan_one_op_per_item(tmp_path, mocker):
@@ -81,7 +81,7 @@ def test_old_versions_plan_one_op_per_item(tmp_path, mocker):
     assert rc == 0
     plan = json.loads(plan_out.read_text())
     assert len(plan["operations"]) == 1
-    assert plan["operations"][0]["action"] == "version-delete"
+    assert plan["operations"][0]["action"] == "od.version-delete"
     assert plan["operations"][0]["args"]["keep"] == 5
 
 
@@ -117,7 +117,7 @@ def _write_purge_plan(path: Path, drive_id: str, item_id: str, op_id: str) -> No
         "source_cmd": "smoke",
         "scope": "me",
         "operations": [
-            {"op_id": op_id, "action": "recycle-purge",
+            {"op_id": op_id, "action": "od.recycle-purge",
              "drive_id": drive_id, "item_id": item_id,
              "args": {}, "dry_run_result": "smoke"}
         ],
@@ -170,7 +170,7 @@ def test_purge_via_plan_recovers_before_from_prior_delete_audit_record(
     # Rebind the dispatch table to the patched callable.
     mocker.patch.dict(
         "m365ctl.onedrive.cli.clean._ACTION_EXECUTORS",
-        {"recycle-purge": _fake_purge},
+        {"od.recycle-purge": _fake_purge},
     )
 
     rc = run_clean(
@@ -212,7 +212,7 @@ def test_purge_without_prior_delete_audit_warns_operator(
 
     mocker.patch.dict(
         "m365ctl.onedrive.cli.clean._ACTION_EXECUTORS",
-        {"recycle-purge": _fake_purge},
+        {"od.recycle-purge": _fake_purge},
     )
 
     rc = run_clean(

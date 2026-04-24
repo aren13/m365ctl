@@ -27,15 +27,15 @@ from m365ctl.common.safety import ScopeViolation, assert_scope_allowed, filter_b
 
 
 _ACTION_EXECUTORS = {
-    "recycle-purge": purge_recycle_bin_item,
-    "version-delete": remove_old_versions,
-    "share-revoke": revoke_stale_shares,
+    "od.recycle-purge": purge_recycle_bin_item,
+    "od.version-delete": remove_old_versions,
+    "od.share-revoke": revoke_stale_shares,
 }
 
 _SUBCOMMAND_ACTIONS = {
-    "recycle-bin": "recycle-purge",
-    "old-versions": "version-delete",
-    "stale-shares": "share-revoke",
+    "recycle-bin": "od.recycle-purge",
+    "old-versions": "od.version-delete",
+    "stale-shares": "od.share-revoke",
 }
 
 
@@ -125,7 +125,7 @@ def run_clean(
             exec_fn = _ACTION_EXECUTORS[action]
             kwargs: dict = {"before": {"parent_path": meta["parent_path"],
                                        "name": meta["name"]}}
-            if action == "recycle-purge":
+            if action == "od.recycle-purge":
                 kwargs["cfg"] = cfg
             result = exec_fn(op, graph, logger, **kwargs)
             if result.status != "ok":
@@ -155,9 +155,9 @@ def run_clean(
     kept = list(filter_by_scope(candidates, cfg, unsafe_scope=unsafe_scope))
 
     args_payload: dict = {}
-    if action == "version-delete":
+    if action == "od.version-delete":
         args_payload["keep"] = int(keep) if keep is not None else 3
-    elif action == "share-revoke":
+    elif action == "od.share-revoke":
         args_payload["older_than_days"] = (
             int(older_than_days) if older_than_days is not None else 90
         )
@@ -170,9 +170,9 @@ def run_clean(
             item_id=item.item_id,
             args=dict(args_payload),
             dry_run_result=(
-                f"would permanently delete {item.full_path}" if action == "recycle-purge"
+                f"would permanently delete {item.full_path}" if action == "od.recycle-purge"
                 else f"would prune versions on {item.full_path} (keep={args_payload.get('keep', 3)})"
-                if action == "version-delete"
+                if action == "od.version-delete"
                 else f"would revoke shares older than "
                      f"{args_payload.get('older_than_days', 90)}d on {item.full_path}"
             ),
@@ -194,7 +194,7 @@ def run_clean(
             meta = _lookup_item(graph, op.drive_id, op.item_id)
             kwargs: dict = {"before": {"parent_path": meta["parent_path"],
                                        "name": meta["name"]}}
-            if action == "recycle-purge":
+            if action == "od.recycle-purge":
                 kwargs["cfg"] = cfg
             result = exec_fn(op, graph, logger, **kwargs)
             if result.status != "ok":

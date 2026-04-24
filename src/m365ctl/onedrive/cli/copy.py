@@ -100,7 +100,7 @@ def run_copy(
     ops = [
         Operation(
             op_id=new_op_id(),
-            action="copy",
+            action="od.copy",
             drive_id=item.drive_id,
             item_id=item.item_id,
             args={

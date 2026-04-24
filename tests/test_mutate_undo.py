@@ -27,7 +27,7 @@ def test_reverse_rename_restores_original_name(tmp_path):
         before={"parent_path": "/", "name": "old.txt"},
         after={"parent_path": "/", "name": "new.txt"}, result="ok")
     rev = build_reverse_operation(logger, "R1")
-    assert rev.action == "rename"
+    assert rev.action == "od.rename"
     assert rev.args == {"new_name": "old.txt"}
     assert rev.item_id == "i"
 
@@ -40,7 +40,7 @@ def test_reverse_move_moves_back(tmp_path):
         after={"parent_path": "/B", "name": "x", "parent_id": "B"},
         result="ok")
     rev = build_reverse_operation(logger, "M1")
-    assert rev.action == "move"
+    assert rev.action == "od.move"
     assert "new_parent_item_id" in rev.args or "new_parent_path" in rev.args
 
 
@@ -55,7 +55,7 @@ def test_reverse_copy_deletes_the_copy(tmp_path):
                "target_parent_item_id": "P", "new_name": "dup.txt"},
         result="ok")
     rev = build_reverse_operation(logger, "C1")
-    assert rev.action == "delete"
+    assert rev.action == "od.delete"
     assert rev.drive_id == "d2"
     assert rev.item_id == "NEW"
 
@@ -68,7 +68,7 @@ def test_reverse_recycle_delete_is_restore(tmp_path):
         after={"parent_path": "(recycle bin)", "name": "x",
                "recycled_from": "/A"}, result="ok")
     rev = build_reverse_operation(logger, "D1")
-    assert rev.action == "restore"
+    assert rev.action == "od.restore"
     assert rev.drive_id == "d"
     assert rev.item_id == "i"
 
@@ -110,7 +110,7 @@ def test_reverse_label_apply_is_remove(tmp_path):
         after={"parent_path": "/", "name": "x", "label": "Confidential"},
         result="ok")
     rev = build_reverse_operation(logger, "L1")
-    assert rev.action == "label-remove"
+    assert rev.action == "od.label-remove"
     assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 
 
@@ -151,7 +151,7 @@ def test_reverse_label_remove_is_apply_of_prior_label(tmp_path):
         after={"parent_path": "/", "name": "x", "label": None},
         result="ok")
     rev = build_reverse_operation(logger, "L2")
-    assert rev.action == "label-apply"
+    assert rev.action == "od.label-apply"
     assert rev.args["label"] == "Internal"
     assert rev.args["site_url"] == "https://contoso.sharepoint.com/"
 

@@ -44,7 +44,7 @@ def test_dry_run_prints_reverse_op_without_executing(tmp_path, mocker, capsys):
     assert rc == 0
     ex_rename.assert_not_called()
     out = capsys.readouterr().out
-    assert "Reverse op: rename" in out
+    assert "Reverse op: od.rename" in out
     assert "DRY-RUN" in out
 
 
