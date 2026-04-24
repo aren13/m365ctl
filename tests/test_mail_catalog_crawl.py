@@ -25,12 +25,15 @@ def _msg(mid: str, *, folder: str = "fld-inbox", subject: str = "x") -> dict:
 
 def test_crawl_folder_first_run_full_sync(tmp_path: Path) -> None:
     graph = MagicMock()
-    graph.get_paginated.return_value = iter(
-        [
+    # Drain loop: first round yields items + deltaLink, second round
+    # (called from the deltaLink) is empty + deltaLink → loop exits.
+    graph.get_paginated.side_effect = [
+        iter([
             ([_msg("m1"), _msg("m2")], None),
             ([_msg("m3")], "https://graph.microsoft.com/.../delta?token=DELTA1"),
-        ]
-    )
+        ]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+    ]
     with open_catalog(tmp_path / "m.duckdb") as conn:
         outcome = crawl_folder(
             graph,
@@ -57,9 +60,10 @@ def test_crawl_folder_first_run_full_sync(tmp_path: Path) -> None:
 
 def test_crawl_folder_resumes_from_stored_delta_link(tmp_path: Path) -> None:
     graph = MagicMock()
-    graph.get_paginated.return_value = iter(
-        [([_msg("m4")], "https://graph.microsoft.com/.../delta?token=DELTA2")]
-    )
+    graph.get_paginated.side_effect = [
+        iter([([_msg("m4")], "https://graph.microsoft.com/.../delta?token=DELTA2")]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=DELTA2")]),
+    ]
     with open_catalog(tmp_path / "m.duckdb") as conn:
         conn.execute(
             "INSERT INTO mail_deltas (mailbox_upn, folder_id, delta_link, "
@@ -75,11 +79,10 @@ def test_crawl_folder_resumes_from_stored_delta_link(tmp_path: Path) -> None:
             initial_path="/me/mailFolders/fld-inbox/messages/delta",
             page_top=200,
         )
-    # The stored delta_link should have been used as the starting path.
-    args = graph.get_paginated.call_args
-    assert args is not None
-    (called_path, *_), _kw = args.args, args.kwargs
-    assert called_path == "https://stored/delta-prior"
+    # The first pagination call should use the stored delta_link as
+    # the starting path (drain loop subsequently calls from DELTA2).
+    first_call_path = graph.get_paginated.call_args_list[0].args[0]
+    assert first_call_path == "https://stored/delta-prior"
 
 
 def test_crawl_folder_410_sync_state_not_found_restarts(tmp_path: Path) -> None:
@@ -88,6 +91,7 @@ def test_crawl_folder_410_sync_state_not_found_restarts(tmp_path: Path) -> None:
     graph.get_paginated.side_effect = [
         _raises_sync_state_not_found(),
         iter([([_msg("m5")], "https://graph.microsoft.com/.../delta?token=FRESH")]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=FRESH")]),
     ]
     with open_catalog(tmp_path / "m.duckdb") as conn:
         conn.execute(
@@ -147,6 +151,12 @@ def test_refresh_mailbox_picks_default_well_known_folders(tmp_path: Path) -> Non
         + [iter([([], f"delta-{wk}")]) for wk in
            ("inbox", "sentitems", "drafts", "deleteditems")]
     )
+    # Graph's /mailFolders listing doesn't return wellKnownName, so the
+    # crawler resolves each well-known target via graph.get(...) directly.
+    graph.get.side_effect = [
+        {"id": f"fld-{wk}", "displayName": wk.title()}
+        for wk in ("inbox", "sentitems", "drafts", "deleteditems")
+    ]
     with open_catalog(tmp_path / "m.duckdb") as conn:
         outcomes = refresh_mailbox(
             graph,

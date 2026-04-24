@@ -103,12 +103,23 @@ def resolve_folder_path(
     Leading slashes on paths are tolerated (``"/Inbox"`` works).
     """
     # Well-known name fast path.
+    #
+    # Graph's default /mailFolders listing does NOT include the
+    # ``wellKnownName`` field — even on the well-known folders themselves
+    # (verified live, 2026-04-25). So we cannot iterate list_folders and
+    # match on ``well_known_name``. Instead, hit the well-known endpoint
+    # directly: Graph accepts ``inbox``/``drafts``/``sentitems``/etc. as
+    # valid folder identifiers under /mailFolders/{id}.
     if path.strip("/").lower() in _WELL_KNOWN_NAMES:
-        needle = path.strip("/").lower()
-        for folder in list_folders(graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode):
-            if (folder.well_known_name or "").lower() == needle:
-                return folder.id
-        raise FolderNotFound(f"well-known folder {path!r} not found in mailbox")
+        wk = path.strip("/").lower()
+        ub = user_base(mailbox_spec, auth_mode=auth_mode)
+        try:
+            raw = graph.get(f"{ub}/mailFolders/{wk}")
+        except Exception as exc:
+            raise FolderNotFound(
+                f"well-known folder {path!r} not found in mailbox"
+            ) from exc
+        return raw["id"]
 
     # Explicit path.
     target = path.strip("/").lower()

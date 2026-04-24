@@ -111,9 +111,18 @@ class GraphClient:
             retry_after_of=_retry_after_of,
         )
 
-    def get(self, path: str, *, params: dict | None = None) -> dict:
+    def get(
+        self,
+        path: str,
+        *,
+        params: dict | None = None,
+        headers: dict | None = None,
+    ) -> dict:
         def _do() -> dict:
-            resp = self._client.get(path, headers=self._auth_headers(), params=params)
+            merged = self._auth_headers()
+            if headers:
+                merged.update(headers)
+            resp = self._client.get(path, headers=merged, params=params)
             return self._parse(resp)
 
         return self._retry(_do)
@@ -128,11 +137,14 @@ class GraphClient:
 
         return self._retry(_do)
 
-    def get_absolute(self, url: str) -> dict:
+    def get_absolute(self, url: str, *, headers: dict | None = None) -> dict:
         """GET an absolute URL (e.g. an @odata.nextLink)."""
 
         def _do() -> dict:
-            resp = self._client.get(url, headers=self._auth_headers())
+            merged = self._auth_headers()
+            if headers:
+                merged.update(headers)
+            resp = self._client.get(url, headers=merged)
             return self._parse(resp)
 
         return self._retry(_do)
@@ -153,10 +165,14 @@ class GraphClient:
         return self._retry(_do)
 
     def get_paginated(
-        self, path: str, *, params: dict | None = None
+        self,
+        path: str,
+        *,
+        params: dict | None = None,
+        headers: dict | None = None,
     ) -> Iterator[tuple[list[dict], str | None]]:
         """Yield (items, delta_link) for each page (auto-retrying per page)."""
-        body = self.get(path, params=params)
+        body = self.get(path, params=params, headers=headers)
         while True:
             items = body.get("value", [])
             next_link = body.get("@odata.nextLink")
@@ -164,7 +180,7 @@ class GraphClient:
             yield items, delta_link
             if not next_link:
                 return
-            body = self.get_absolute(next_link)
+            body = self.get_absolute(next_link, headers=headers)
 
     def patch(self, path: str, *, json_body: dict, headers: dict | None = None) -> dict:
         """PATCH with JSON body; returns parsed dict; wrapped with _retry.

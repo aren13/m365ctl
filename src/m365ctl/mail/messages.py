@@ -154,6 +154,21 @@ def search_messages_graph(
                 raw = hit.get("resource")
                 if not raw:
                     continue
+                # Search responses sometimes omit ``id`` from the embedded
+                # resource (Graph returns a hit-level ``hitId`` instead).
+                # Backfill to keep Message.from_graph_json's ``raw["id"]``
+                # contract happy. Skip if neither is available.
+                if "id" not in raw:
+                    hit_id = hit.get("hitId")
+                    if not hit_id:
+                        continue
+                    raw = {**raw, "id": hit_id}
+                # ``receivedDateTime`` may also be missing on partial hits;
+                # fall back to ``sentDateTime`` (Message requires received).
+                if "receivedDateTime" not in raw and "sentDateTime" in raw:
+                    raw = {**raw, "receivedDateTime": raw["sentDateTime"]}
+                if "receivedDateTime" not in raw:
+                    continue
                 yield Message.from_graph_json(
                     raw,
                     mailbox_upn=_derive_mailbox_upn("me"),
