@@ -179,6 +179,11 @@ def _inverse_restore(before: dict, after: dict) -> dict:
     return {"action": "od.delete", "args": {}}
 
 
+# Note on label-apply / label-remove builders below: these satisfy the
+# Dispatcher's (before, after) -> dict contract for preflight lookup only.
+# Real-world args including site_url are sourced from the audit record via
+# build_reverse_operation(). If a future refactor wires Dispatcher output
+# directly into the executor, site_url threading must be added here.
 def _inverse_label_apply(before: dict, after: dict) -> dict:
     return {"action": "od.label-remove", "args": {}}
 

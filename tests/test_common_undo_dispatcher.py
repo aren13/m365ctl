@@ -53,7 +53,8 @@ def test_is_registered_and_actions_list():
     assert d.is_registered("mail.send")
     # Legacy normalization also reports registered.
     assert d.is_registered("move")
-    assert sorted(d.actions()) == ["mail.send", "od.move"]
+    # actions() itself must return sorted output — don't re-sort in the assert.
+    assert d.actions() == ["mail.send", "od.move"]
 
 
 @pytest.mark.parametrize("legacy,normalized", [
