@@ -41,10 +41,9 @@ def run_search(
     cfg = load_config(config_path)
 
     # Auth: 'me' -> delegated; everything else -> app-only.
-    if scope == "me":
-        cred = DelegatedCredential(cfg)
-    else:
-        cred = AppOnlyCredential(cfg)
+    cred: DelegatedCredential | AppOnlyCredential = (
+        DelegatedCredential(cfg) if scope == "me" else AppOnlyCredential(cfg)
+    )
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)
 

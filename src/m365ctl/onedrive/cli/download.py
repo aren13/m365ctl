@@ -64,10 +64,9 @@ def run_download(
         return 2
 
     cfg = load_config(config_path)
-    if scope == "me":
-        cred = DelegatedCredential(cfg)
-    else:
-        cred = AppOnlyCredential(cfg)
+    cred: DelegatedCredential | AppOnlyCredential = (
+        DelegatedCredential(cfg) if scope == "me" else AppOnlyCredential(cfg)
+    )
 
     if query is not None:
         with open_catalog(cfg.catalog.path) as conn:
