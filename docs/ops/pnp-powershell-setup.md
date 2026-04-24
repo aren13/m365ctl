@@ -25,7 +25,7 @@ PEM key + PEM cert we use for the Python flow. Run the one-shot helper:
 ```
 
 This produces `~/.config/fazla-od/fazla-od.pfx` (mode 600, gitignored —
-`~/.config/fazla-od/` is outside the repo) and stores a 40-char random
+`~/.config/fazla-od/` is outside the repo) and stores a ~40-char random
 password in macOS Keychain under service `FazlaODToolkit:PfxPassword`,
 account `fazla-od`.
 
@@ -62,5 +62,9 @@ Expected: three site URL + title rows printed, no error.
 
 ## Rotation
 
-When the PEM cert rotates (every 2 years; see spec §3), re-run
-`scripts/ps/convert-cert.sh`. The Keychain entry is overwritten in place.
+When the PEM cert rotates (every 2 years; see spec §3):
+
+1. `rm ~/.config/fazla-od/fazla-od.pfx`
+2. Re-run `./scripts/ps/convert-cert.sh`
+
+The Keychain entry is overwritten in place; no additional steps required.
