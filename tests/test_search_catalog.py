@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.search.catalog_search import catalog_search
+from m365ctl.catalog.db import open_catalog
+from m365ctl.search.catalog_search import catalog_search
 
 
 def _seed(db: Path) -> None:

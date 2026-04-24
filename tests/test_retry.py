@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.retry import RetryExhausted, with_retry
+from m365ctl.retry import RetryExhausted, with_retry
 
 
 def test_retry_returns_result_on_first_success() -> None:

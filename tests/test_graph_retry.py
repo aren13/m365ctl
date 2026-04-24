@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
-from fazla_od.graph import GraphClient, GraphError, is_transient_graph_error
+from m365ctl.graph import GraphClient, GraphError, is_transient_graph_error
 
 
 def _seq_handler(responses: list[httpx.Response]):

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.cli.download import run_download
-from fazla_od.download.fetcher import FetchResult
+from m365ctl.catalog.db import open_catalog
+from m365ctl.cli.download import run_download
+from m365ctl.download.fetcher import FetchResult
 
 
 def _cfg(tmp_path: Path):
@@ -21,10 +21,10 @@ def _cfg(tmp_path: Path):
 
 def test_download_single_item(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
     captured = []
 
@@ -34,7 +34,7 @@ def test_download_single_item(tmp_path, mocker) -> None:
         dest.write_bytes(b"X" * 10)
         return FetchResult(drive_id, item_id, dest, 10, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
 
     dest = tmp_path / "out"
     rc = run_download(
@@ -51,10 +51,10 @@ def test_download_single_item(tmp_path, mocker) -> None:
 
 def test_download_from_plan(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     plan = tmp_path / "plan.json"
@@ -73,7 +73,7 @@ def test_download_from_plan(tmp_path, mocker) -> None:
         dest.write_bytes(b"")
         return FetchResult(drive_id, item_id, dest, 0, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
 
     dest = tmp_path / "out"
     rc = run_download(
@@ -92,10 +92,10 @@ def test_download_from_plan(tmp_path, mocker) -> None:
 
 def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     with open_catalog(cfg.catalog.path) as conn:
@@ -105,7 +105,7 @@ def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
         )
 
     mocker.patch(
-        "fazla_od.cli.download.fetch_item",
+        "m365ctl.cli.download.fetch_item",
         side_effect=AssertionError("fetch_item should not be called in plan-out mode"),
     )
     plan_out = tmp_path / "plan.json"
@@ -126,9 +126,9 @@ def test_download_query_emits_plan_out(tmp_path, mocker) -> None:
 
 def test_download_requires_exactly_one_source(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential", return_value=MagicMock())
-    mocker.patch("fazla_od.cli.download.DelegatedCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.cli.download.DelegatedCredential", return_value=MagicMock())
     rc = run_download(
         config_path=tmp_path / "config.toml",
         item_id=None, drive_id=None,
@@ -141,10 +141,10 @@ def test_download_requires_exactly_one_source(tmp_path, mocker) -> None:
 
 def test_download_dest_defaults_to_timestamped_workspace(tmp_path, mocker) -> None:
     cfg = _cfg(tmp_path)
-    mocker.patch("fazla_od.cli.download.load_config", return_value=cfg)
-    mocker.patch("fazla_od.cli.download.AppOnlyCredential",
+    mocker.patch("m365ctl.cli.download.load_config", return_value=cfg)
+    mocker.patch("m365ctl.cli.download.AppOnlyCredential",
                  return_value=MagicMock(get_token=lambda: "tok"))
-    mocker.patch("fazla_od.cli.download.DelegatedCredential",
+    mocker.patch("m365ctl.cli.download.DelegatedCredential",
                  return_value=MagicMock(get_token=lambda: "dtok"))
 
     captured: list[Path] = []
@@ -155,9 +155,9 @@ def test_download_dest_defaults_to_timestamped_workspace(tmp_path, mocker) -> No
         dest.write_bytes(b"")
         return FetchResult(drive_id, item_id, dest, 0, False)
 
-    mocker.patch("fazla_od.cli.download.fetch_item", side_effect=fake_fetch)
+    mocker.patch("m365ctl.cli.download.fetch_item", side_effect=fake_fetch)
     monkey_now = "20260424-101530"
-    mocker.patch("fazla_od.cli.download._timestamp", return_value=monkey_now)
+    mocker.patch("m365ctl.cli.download._timestamp", return_value=monkey_now)
 
     rc = run_download(
         config_path=tmp_path / "config.toml",

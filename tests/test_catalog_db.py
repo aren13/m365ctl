@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.catalog.db import open_catalog
+from m365ctl.catalog.db import open_catalog
 
 
 def test_open_catalog_creates_file_and_applies_schema(tmp_path: Path) -> None:

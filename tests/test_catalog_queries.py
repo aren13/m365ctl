@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.catalog.db import open_catalog
-from fazla_od.catalog.queries import (
+from m365ctl.catalog.db import open_catalog
+from m365ctl.catalog.queries import (
     by_owner,
     duplicates,
     stale_since,

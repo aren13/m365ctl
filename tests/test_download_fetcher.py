@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from fazla_od.download.fetcher import FetchResult, fetch_item
+from m365ctl.download.fetcher import FetchResult, fetch_item
 
 
 def _transport_redirect_then_200(body: bytes, redirect_url: str):

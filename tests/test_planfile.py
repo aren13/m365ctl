@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.planfile import (
+from m365ctl.planfile import (
     PLAN_SCHEMA_VERSION,
     Operation,
     Plan,
@@ -111,7 +111,7 @@ def test_load_plan_rejects_missing_op_fields(tmp_path: Path) -> None:
 
 
 def test_new_op_id_generates_uuid4() -> None:
-    from fazla_od.planfile import new_op_id
+    from m365ctl.planfile import new_op_id
     a, b = new_op_id(), new_op_id()
     assert a != b
     assert len(a) == 36 and a.count("-") == 4

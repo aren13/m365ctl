@@ -7,4 +7,4 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m fazla_od.cli auth "$@"
+exec uv run --project "$REPO" python -m m365ctl.cli auth "$@"

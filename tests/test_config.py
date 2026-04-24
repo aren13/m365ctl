@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.config import Config, ConfigError, load_config
+from m365ctl.config import Config, ConfigError, load_config
 
 
 def _valid_toml(tmp_path: Path) -> Path:

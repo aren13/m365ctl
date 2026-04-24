@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fazla_od.catalog.crawl import DriveSpec, resolve_scope
+from m365ctl.catalog.crawl import DriveSpec, resolve_scope
 
 
 def test_resolve_scope_site_by_numeric_id_lists_drives() -> None:
@@ -104,7 +104,7 @@ def test_resolve_scope_tenant_enumerates_users_and_sites() -> None:
                     "owner": {"user": {"email": "a@fazla.com"}}}
         if path == "/users/u2/drive":
             # Simulate a user without a provisioned drive (HTTP 404 → raises)
-            from fazla_od.graph import GraphError
+            from m365ctl.graph import GraphError
             raise GraphError("itemNotFound: no drive")
         if path == "/sites" and params == {"search": "*"}:
             return {"value": [
@@ -147,7 +147,7 @@ def test_resolve_scope_tenant_skips_notallowed_access_blocked() -> None:
                     "driveType": "business",
                     "owner": {"user": {"email": "a@fazla.com"}}}
         if path == "/users/u-blocked/drive":
-            from fazla_od.graph import GraphError
+            from m365ctl.graph import GraphError
             raise GraphError(
                 "notAllowed: Access to this site has been blocked."
             )
@@ -177,7 +177,7 @@ def test_resolve_scope_tenant_skips_resourcenotfound_mysite() -> None:
                     "driveType": "business",
                     "owner": {"user": {"email": "a@fazla.com"}}}
         if path == "/users/u-guest/drive":
-            from fazla_od.graph import GraphError
+            from m365ctl.graph import GraphError
             raise GraphError("ResourceNotFound: User's mysite not found.")
         if path == "/sites" and params == {"search": "*"}:
             return {"value": []}

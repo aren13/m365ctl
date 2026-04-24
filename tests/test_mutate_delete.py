@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from fazla_od.audit import AuditLogger, iter_audit_entries
-from fazla_od.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
-from fazla_od.graph import GraphClient
-from fazla_od.mutate.delete import execute_recycle_delete, execute_restore
-from fazla_od.planfile import Operation
+from m365ctl.audit import AuditLogger, iter_audit_entries
+from m365ctl.config import CatalogConfig, Config, LoggingConfig, ScopeConfig
+from m365ctl.graph import GraphClient
+from m365ctl.mutate.delete import execute_recycle_delete, execute_restore
+from m365ctl.planfile import Operation
 
 
 def _client(handler):
@@ -91,7 +91,7 @@ def test_restore_notsupported_wraps_with_manual_instructions(tmp_path, mocker):
         )
 
     # Simulate pwsh not on PATH — fallback unavailable, legacy wrap applies.
-    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
                  side_effect=FileNotFoundError("pwsh: not found"))
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -132,7 +132,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
         "restored_parent_path": "/Shared Documents/_fazla_smoke",
     })
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    run = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -191,7 +191,7 @@ def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_pat
         "restored_parent_path": "_fazla_smoke2",
     })
     completed.stderr = ""
-    run = mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    run = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -272,7 +272,7 @@ def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Set-PnPRecycleBinItem: no match"
-    mocker.patch("fazla_od.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
                  return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")

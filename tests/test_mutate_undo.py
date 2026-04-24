@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.mutate.undo import Irreversible, build_reverse_operation
+from m365ctl.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.mutate.undo import Irreversible, build_reverse_operation
 
 
 def _ap(logger: AuditLogger, op_id: str, cmd: str, args: dict,
