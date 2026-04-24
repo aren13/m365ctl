@@ -40,7 +40,9 @@ def _confirm_via_tty(prompt: str) -> bool:
     """Read y/N from /dev/tty directly. Returns False if no TTY.
 
     Opens /dev/tty read-write and prompts there; an agent piping into
-    the command's stdin cannot intercept this.
+    the command's stdin cannot intercept this. Returning ``False`` is the
+    only rejection signal — callers do not distinguish between "no TTY"
+    and "user said no"; both are treated as "don't proceed".
     """
     try:
         with open("/dev/tty", "r+", encoding="utf-8") as tty:
@@ -61,6 +63,13 @@ def _drive_allowed(item: _HasScopeFields, cfg: Config) -> bool:
 
 
 def _deny_match(item: _HasScopeFields, cfg: Config) -> str | None:
+    """Return the first matching deny pattern, or None.
+
+    Uses fnmatch glob semantics. Patterns ending in ``/**`` additionally
+    match the bare parent directory itself — so ``/HR/**`` blocks both
+    ``/HR`` and ``/HR/anything/deeper`` under a single rule. This closes
+    the fnmatch gap where ``fnmatch("/HR", "/HR/**")`` returns False.
+    """
     for pattern in cfg.scope.deny_paths:
         if fnmatch.fnmatch(item.full_path, pattern):
             return pattern
@@ -94,6 +103,10 @@ def assert_scope_allowed(
     if _drive_allowed(item, cfg):
         return
 
+    # Note: `cfg.scope.unsafe_requires_flag` is intentionally NOT consulted here.
+    # The CLI layer decides whether `--unsafe-scope` may be passed based on that
+    # config field. By the time we get here, `unsafe_scope` is the authoritative
+    # caller intent.
     if not unsafe_scope:
         raise ScopeViolation(
             f"drive {item.drive_id!r} not in scope.allow_drives; "
