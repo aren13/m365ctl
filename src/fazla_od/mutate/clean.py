@@ -85,13 +85,15 @@ def _purge_via_pnp(
     """
     leaf = before.get("name", "")
     dir_name = normalize_recycle_dir_name(before.get("parent_path", ""))
+    # Don't pass -PfxPath: cfg.cert_path is the PEM key, not the PFX that
+    # PnP needs. The PS script defaults to ~/.config/fazla-od/fazla-od.pfx
+    # (set up per docs/ops/pnp-powershell-setup.md); let that default win.
     code, out, err = invoke_pwsh(_PURGE_PS1, [
         "-Tenant", cfg.tenant_id,
         "-ClientId", cfg.client_id,
         "-SiteUrl", site_url,
         "-LeafName", leaf,
         "-DirName", dir_name,
-        "-PfxPath", str(cfg.cert_path),
     ])
     if code != 0:
         msg = (err or out or "").strip()
