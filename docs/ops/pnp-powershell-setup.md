@@ -55,7 +55,7 @@ Expected: the PFX exists; the password is ~40 characters.
 ## 3. Confirm the Entra app has the same cert thumbprint
 
 The PFX is built from the exact same PEM key+cert that Plan 1 uploaded to
-Entra (thumbprint `C38CC9B49D5E4D326B4A79ECAF33CD65B008BCBF`). No new cert
+Entra (thumbprint `<your-cert-thumbprint>`). No new cert
 upload is required.
 
 ## 3b. Grant the Entra app SharePoint-API permissions (NOT just Graph)
@@ -91,8 +91,8 @@ pwsh -NoLogo -Command '
         security find-generic-password -a fazla-od -s FazlaODToolkit:PfxPassword -w
     ) -AsPlainText -Force
     Connect-PnPOnline `
-        -Tenant 361efb70-ca20-41ae-b204-9045df001350 `
-        -ClientId b22e6fd3-4859-43ae-b997-997ad3aaf14b `
+        -Tenant <your-tenant-id> `
+        -ClientId <your-client-id> `
         -CertificatePath "$HOME/.config/fazla-od/fazla-od.pfx" `
         -CertificatePassword $pwd `
         -Url https://fazla.sharepoint.com

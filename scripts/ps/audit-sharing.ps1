@@ -23,7 +23,7 @@
 
 .EXAMPLE
   pwsh scripts/ps/audit-sharing.ps1 -Scope "site:fazla.sharepoint.com,abc,def" \
-      -Tenant 361efb70-... -ClientId b22e6fd3-...
+      -Tenant <your-tenant-id> -ClientId <your-client-id>
 #>
 param(
     [Parameter(Mandatory=$true)] [string] $Scope,

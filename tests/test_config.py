@@ -9,8 +9,8 @@ def _valid_toml(tmp_path: Path) -> Path:
     p = tmp_path / "config.toml"
     p.write_text(
         """
-tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
-client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
 cert_path    = "~/.config/fazla-od/fazla-od.key"
 cert_public  = "~/.config/fazla-od/fazla-od.cer"
 default_auth = "delegated"
@@ -35,8 +35,8 @@ ops_dir = "logs/ops"
 def test_load_returns_config_with_parsed_fields(tmp_path: Path) -> None:
     cfg = load_config(_valid_toml(tmp_path))
     assert isinstance(cfg, Config)
-    assert cfg.tenant_id == "361efb70-ca20-41ae-b204-9045df001350"
-    assert cfg.client_id == "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
+    assert cfg.tenant_id == "00000000-0000-0000-0000-000000000000"
+    assert cfg.client_id == "11111111-1111-1111-1111-111111111111"
     assert cfg.default_auth == "delegated"
     assert cfg.scope.allow_drives == ["me"]
 
