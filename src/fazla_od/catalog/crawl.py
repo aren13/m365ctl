@@ -13,6 +13,16 @@ class _GraphLike(Protocol):
     def get_paginated(self, path: str, *, params: dict | None = ...): ...
 
 
+# Error-code substrings that signal "this user/site is unreachable; skip it".
+# Used during tenant-scope enumeration so one bad user or site doesn't abort
+# the whole scan. Transient errors (429/503/5xx) never reach these branches —
+# ``with_retry`` exhausts them upstream.
+_SKIP_TOKENS: tuple[str, ...] = (
+    "itemNotFound", "HTTP404", "HTTP403", "HTTP410",
+    "ResourceNotFound", "notAllowed", "accessDenied",
+)
+
+
 @dataclass(frozen=True)
 class DriveSpec:
     drive_id: str
@@ -188,22 +198,29 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
             # All of these mean "we can't crawl this user" — skip silently,
             # don't abort the whole tenant scan. Transient errors (429/503)
             # never reach here because with_retry has already exhausted them.
-            msg = str(exc)
-            _SKIP_TOKENS = (
-                "itemNotFound", "HTTP404", "HTTP403", "HTTP410",
-                "ResourceNotFound", "notAllowed", "accessDenied",
-            )
-            if any(t in msg for t in _SKIP_TOKENS):
+            if any(t in str(exc) for t in _SKIP_TOKENS):
                 continue
             raise
         specs.append(
             _drive_from_meta(meta, graph_path=f"/drives/{meta['id']}/root/delta")
         )
 
-    # Sites → each site's drives.
+    # Sites → each site's drives. Apply the same skip semantics as the user
+    # loop: some sites (personal / private-channel / retention-held) 403 or
+    # 404 on direct GET even though they appear in the tenant-wide search.
     for site in _collect("/sites", params={"search": "*"}):
-        site_full = graph.get(f"/sites/{site['id']}")
-        specs.extend(_drives_of_site(site_full, graph))
+        try:
+            site_full = graph.get(f"/sites/{site['id']}")
+        except GraphError as exc:
+            if any(t in str(exc) for t in _SKIP_TOKENS):
+                continue
+            raise
+        try:
+            specs.extend(_drives_of_site(site_full, graph))
+        except GraphError as exc:
+            if any(t in str(exc) for t in _SKIP_TOKENS):
+                continue
+            raise
     return specs
 
 
