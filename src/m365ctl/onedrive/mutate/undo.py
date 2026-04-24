@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from m365ctl.common.audit import AuditLogger, find_op_by_id
 from m365ctl.common.planfile import Operation, new_op_id
+from m365ctl.common.undo import Dispatcher
 
 
 class Irreversible(RuntimeError):
@@ -147,3 +148,72 @@ def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
         )
 
     raise Irreversible(f"no reverse-op known for cmd {cmd!r}")
+
+
+# --- Dispatcher registration ---------------------------------------------
+# Lightweight `(before, after) -> dict` inverse builders that the
+# domain-agnostic `common.undo.Dispatcher` consumes. They produce a minimal
+# `{"action": ..., "args": {...}}` spec describing the inverse op. The CLI
+# still delegates actual executor routing through `build_reverse_operation`
+# (which reads the full audit log record); the Dispatcher is used for
+# preflight: action lookup, legacy normalization, and irreversible rejection.
+
+
+def _inverse_rename(before: dict, after: dict) -> dict:
+    return {"action": "od.rename",
+            "args": {"new_name": before.get("name", "")}}
+
+
+def _inverse_move(before: dict, after: dict) -> dict:
+    return {"action": "od.move",
+            "args": {"new_parent_item_id": before.get("parent_id", "")}}
+
+
+def _inverse_delete(before: dict, after: dict) -> dict:
+    return {"action": "od.restore",
+            "args": {"orig_name": before.get("name", ""),
+                     "orig_parent_path": before.get("parent_path", "")}}
+
+
+def _inverse_restore(before: dict, after: dict) -> dict:
+    return {"action": "od.delete", "args": {}}
+
+
+def _inverse_label_apply(before: dict, after: dict) -> dict:
+    return {"action": "od.label-remove", "args": {}}
+
+
+def _inverse_label_remove(before: dict, after: dict) -> dict:
+    return {"action": "od.label-apply",
+            "args": {"label": before.get("label", "")}}
+
+
+def register_od_inverses(dispatcher: Dispatcher) -> None:
+    """Register every OneDrive inverse builder on the supplied dispatcher."""
+    dispatcher.register("od.rename", _inverse_rename)
+    dispatcher.register("od.move", _inverse_move)
+    dispatcher.register("od.delete", _inverse_delete)
+    dispatcher.register("od.restore", _inverse_restore)
+    dispatcher.register("od.label-apply", _inverse_label_apply)
+    dispatcher.register("od.label-remove", _inverse_label_remove)
+    # Irreversible OneDrive verbs.
+    dispatcher.register_irreversible(
+        "od.copy",
+        "Copy target lives only as a new item; delete the copy to 'undo'.",
+    )
+    dispatcher.register_irreversible(
+        "od.download",
+        "Downloads are local-file artifacts; delete the file to 'undo'.",
+    )
+    dispatcher.register_irreversible(
+        "od.version-delete",
+        "Deleted file versions cannot be restored via Graph.",
+    )
+    dispatcher.register_irreversible(
+        "od.share-revoke",
+        "Revoked sharing links cannot be restored; re-share explicitly.",
+    )
+    dispatcher.register_irreversible(
+        "od.recycle-purge",
+        "Purged recycle-bin items are irrecoverable.",
+    )

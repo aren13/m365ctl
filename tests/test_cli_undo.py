@@ -87,3 +87,16 @@ def test_irreversible_op_exits_2(tmp_path, mocker, capsys):
     err = capsys.readouterr().err
     assert "irreversible" in err.lower()
     assert "permanently" in err.lower()
+
+
+def test_normalize_legacy_bare_action_in_dispatcher():
+    """A bare legacy action like 'move' must resolve via the registered `od.move` inverse."""
+    from m365ctl.common.undo import Dispatcher, normalize_legacy_action
+    from m365ctl.onedrive.mutate.undo import register_od_inverses
+
+    d = Dispatcher()
+    register_od_inverses(d)
+
+    assert normalize_legacy_action("move") == "od.move"
+    assert d.is_registered("move")     # via normalization
+    assert d.is_registered("od.move")  # direct
