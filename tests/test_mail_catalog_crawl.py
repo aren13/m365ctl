@@ -122,6 +122,62 @@ def test_crawl_folder_410_sync_state_not_found_restarts(tmp_path: Path) -> None:
     assert second_call_path == "/me/mailFolders/fld-inbox/messages/delta"
 
 
+def test_crawl_folder_respects_max_rounds(tmp_path: Path) -> None:
+    """When max_rounds is set, drain stops after N rounds and persists the
+    deltaLink from the last completed round so subsequent refreshes resume."""
+    graph = MagicMock()
+    # Three rounds of content; cap at 2 → we MUST NOT request the 3rd round.
+    graph.get_paginated.side_effect = [
+        iter([([_msg("m1"), _msg("m2")],
+               "https://graph.microsoft.com/.../delta?token=ROUND1")]),
+        iter([([_msg("m3")],
+               "https://graph.microsoft.com/.../delta?token=ROUND2")]),
+        iter([([_msg("m4")],
+               "https://graph.microsoft.com/.../delta?token=ROUND3")]),
+    ]
+    with open_catalog(tmp_path / "m.duckdb") as conn:
+        outcome = crawl_folder(
+            graph,
+            conn=conn,
+            mailbox_upn="me",
+            folder_id="fld-inbox",
+            folder_path="Inbox",
+            initial_path="/me/mailFolders/fld-inbox/messages/delta",
+            page_top=200,
+            max_rounds=2,
+        )
+        assert outcome.messages_seen == 3  # m1, m2 from round 1 + m3 from round 2
+        assert outcome.truncated is True
+        assert outcome.delta_link.endswith("ROUND2")
+        # Third round must NOT have been requested.
+        assert graph.get_paginated.call_count == 2
+        (link,) = conn.execute(
+            "SELECT delta_link FROM mail_deltas "
+            "WHERE mailbox_upn = 'me' AND folder_id = 'fld-inbox'"
+        ).fetchone()
+        assert link.endswith("ROUND2")
+
+
+def test_crawl_folder_no_cap_sets_truncated_false(tmp_path: Path) -> None:
+    """Without --max-rounds, a normal full drain reports truncated=False."""
+    graph = MagicMock()
+    graph.get_paginated.side_effect = [
+        iter([([_msg("m1")], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+    ]
+    with open_catalog(tmp_path / "m.duckdb") as conn:
+        outcome = crawl_folder(
+            graph,
+            conn=conn,
+            mailbox_upn="me",
+            folder_id="fld-inbox",
+            folder_path="Inbox",
+            initial_path="/me/mailFolders/fld-inbox/messages/delta",
+            page_top=200,
+        )
+        assert outcome.truncated is False
+
+
 def _raises_sync_state_not_found():
     def _gen():
         raise GraphError("HTTP410 syncStateNotFound: token expired")

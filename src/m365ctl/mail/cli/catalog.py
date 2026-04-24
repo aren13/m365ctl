@@ -61,9 +61,14 @@ def _run_refresh(args: argparse.Namespace) -> int:
             mailbox_upn=mailbox_upn,
             auth_mode=auth_mode,
             folder_filter=folder_filter,
+            max_rounds=args.max_rounds,
         )
     for o in outcomes:
-        marker = " [restarted]" if o.status == "restarted" else ""
+        marker = ""
+        if o.status == "restarted":
+            marker += " [restarted]"
+        if o.truncated:
+            marker += " [truncated — re-run to continue]"
         print(f"  {o.folder_path:<24} {o.messages_seen:>6} messages{marker}")
     print(f"Done. {len(outcomes)} folder(s) refreshed.")
     return 0
@@ -102,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="'me' | 'upn:<addr>' | 'shared:<addr>' (default: me)")
     refresh.add_argument("--folder",
                          help="Restrict refresh to one folder (path or well-known name).")
+    refresh.add_argument(
+        "--max-rounds", type=int, default=None, metavar="N",
+        help=("Stop after N delta rounds per folder; the deltaLink is saved "
+              "so a subsequent refresh resumes."),
+    )
     refresh.add_argument("--unsafe-scope", action="store_true")
 
     status = sub.add_parser("status", help="Print catalog summary.")
