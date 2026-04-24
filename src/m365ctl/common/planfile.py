@@ -29,6 +29,11 @@ Action = Literal[
     "move", "rename", "copy", "delete", "restore",
     "label-apply", "label-remove", "download",
     "version-delete", "share-revoke", "recycle-purge",
+    # Phase 2 — mail folder + category CRUD.
+    "mail.folder.create", "mail.folder.rename",
+    "mail.folder.move", "mail.folder.delete",
+    "mail.categories.add", "mail.categories.update",
+    "mail.categories.remove",
 ]
 
 _VALID_ACTIONS: frozenset[str] = frozenset({
@@ -41,6 +46,11 @@ _VALID_ACTIONS: frozenset[str] = frozenset({
     "move", "rename", "copy", "delete", "restore",
     "label-apply", "label-remove", "download",
     "version-delete", "share-revoke", "recycle-purge",
+    # Phase 2 — mail folder + category CRUD.
+    "mail.folder.create", "mail.folder.rename",
+    "mail.folder.move", "mail.folder.delete",
+    "mail.categories.add", "mail.categories.update",
+    "mail.categories.remove",
 })
 
 _REQUIRED_OP_FIELDS = ("op_id", "action", "drive_id", "item_id", "args")

@@ -115,3 +115,46 @@ def test_new_op_id_generates_uuid4() -> None:
     a, b = new_op_id(), new_op_id()
     assert a != b
     assert len(a) == 36 and a.count("-") == 4
+
+
+def test_plan_loader_accepts_mail_folder_actions(tmp_path):
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
+    import json
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({
+        "version": PLAN_SCHEMA_VERSION,
+        "created_at": "2026-04-24T00:00:00Z",
+        "source_cmd": "mail-folders move",
+        "scope": "me",
+        "operations": [
+            {"op_id": "1", "action": "mail.folder.create", "drive_id": "me", "item_id": "inbox", "args": {"name": "Triage"}},
+            {"op_id": "2", "action": "mail.folder.rename", "drive_id": "me", "item_id": "f1", "args": {"new_name": "Triaged"}},
+            {"op_id": "3", "action": "mail.folder.move", "drive_id": "me", "item_id": "f1", "args": {"destination_id": "archive"}},
+            {"op_id": "4", "action": "mail.folder.delete", "drive_id": "me", "item_id": "f1", "args": {}},
+        ],
+    }))
+    plan = load_plan(path)
+    assert len(plan.operations) == 4
+    assert [op.action for op in plan.operations] == [
+        "mail.folder.create", "mail.folder.rename",
+        "mail.folder.move", "mail.folder.delete",
+    ]
+
+
+def test_plan_loader_accepts_mail_categories_actions(tmp_path):
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
+    import json
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({
+        "version": PLAN_SCHEMA_VERSION,
+        "created_at": "2026-04-24T00:00:00Z",
+        "source_cmd": "mail-categories sync",
+        "scope": "me",
+        "operations": [
+            {"op_id": "1", "action": "mail.categories.add", "drive_id": "me", "item_id": "", "args": {"name": "Waiting", "color": "preset0"}},
+            {"op_id": "2", "action": "mail.categories.update", "drive_id": "me", "item_id": "c1", "args": {"name": "Waiting-New"}},
+            {"op_id": "3", "action": "mail.categories.remove", "drive_id": "me", "item_id": "c1", "args": {}},
+        ],
+    }))
+    plan = load_plan(path)
+    assert len(plan.operations) == 3
