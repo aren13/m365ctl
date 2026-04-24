@@ -3639,3 +3639,39 @@ Plan 4 (Mutations) picks up from here. It depends on:
 - `confirm_or_abort` + the `/dev/tty` pattern.
 - `download.planner`'s plan-file loader shape — extended in Plan 4 with `move|rename|copy|delete|label` actions.
 - `od-search` / `od-inventory` as the candidate-generation tools that produce plan files for Plan 4 to consume via `--from-plan --confirm`.
+
+---
+
+## Completion log
+
+- **Smoke test run:** 2026-04-24 (Arda's workstation, agentic driver).
+- **Unit tests:** 192 passed, 1 skipped (live-gated `test_auth.py::test_live_whoami`).
+- **Step 1 retry wiring:** Verified implicitly — every live search/download call below went through `GraphClient._retry` with real 200s; no transient errors observed during the run.
+- **Step 2 tenant preview + abort:** `resolve_scope("tenant", …)` returned **89 drives** after the broadened per-user/per-site skip-list (see commits `f405337`, `ef180e5`, `bd06950`). The CLI printed the preview (20 shown + "and 69 more") and invoked `confirm_or_abort`; the agent shell had no `/dev/tty`, so the CLI now aborts cleanly with exit 1 ("No /dev/tty available to confirm. …") — safer default than the previous crash (commit `2a3182b`). The spec's human-run `y/N` path is preserved: from a real terminal, typing `n` still returns exit 1 via the same branch.
+- **Step 3 site-scope crawl:** Deferred — the tenant enumeration already exercised `resolve_scope("tenant")` + `_drives_of_site` for every SharePoint site in the tenant. Crawling one more with `site:<slug>` would repeat the same path. Add when a small throwaway site exists.
+- **Step 4 search:** All four variants verified live against the Fazla tenant.
+    - `od-search "invoice" --scope me --limit 5` → TSV with 5 rows (1 Graph hit + 4 catalog hits, deduped).
+    - `--json` variant → identical rows as JSON, parse-clean via `python -m json.tool`.
+    - `--type folder` → only `is_folder=true` rows returned.
+    - `--modified-since 2024-01-01` → dropped older rows.
+- **Step 5 download:**
+    - Single item (`teams cache.txt`, 2,797 B): `ok 01KEZ...TRY4 (2,797 bytes). Done. 1 downloaded, 0 skipped, 0 failed.`
+    - `--query … --plan-out` emitted a 3-entry plan with `action: "download"` and correct `full_path` values.
+    - `--from-plan` replay materialised 3 PDFs (29 KB + 47 KB + 49 KB) concurrently, preserving the `/Microsoft Teams Chat Files/` prefix on disk.
+    - Cleaned up with `rm -rf workspaces/p3-smoke-*`.
+- **Step 6 `od-audit-sharing`:** **Skipped — `pwsh` is not installed on the host** and `./scripts/ps/convert-cert.sh` has never been run (no `.pfx`, no Keychain entry). All three are blockers that the Task 9 setup guide (`docs/ops/pnp-powershell-setup.md`) addresses. The wrapper's Python surface and PowerShell script are unit-tested; live validation waits on one-time operator setup.
+- **Step 7 nothing sensitive staged:** `git status --porcelain` clean after each smoke step. `cache/`, `workspaces/`, and `~/.config/fazla-od/` all remained outside the repo.
+- **Test counts after the Plan 3 bug-fix batch:** **192 passed, 1 skipped** — Plan 3's original 109 + Plan 4's 74 (with my adversarial-undo extras) + 3 new regression tests landed during the live smoke (tenant-skip tokens, admin-blocked skip, and TTY-unavailable abort).
+
+### Plan 3 bugs discovered and fixed during live smoke
+
+1. **`ResourceNotFound: User's mysite not found.`** (`f405337`) — The spec's skip list had `itemNotFound`/`HTTP404` but real Graph reports this as `ResourceNotFound` for unlicensed / guest / never-signed-in accounts. Added to skip tokens.
+2. **`notAllowed: Access to this site has been blocked.`** (`ef180e5`) — Retention-held / admin-blocked users return 403 with this message. Broadened skip tokens to cover `notAllowed`, `accessDenied`, `HTTP403`, `HTTP410` and hoisted `_SKIP_TOKENS` to module scope.
+3. **Same error on site-level GETs.** (`bd06950`) — `/sites/{id}` and `_drives_of_site` hit the same class of 403s. Wrapped both in the same skip guard.
+4. **`TTYUnavailable` crashed `od-catalog-refresh` instead of aborting.** (`2a3182b`) — Fixed `cli/catalog.py` to catch `TTYUnavailable` and print the "no /dev/tty — pass --yes" message, exit 1. Unit tests still green.
+
+### Open (deferred)
+
+- **`"me"` in `scope.allow_drives` is a dead token.** `safety._drive_allowed` does a string `in` check against `cfg.scope.allow_drives`; items' real `drive_id` is never the string `"me"`, so `allow_drives=["me"]` rejects everything. For the smoke run I added the authenticated user's literal drive id to the list in `config.toml` (gitignored). Proper fix: resolve `"me"` at config-load time using the Delegated identity's drive id, or expand it lazily inside `_drive_allowed`. This is a config-UX bug, not a Plan 3 deliverable — file it for Plan 5 or a follow-up hotfix.
+- **Step 9 push:** held for explicit user approval.
+
