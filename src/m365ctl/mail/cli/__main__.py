@@ -19,6 +19,9 @@ Phase 3 (safe message mutations):
 - read          mark read / unread
 - focus         set inferenceClassification (focused / other)
 - categorize    add / remove / set categories
+
+Phase 4 (soft delete):
+- delete        soft-delete messages (→ Deleted Items, reversible via `undo`)
 """
 from __future__ import annotations
 
@@ -46,6 +49,8 @@ _USAGE = (
     "  read         mark read / unread\n"
     "  focus        set inferenceClassification\n"
     "  categorize   add / remove / set categories\n"
+    "  delete       soft-delete messages (→ Deleted Items)\n"
+    "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
 
@@ -88,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.focus import main as f
     elif verb == "categorize":
         from m365ctl.mail.cli.categorize import main as f
+    elif verb == "delete":
+        from m365ctl.mail.cli.delete import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
