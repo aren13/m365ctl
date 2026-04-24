@@ -120,29 +120,36 @@ def size_per_folder(
     return _rows_as_dicts(cur)
 
 
+def _scalar(cur: duckdb.DuckDBPyConnection) -> Any:
+    """First-column scalar of a single-row query (e.g. COUNT(*), MAX(...))."""
+    row = cur.fetchone()
+    assert row is not None, "aggregate query must return one row"
+    return row[0]
+
+
 def summary(
     conn: duckdb.DuckDBPyConnection, *, mailbox_upn: str,
 ) -> dict[str, Any]:
-    (alive,) = conn.execute(
+    alive = _scalar(conn.execute(
         f"SELECT COUNT(*) FROM mail_messages WHERE {_LIVE_WHERE}",
         [mailbox_upn],
-    ).fetchone()
-    (deleted,) = conn.execute(
+    ))
+    deleted = _scalar(conn.execute(
         "SELECT COUNT(*) FROM mail_messages "
         "WHERE mailbox_upn = ? AND is_deleted = true",
         [mailbox_upn],
-    ).fetchone()
-    (folders,) = conn.execute(
+    ))
+    folders = _scalar(conn.execute(
         "SELECT COUNT(*) FROM mail_folders WHERE mailbox_upn = ?",
         [mailbox_upn],
-    ).fetchone()
-    last_row = conn.execute(
+    ))
+    last_refreshed = _scalar(conn.execute(
         "SELECT MAX(last_refreshed_at) FROM mail_deltas WHERE mailbox_upn = ?",
         [mailbox_upn],
-    ).fetchone()
+    ))
     return {
         "messages_total": alive,
         "messages_deleted": deleted,
         "folders_total": folders,
-        "last_refreshed_at": last_row[0] if last_row else None,
+        "last_refreshed_at": last_refreshed,
     }

@@ -55,10 +55,12 @@ CREATE INDEX IF NOT EXISTS idx_items_hash     ON items(quick_xor_hash);
 
 def apply_schema(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(_DDL_V1)
-    (already,) = conn.execute(
+    row = conn.execute(
         "SELECT COUNT(*) FROM schema_meta WHERE version = ?",
         [CURRENT_SCHEMA_VERSION],
     ).fetchone()
+    assert row is not None
+    (already,) = row
     if already == 0:
         conn.execute(
             "INSERT INTO schema_meta (version) VALUES (?)",
