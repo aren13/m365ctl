@@ -1,8 +1,8 @@
-# Fazla OneDrive Toolkit
+# m365ctl
 
-CLI for admin-scoped control of the Fazla M365 OneDrive + SharePoint tenant.
+CLI for admin-scoped control of the Microsoft 365 OneDrive + SharePoint tenant.
 
-See `docs/superpowers/specs/2026-04-24-fazla-onedrive-toolkit-design.md` for the full design.
+See `M365CTL-SPEC.md` for the full design.
 
 ## Quick start (after Plan 1)
 
