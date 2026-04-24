@@ -1,0 +1,131 @@
+<#
+.SYNOPSIS
+  Emit one row per permission for every item in a SharePoint site or one drive.
+
+.PARAMETER Scope
+  One of: site:<site-id-or-url>, drive:<drive-id>
+
+.PARAMETER OutputFormat
+  json (default) or tsv.
+
+.PARAMETER Tenant
+  Tenant (directory) ID. Required.
+
+.PARAMETER ClientId
+  Azure AD app client ID. Required.
+
+.PARAMETER PfxPath
+  Path to the PFX cert (default ~/.config/fazla-od/fazla-od.pfx).
+
+.PARAMETER KeychainService
+  Keychain service name holding the PFX password
+  (default FazlaODToolkit:PfxPassword).
+
+.EXAMPLE
+  pwsh scripts/ps/audit-sharing.ps1 -Scope "site:fazla.sharepoint.com,abc,def" \
+      -Tenant 361efb70-... -ClientId b22e6fd3-...
+#>
+param(
+    [Parameter(Mandatory=$true)] [string] $Scope,
+    [ValidateSet("json","tsv")] [string] $OutputFormat = "json",
+    [Parameter(Mandatory=$true)] [string] $Tenant,
+    [Parameter(Mandatory=$true)] [string] $ClientId,
+    [string] $PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx",
+    [string] $KeychainService = "FazlaODToolkit:PfxPassword",
+    [string] $KeychainAccount = "fazla-od"
+)
+
+$ErrorActionPreference = "Stop"
+
+function Get-PfxPassword {
+    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w
+    if (-not $raw) { throw "Could not read PFX password from Keychain." }
+    return (ConvertTo-SecureString -String $raw -AsPlainText -Force)
+}
+
+function Connect-SiteByUrl($url) {
+    $pwd = Get-PfxPassword
+    Connect-PnPOnline `
+        -Tenant $Tenant `
+        -ClientId $ClientId `
+        -CertificatePath $PfxPath `
+        -CertificatePassword $pwd `
+        -Url $url | Out-Null
+}
+
+function Parse-Scope {
+    param([string]$s)
+    if ($s -like "site:*") {
+        $ident = $s.Substring(5)
+        if ($ident -match "^https?://") { return @{ Kind="site-url"; Value=$ident } }
+        return @{ Kind="site-id"; Value=$ident }
+    } elseif ($s -like "drive:*") {
+        return @{ Kind="drive"; Value=$s.Substring(6) }
+    } else {
+        throw "Unsupported scope: $s (expected site:<id|url> or drive:<id>)"
+    }
+}
+
+function Resolve-SiteUrl {
+    param($parsed)
+    if ($parsed.Kind -eq "site-url") { return $parsed.Value }
+    # Connect to tenant admin to resolve the id -> url, then reconnect.
+    $pwd = Get-PfxPassword
+    $adminUrl = "https://$($Tenant.Split('-')[0])-admin.sharepoint.com"
+    # Fall back: the caller typically supplies a URL in practice. If we only
+    # have a site-id, the operator must pass it as site:<url> — document this.
+    throw "site:<id> form requires an admin endpoint; please pass site:<full-url>."
+}
+
+function Emit-Row {
+    param($row)
+    if ($OutputFormat -eq "json") {
+        return $row
+    }
+    # TSV
+    "{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}" -f `
+        $row.drive_id, $row.item_id, $row.full_path, $row.shared_with,
+        $row.permission_level, $row.is_external, $row.expires_at
+}
+
+$parsed = Parse-Scope $Scope
+if ($parsed.Kind -eq "drive") {
+    throw "Drive-only audit not yet implemented; pass site:<url> for now."
+}
+
+$siteUrl = Resolve-SiteUrl $parsed
+Connect-SiteByUrl $siteUrl
+
+$rows = New-Object System.Collections.Generic.List[object]
+$lists = Get-PnPList | Where-Object { $_.BaseTemplate -eq 101 }  # Document Library
+foreach ($lst in $lists) {
+    $items = Get-PnPListItem -List $lst -PageSize 1000 -Fields "FileRef","UniqueId"
+    foreach ($it in $items) {
+        $path = $it["FileRef"]
+        $uid  = $it["UniqueId"]
+        $perms = Get-PnPListItemPermission -List $lst -Identity $it.Id
+        foreach ($p in $perms.Permissions) {
+            $shared = $p.PrincipalName
+            $isExternal = $false
+            if ($shared -match "#ext#" -or $shared -match "@") {
+                $isExternal = ($shared -notmatch "@fazla\.")
+            }
+            $rows.Add([ordered]@{
+                drive_id          = $lst.Id.ToString()
+                item_id           = $uid.ToString()
+                full_path         = $path
+                shared_with       = $shared
+                permission_level  = $p.Roles -join ","
+                is_external       = $isExternal
+                expires_at        = $p.ExpirationDateTime
+            })
+        }
+    }
+}
+
+if ($OutputFormat -eq "json") {
+    $rows | ConvertTo-Json -Depth 4 -Compress
+} else {
+    "drive_id`titem_id`tfull_path`tshared_with`tpermission_level`tis_external`texpires_at"
+    foreach ($r in $rows) { Emit-Row $r }
+}
