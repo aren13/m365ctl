@@ -150,6 +150,57 @@ class GraphClient:
                 return
             body = self.get_absolute(next_link)
 
+    def patch(self, path: str, *, json_body: dict) -> dict:
+        """PATCH with JSON body; returns parsed dict; wrapped with _retry."""
+
+        def _do() -> dict:
+            resp = self._client.patch(path, headers=self._auth_headers(), json=json_body)
+            return self._parse(resp)
+
+        return self._retry(_do)
+
+    def post_raw(self, path: str, *, json_body: dict | None = None) -> httpx.Response:
+        """POST returning the raw httpx.Response (e.g. to inspect Location on 202).
+
+        Raises ``GraphError`` on 4xx/5xx so retry/classification still applies.
+        Wrapped with _retry.
+        """
+
+        def _do() -> httpx.Response:
+            resp = self._client.post(path, headers=self._auth_headers(), json=json_body)
+            self._maybe_raise(resp)
+            return resp
+
+        return self._retry(_do)
+
+    def delete(self, path: str) -> None:
+        """DELETE; returns None on 204; parses body on non-204; raises on 4xx/5xx."""
+
+        def _do() -> None:
+            resp = self._client.delete(path, headers=self._auth_headers())
+            if resp.status_code == 204:
+                return None
+            # Some endpoints (e.g. permanentDelete) return 200 + body.
+            self._parse(resp)
+            return None
+
+        return self._retry(_do)
+
+    def _maybe_raise(self, resp: httpx.Response) -> None:
+        """Raise ``GraphError`` if *resp* is 4xx/5xx; return None otherwise."""
+        if resp.status_code >= 400:
+            try:
+                body = resp.json() if resp.content else {}
+            except ValueError:
+                body = {}
+            err = body.get("error", {}) if isinstance(body, dict) else {}
+            code = err.get("code", f"HTTP{resp.status_code}")
+            msg = err.get("message", resp.text[:200])
+            raise GraphError(
+                f"{code}: {msg}",
+                retry_after_seconds=_parse_retry_after(resp.headers.get("Retry-After")),
+            )
+
     def _parse(self, resp: httpx.Response) -> dict:
         if resp.status_code >= 400:
             try:
