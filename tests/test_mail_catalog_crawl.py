@@ -3,11 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from m365ctl.common.graph import GraphError
 from m365ctl.mail.catalog.crawl import (
-    CrawlOutcome,
     crawl_folder,
     refresh_mailbox,
 )

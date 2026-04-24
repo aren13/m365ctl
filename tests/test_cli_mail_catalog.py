@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from m365ctl.mail.catalog.crawl import CrawlOutcome
 from m365ctl.mail.cli import catalog as cli_catalog

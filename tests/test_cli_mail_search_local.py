@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
 from m365ctl.mail.catalog.db import open_catalog
 from m365ctl.mail.cli import search as cli_search
@@ -101,6 +100,6 @@ def test_search_local_empty_catalog_warns(tmp_path: Path, capsys) -> None:
 def test_search_local_excludes_deleted(tmp_path: Path, capsys) -> None:
     cfg = _write_config(tmp_path)
     _seed_message(tmp_path, message_id="dead", subject="ghost", is_deleted=True)
-    rc = cli_search.main(["--config", str(cfg), "--local", "ghost"])
+    cli_search.main(["--config", str(cfg), "--local", "ghost"])
     out = capsys.readouterr().out
     assert "ghost" not in out

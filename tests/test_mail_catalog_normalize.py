@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from m365ctl.mail.catalog.normalize import normalize_folder, normalize_message
 
