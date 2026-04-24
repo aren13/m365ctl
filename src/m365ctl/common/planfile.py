@@ -34,6 +34,9 @@ Action = Literal[
     "mail.folder.move", "mail.folder.delete",
     "mail.categories.add", "mail.categories.update",
     "mail.categories.remove",
+    # Phase 3 — safe message mutations.
+    "mail.move", "mail.copy", "mail.flag", "mail.read",
+    "mail.focus", "mail.categorize", "mail.delete.soft",
 ]
 
 _VALID_ACTIONS: frozenset[str] = frozenset({
@@ -51,6 +54,9 @@ _VALID_ACTIONS: frozenset[str] = frozenset({
     "mail.folder.move", "mail.folder.delete",
     "mail.categories.add", "mail.categories.update",
     "mail.categories.remove",
+    # Phase 3 — safe message mutations.
+    "mail.move", "mail.copy", "mail.flag", "mail.read",
+    "mail.focus", "mail.categorize", "mail.delete.soft",
 })
 
 _REQUIRED_OP_FIELDS = ("op_id", "action", "drive_id", "item_id", "args")

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+exec uv run --project "$REPO" python -m m365ctl mail move "$@"

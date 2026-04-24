@@ -45,3 +45,29 @@ def test_graph_get_bytes_returns_raw_content() -> None:
         token_provider=lambda: "tok", transport=transport, sleep=lambda _s: None
     )
     assert graph.get_bytes("/me/messages/m1/attachments/a1/$value") == b"payload-bytes"
+
+
+def test_graph_patch_accepts_extra_headers():
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.headers))
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    graph = GraphClient(token_provider=lambda: "tok", transport=transport, sleep=lambda _s: None)
+    graph.patch("/me/messages/m1", json_body={"isRead": True}, headers={"If-Match": "etag-123"})
+    assert captured[0]["if-match"] == "etag-123"
+
+
+def test_graph_post_accepts_extra_headers():
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.headers))
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    graph = GraphClient(token_provider=lambda: "tok", transport=transport, sleep=lambda _s: None)
+    graph.post("/search/query", json={"requests": []}, headers={"X-Custom": "abc"})
+    assert captured[0]["x-custom"] == "abc"
