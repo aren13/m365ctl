@@ -137,11 +137,17 @@ class GraphClient:
 
         return self._retry(_do)
 
-    def post(self, path: str, *, json: dict) -> dict:
-        """POST with auto-retry; used by /search/query."""
+    def post(self, path: str, *, json: dict, headers: dict | None = None) -> dict:
+        """POST with auto-retry; used by /search/query and folder/message ops.
+
+        ``headers`` merges with the auth headers — caller can pass e.g. ``{"If-Match": "<etag>"}``.
+        """
 
         def _do() -> dict:
-            resp = self._client.post(path, headers=self._auth_headers(), json=json)
+            merged = self._auth_headers()
+            if headers:
+                merged.update(headers)
+            resp = self._client.post(path, headers=merged, json=json)
             return self._parse(resp)
 
         return self._retry(_do)
@@ -160,11 +166,18 @@ class GraphClient:
                 return
             body = self.get_absolute(next_link)
 
-    def patch(self, path: str, *, json_body: dict) -> dict:
-        """PATCH with JSON body; returns parsed dict; wrapped with _retry."""
+    def patch(self, path: str, *, json_body: dict, headers: dict | None = None) -> dict:
+        """PATCH with JSON body; returns parsed dict; wrapped with _retry.
+
+        ``headers`` merges with the auth headers — caller can pass e.g. ``{"If-Match": "<etag>"}``
+        for conditional-write semantics.
+        """
 
         def _do() -> dict:
-            resp = self._client.patch(path, headers=self._auth_headers(), json=json_body)
+            merged = self._auth_headers()
+            if headers:
+                merged.update(headers)
+            resp = self._client.patch(path, headers=merged, json=json_body)
             return self._parse(resp)
 
         return self._retry(_do)
