@@ -4032,3 +4032,46 @@ Plan 5 (Audit, Search, Workspace) picks up from here and ships the remaining spe
 - `od-sync-workspace` — rclone bisync wrapper for hybrid local workflows.
 
 Plan 5 reuses `safety.assert_scope_allowed` for `od-download` (no mutation but honours deny_paths), the audit log for read-op attribution of any item it touches, and the plan-file schema for `od-download --from-plan`.
+
+---
+
+## Completion log
+
+- **Smoke test run:** 2026-04-24 (Arda's workstation, agentic driver).
+- **Unit tests:** 190 passed, 1 skipped (live-gated `test_auth.py::test_live_whoami`).
+- **Staging (Step 2):** Created `/_fazla_smoke/` folder, `/_fazla_smoke/sub/`, and `/_fazla_smoke/hello.txt` directly via Graph `POST /me/drive/root/children` and `PUT /content` (the toolkit has no create-folder verb — deliberate; folder creation is a Plan-5 or manual op).
+- **Step 3 rename → ok.** `hello.txt` → `hello-renamed.txt`. One paired start/end in `logs/ops/2026-04-24.jsonl`. `before.name` and `after.name` both correct.
+- **Step 4 move → ok.** Moved into `/_fazla_smoke/sub/`. Graph returned new `parentReference.id` as expected.
+- **Step 5 copy + undo(delete the copy) → ok.** Copy executed synchronously (Graph returned 200 with new item id; monitor-URL polling never triggered for this small file). `od-undo <copy_op_id>` built a `delete` against the new item id from `after.new_item_id` and deleted the copy cleanly. Two more paired audit entries.
+- **Step 6 recycle-delete → ok; undo(restore) → error.**
+    - `od-delete` against the original item returned 204 and logged `ok (recycled)`.
+    - `od-undo <delete_op_id>` built the correct `restore` op, but Graph responded `notSupported: Operation not supported` to `POST /drives/{d}/items/{i}/restore`. **This is a Plan 4 design gap:** Microsoft Graph v1.0's `/restore` verb on a `driveItem` is not universally supported for OneDrive-for-Business recycle-bin items — the recycle-bin representation may need a different ID (recycleBinItem) than the pre-delete `item_id`. The audit log correctly records the failed attempt (start + end with `result=error`); the CLI returned 1.
+- **Step 7 purge via `od-clean recycle-bin` → error; undo → irreversible (exit 2).**
+    - Had to hand-craft a plan file because the catalog has no knowledge of recycle-bin items (catalog only snapshots the live drive). Fed `--from-plan /tmp/purge.json` with a single `recycle-purge` op.
+    - First attempt **crashed** because `cli/clean.py` ran `_lookup_item` before dispatching, and recycle-bin items 404 at `GET /drives/{d}/items/{i}`. **Fixed in commit `802c5b9`:** fall back to minimal metadata on 404, same pattern as `cli/undo.py`.
+    - Second attempt ran the purge: Graph returned `itemNotFound: Item not found` on `POST .../permanentDelete`. **Another Graph-shape issue** — `permanentDelete` also wants the recycle-bin-specific id, not the original.
+    - `od-undo <purge_op_id>` correctly raised `Irreversible` — not because the op was a purge (that branch never took because the purge errored), but via the generic "did not succeed originally (result='error')" guard. **Exit 2 matches spec.** Irreversibility gate verified.
+- **Step 8 audit log inspection:** 14 lines, 7 paired `start/end` sets covering all attempts above. `result` field correctly reflects ok/error for each. No orphaned start-without-end.
+- **Step 9 clean up:** `_fazla_smoke/` folder removed via direct Graph `DELETE /me/drive/items/{folder_id}` (soft-recycle). Workspaces clean. `git status --porcelain` clean after commits.
+- **Step 10 full-suite:** **190 passed, 1 skipped** on final run — 7 more passing than the plan's predicted 183, because Plan 3 Task 12 added 3 regression tests (`test_resolve_scope_tenant_skips_{resourcenotfound_mysite,notallowed_access_blocked}` and the pre-existing Task 11 adversarial extras).
+- **Step 11 completion log:** this section.
+- **Step 12 push:** held for user approval.
+
+### Plan 4 bugs discovered during live smoke (beyond the Plan 3 fixes)
+
+1. **`cli/clean.py` crashed on recycle-bin lookups.** (`802c5b9`) — `GET /drives/{d}/items/{i}` 404s for items in the recycle bin; we were calling that unconditionally before the purge. Falls back to minimal metadata now, parallel to how `cli/undo.py` handles it.
+
+### Plan 4 design gaps (defer to a follow-up plan)
+
+2. **`/restore` doesn't universally work on OneDrive-for-Business recycle-bin items.** `execute_restore` in `mutate/delete.py` issues `POST /drives/{d}/items/{i}/restore` using the pre-delete item_id, which Graph rejects with `notSupported`. The correct endpoint is either the SharePoint REST recycle-bin API (`/Web/RecycleBin('<rb_id>')/Restore()`) or a Graph endpoint that takes the recycle-bin-item id (which requires looking up `/drives/{d}/recycleBin` first). Current unit tests pass because they mock Graph returning 200; they never caught this. **Fix direction:** add a `_lookup_recycle_bin_id(original_item_id)` that queries `/drives/{d}/recycleBin` and finds the matching entry, then use that id in `/restore`. Not in scope for Plan 4's landing.
+3. **`permanentDelete` has the same shape issue.** `purge_recycle_bin_item` calls `POST /drives/{d}/items/{i}/permanentDelete` with the pre-delete id → 404. Same fix as #2: resolve the recycle-bin id first.
+4. **`allow_drives = ["me"]` is a dead token** (carried over from Plan 3 log). `safety._drive_allowed` string-compares; `"me"` is never a real drive_id. Resolve at config-load time via the delegated identity's drive id, or expand lazily in `_drive_allowed`.
+5. **`od-clean --pattern` won't find recycle-bin items** because the catalog only indexes live items. Either document this (`recycle-bin` subcommand only accepts `--from-plan` against hand-crafted plans; bulk purge of the recycle bin needs a separate "list recycle bin" call) or extend `expand_pattern` to optionally query `/drives/{d}/recycleBin`. Defer.
+
+### Safety properties VERIFIED during live run
+
+- Spec §7 rule 1: `--confirm` genuinely gates execution — every step above used `--confirm`; removing it (not tested here but covered by unit test `test_dry_run_is_default_no_mutation`) would have produced dry-run output.
+- Spec §7 rule 5: audit log has **every** mutation attempt, with paired start/end, even when the Graph call errored. Start records persist BEFORE the call — verified by the audit dump above.
+- Spec §7 rule 6: no hard deletes happened via `od-delete`. Every delete was a soft-recycle (Graph `DELETE /drives/{d}/items/{i}`); hard delete only tried via the explicit `od-clean recycle-bin` subcommand. `cmd` field in the audit log distinguishes them clearly (`od-delete` vs `od-clean(recycle-bin)`).
+- Spec §7 rule 8 (irreversible flagging): `od-undo` on a failed op returned exit 2 with "irreversible", matching the spec. The specific branch covered was "did not succeed originally" (via the Irreversible guard on `result != 'ok'`); the "recycle-purge can't be undone" branch is unit-tested but not live-verified because the live purge itself errored (see design gap #3).
+
