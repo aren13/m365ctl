@@ -158,3 +158,29 @@ def test_plan_loader_accepts_mail_categories_actions(tmp_path):
     }))
     plan = load_plan(path)
     assert len(plan.operations) == 3
+
+
+def test_plan_loader_accepts_phase3_mail_actions(tmp_path):
+    from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
+    import json
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps({
+        "version": PLAN_SCHEMA_VERSION,
+        "created_at": "2026-04-25T00:00:00Z",
+        "source_cmd": "mail move --pattern",
+        "scope": "me",
+        "operations": [
+            {"op_id": "1", "action": "mail.move",        "drive_id": "me", "item_id": "msg-1", "args": {"destination_id": "archive"}},
+            {"op_id": "2", "action": "mail.copy",        "drive_id": "me", "item_id": "msg-2", "args": {"destination_id": "archive"}},
+            {"op_id": "3", "action": "mail.flag",        "drive_id": "me", "item_id": "msg-3", "args": {"status": "flagged"}},
+            {"op_id": "4", "action": "mail.read",        "drive_id": "me", "item_id": "msg-4", "args": {"is_read": True}},
+            {"op_id": "5", "action": "mail.focus",       "drive_id": "me", "item_id": "msg-5", "args": {"inference_classification": "focused"}},
+            {"op_id": "6", "action": "mail.categorize",  "drive_id": "me", "item_id": "msg-6", "args": {"set": ["Followup"]}},
+            {"op_id": "7", "action": "mail.delete.soft", "drive_id": "me", "item_id": "msg-7", "args": {}},
+        ],
+    }))
+    plan = load_plan(path)
+    assert [op.action for op in plan.operations] == [
+        "mail.move", "mail.copy", "mail.flag", "mail.read",
+        "mail.focus", "mail.categorize", "mail.delete.soft",
+    ]
