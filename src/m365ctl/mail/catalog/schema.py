@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
     message_id           VARCHAR NOT NULL,
     internet_message_id  VARCHAR,
     conversation_id      VARCHAR,
-    parent_folder_id     VARCHAR NOT NULL,
+    parent_folder_id     VARCHAR,
     parent_folder_path   VARCHAR,
     subject              VARCHAR,
     from_address         VARCHAR,
@@ -65,10 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_mail_messages_received
     ON mail_messages(mailbox_upn, received_at);
 CREATE INDEX IF NOT EXISTS idx_mail_messages_from
     ON mail_messages(mailbox_upn, from_address);
-CREATE INDEX IF NOT EXISTS idx_mail_messages_folder
-    ON mail_messages(mailbox_upn, parent_folder_id);
-CREATE INDEX IF NOT EXISTS idx_mail_messages_unread
-    ON mail_messages(mailbox_upn, is_read);
+CREATE INDEX IF NOT EXISTS idx_mail_messages_folder_unread
+    ON mail_messages(mailbox_upn, parent_folder_id, is_read);
 
 CREATE TABLE IF NOT EXISTS mail_categories (
     mailbox_upn  VARCHAR NOT NULL,

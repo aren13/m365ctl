@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from m365ctl.mail.models import _parse_graph_datetime  # type: ignore[attr-defined]
+from m365ctl.mail.models import parse_graph_datetime
 
 
 def _addr(block: dict | None) -> tuple[str | None, str | None]:
@@ -42,8 +42,8 @@ def normalize_message(
             "message_id": raw["id"],
             "internet_message_id": None,
             "conversation_id": None,
-            "parent_folder_id": "",
-            "parent_folder_path": "",
+            "parent_folder_id": None,
+            "parent_folder_path": None,
             "subject": None,
             "from_address": None,
             "from_name": None,
@@ -77,8 +77,8 @@ def normalize_message(
         "from_address": from_addr,
         "from_name": from_name,
         "to_addresses": _join_addrs(raw.get("toRecipients")),
-        "received_at": _parse_graph_datetime(raw.get("receivedDateTime")),
-        "sent_at": _parse_graph_datetime(raw.get("sentDateTime")),
+        "received_at": parse_graph_datetime(raw.get("receivedDateTime")),
+        "sent_at": parse_graph_datetime(raw.get("sentDateTime")),
         "is_read": raw.get("isRead"),
         "is_draft": raw.get("isDraft"),
         "has_attachments": raw.get("hasAttachments"),

@@ -23,7 +23,7 @@ AutoReplyStatus = Literal["disabled", "alwaysEnabled", "scheduled"]
 AttachmentKind = Literal["file", "item", "reference"]
 
 
-def _parse_graph_datetime(raw: dict | str | None) -> datetime | None:
+def parse_graph_datetime(raw: dict | str | None) -> datetime | None:
     """Parse Graph's ``dateTime`` / timeZone pair or ISO-8601 string.
 
     Graph uses two shapes interchangeably:
@@ -90,9 +90,9 @@ class Flag:
     def from_graph_json(cls, raw: dict) -> "Flag":
         return cls(
             status=raw.get("flagStatus", "notFlagged"),
-            start_at=_parse_graph_datetime(raw.get("startDateTime")),
-            due_at=_parse_graph_datetime(raw.get("dueDateTime")),
-            completed_at=_parse_graph_datetime(raw.get("completedDateTime")),
+            start_at=parse_graph_datetime(raw.get("startDateTime")),
+            due_at=parse_graph_datetime(raw.get("dueDateTime")),
+            completed_at=parse_graph_datetime(raw.get("completedDateTime")),
         )
 
 
@@ -246,8 +246,8 @@ class AutomaticRepliesSetting:
         return cls(
             status=raw.get("status", "disabled"),
             external_audience=raw.get("externalAudience", "none"),
-            scheduled_start=_parse_graph_datetime(raw.get("scheduledStartDateTime")),
-            scheduled_end=_parse_graph_datetime(raw.get("scheduledEndDateTime")),
+            scheduled_start=parse_graph_datetime(raw.get("scheduledStartDateTime")),
+            scheduled_end=parse_graph_datetime(raw.get("scheduledEndDateTime")),
             internal_reply_message=raw.get("internalReplyMessage", ""),
             external_reply_message=raw.get("externalReplyMessage", ""),
         )
@@ -322,7 +322,7 @@ class Message:
         conv_idx_b64 = raw.get("conversationIndex", "") or ""
         conv_idx = base64.b64decode(conv_idx_b64) if conv_idx_b64 else b""
 
-        received = _parse_graph_datetime(raw.get("receivedDateTime"))
+        received = parse_graph_datetime(raw.get("receivedDateTime"))
         if received is None:
             raise ValueError("receivedDateTime missing from Graph message payload")
 
@@ -345,7 +345,7 @@ class Message:
             bcc=_addrs("bccRecipients"),
             reply_to=_addrs("replyTo"),
             received_at=received,
-            sent_at=_parse_graph_datetime(raw.get("sentDateTime")),
+            sent_at=parse_graph_datetime(raw.get("sentDateTime")),
             is_read=raw.get("isRead", False),
             is_draft=raw.get("isDraft", False),
             has_attachments=raw.get("hasAttachments", False),
