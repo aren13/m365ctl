@@ -66,7 +66,7 @@ def run_undo(*, config_path: Path, op_id: str, confirm: bool,
     elif rev.action == "delete":
         r = execute_recycle_delete(rev, graph, logger, before=before)
     elif rev.action == "restore":
-        r = execute_restore(rev, graph, logger, before=before)
+        r = execute_restore(rev, graph, logger, before=before, cfg=cfg)
     elif rev.action == "label-apply":
         r = execute_label_apply(rev, logger, before=before)
     elif rev.action == "label-remove":
