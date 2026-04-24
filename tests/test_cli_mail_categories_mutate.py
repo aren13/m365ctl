@@ -1,4 +1,3 @@
-import pytest
 
 from m365ctl.mail.cli.categories import build_parser
 
