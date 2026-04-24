@@ -3364,7 +3364,7 @@ Label display name (required for apply).
 Plan 3 installs PnP.PowerShell and converts the cert to PFX. This script
 relies on both being already in place. It authenticates with certificate
 + app-only against the m365ctl tenant using env vars set by the caller
-(FAZLA_OD_TENANT, FAZLA_OD_CLIENT_ID, FAZLA_OD_CERT_PFX).
+(M365CTL_TENANT, M365CTL_CLIENT_ID, M365CTL_CERT_PFX).
 #>
 param(
     [Parameter(Mandatory=$true)][ValidateSet('apply','remove')][string]$Action,
@@ -3378,10 +3378,10 @@ $ErrorActionPreference = 'Stop'
 Import-Module PnP.PowerShell -ErrorAction Stop
 Connect-PnPOnline `
     -Url $SiteUrl `
-    -Tenant $env:FAZLA_OD_TENANT `
-    -ClientId $env:FAZLA_OD_CLIENT_ID `
-    -CertificatePath $env:FAZLA_OD_CERT_PFX `
-    -CertificatePassword (ConvertTo-SecureString $env:FAZLA_OD_CERT_PFX_PASS -AsPlainText -Force)
+    -Tenant $env:M365CTL_TENANT `
+    -ClientId $env:M365CTL_CLIENT_ID `
+    -CertificatePath $env:M365CTL_CERT_PFX `
+    -CertificatePassword (ConvertTo-SecureString $env:M365CTL_CERT_PFX_PASS -AsPlainText -Force)
 
 try {
     if ($Action -eq 'apply') {

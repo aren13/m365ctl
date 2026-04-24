@@ -1,4 +1,4 @@
-# PnP.PowerShell setup for Fazla OneDrive Toolkit
+# PnP.PowerShell setup for m365ctl
 
 One-time setup to enable `od-audit-sharing`, which shells out to PowerShell.
 
@@ -95,7 +95,7 @@ pwsh -NoLogo -Command '
         -ClientId <your-client-id> `
         -CertificatePath "$HOME/.config/fazla-od/fazla-od.pfx" `
         -CertificatePassword $pwd `
-        -Url https://fazla.sharepoint.com
+        -Url https://<your-tenant>.sharepoint.com
     Get-PnPTenantSite | Select-Object -First 3 Url, Title
 '
 ```
