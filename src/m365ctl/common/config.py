@@ -22,8 +22,10 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class ScopeConfig:
     allow_drives: list[str]
+    allow_mailboxes: list[str] = field(default_factory=lambda: ["me"])
     allow_users: list[str] = field(default_factory=lambda: ["*"])
     deny_paths: list[str] = field(default_factory=list)
+    deny_folders: list[str] = field(default_factory=list)
     unsafe_requires_flag: bool = True
 
 
@@ -34,8 +36,24 @@ class CatalogConfig:
 
 
 @dataclass(frozen=True)
+class MailConfig:
+    catalog_path: Path
+    default_deleted_folder: str = "Deleted Items"
+    default_junk_folder: str = "Junk Email"
+    default_drafts_folder: str = "Drafts"
+    default_sent_folder: str = "Sent Items"
+    default_triage_root: str = "Inbox/Triage"
+    categories_master: list[str] = field(default_factory=list)
+    signature_path: Path | None = None
+    drafts_before_send: bool = True
+    schedule_send_enabled: bool = False
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     ops_dir: Path
+    purged_dir: Path = field(default_factory=lambda: Path("logs/purged"))
+    retention_days: int = 30
 
 
 @dataclass(frozen=True)
@@ -48,6 +66,9 @@ class Config:
     scope: ScopeConfig
     catalog: CatalogConfig
     logging: LoggingConfig
+    mail: MailConfig = field(
+        default_factory=lambda: MailConfig(catalog_path=Path("cache/mail.duckdb"))
+    )
 
 
 def _require(mapping: dict, key: str, source: str) -> object:
@@ -86,8 +107,10 @@ def load_config(path: Path | str) -> Config:
 
     scope = ScopeConfig(
         allow_drives=list(allow_drives),
+        allow_mailboxes=list(scope_raw.get("allow_mailboxes", ["me"])),
         allow_users=list(scope_raw.get("allow_users", ["*"])),
         deny_paths=list(scope_raw.get("deny_paths", [])),
+        deny_folders=list(scope_raw.get("deny_folders", [])),
         unsafe_requires_flag=bool(scope_raw.get("unsafe_requires_flag", True)),
     )
 
@@ -97,9 +120,27 @@ def load_config(path: Path | str) -> Config:
         refresh_on_start=bool(catalog_raw.get("refresh_on_start", False)),
     )
 
+    mail_raw = data.get("mail", {})
+    sig_raw = mail_raw.get("signature_path", "")
+    signature_path: Path | None = _expand(sig_raw) if sig_raw else None
+    mail = MailConfig(
+        catalog_path=_expand(mail_raw.get("catalog_path", "cache/mail.duckdb")),
+        default_deleted_folder=str(mail_raw.get("default_deleted_folder", "Deleted Items")),
+        default_junk_folder=str(mail_raw.get("default_junk_folder", "Junk Email")),
+        default_drafts_folder=str(mail_raw.get("default_drafts_folder", "Drafts")),
+        default_sent_folder=str(mail_raw.get("default_sent_folder", "Sent Items")),
+        default_triage_root=str(mail_raw.get("default_triage_root", "Inbox/Triage")),
+        categories_master=list(mail_raw.get("categories_master", [])),
+        signature_path=signature_path,
+        drafts_before_send=bool(mail_raw.get("drafts_before_send", True)),
+        schedule_send_enabled=bool(mail_raw.get("schedule_send_enabled", False)),
+    )
+
     logging_raw = data.get("logging", {})
     logging_cfg = LoggingConfig(
         ops_dir=_expand(logging_raw.get("ops_dir", "logs/ops")),
+        purged_dir=_expand(logging_raw.get("purged_dir", "logs/purged")),
+        retention_days=int(logging_raw.get("retention_days", 30)),
     )
 
     return Config(
@@ -110,5 +151,6 @@ def load_config(path: Path | str) -> Config:
         default_auth=default_auth,
         scope=scope,
         catalog=catalog,
+        mail=mail,
         logging=logging_cfg,
     )
