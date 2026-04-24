@@ -11,6 +11,7 @@ from fazla_od.cli import copy as copy_cli
 from fazla_od.cli import delete as delete_cli
 from fazla_od.cli import download as download_cli
 from fazla_od.cli import inventory as inventory_cli
+from fazla_od.cli import label as label_cli
 from fazla_od.cli import move as move_cli
 from fazla_od.cli import rename as rename_cli
 from fazla_od.cli import search as search_cli
@@ -24,6 +25,7 @@ _SUBCOMMANDS = {
     "delete": delete_cli.main,
     "download": download_cli.main,
     "inventory": inventory_cli.main,
+    "label": label_cli.main,
     "move": move_cli.main,
     "rename": rename_cli.main,
     "search": search_cli.main,
