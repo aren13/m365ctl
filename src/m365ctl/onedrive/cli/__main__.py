@@ -1,4 +1,4 @@
-"""fazla-od command dispatcher."""
+"""m365ctl command dispatcher."""
 from __future__ import annotations
 
 import sys

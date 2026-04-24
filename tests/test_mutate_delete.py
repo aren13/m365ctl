@@ -129,7 +129,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
     completed.stdout = json.dumps({
         "recycle_bin_item_id": "abc-123",
         "restored_name": "hello.txt",
-        "restored_parent_path": "/Shared Documents/_fazla_smoke",
+        "restored_parent_path": "/Shared Documents/_smoke",
     })
     completed.stderr = ""
     run = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
@@ -140,7 +140,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
                    item_id="i1", args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = execute_restore(op, _client(handler), logger,
-                             before={"parent_path": "/Shared Documents/_fazla_smoke",
+                             before={"parent_path": "/Shared Documents/_smoke",
                                      "name": "hello.txt"},
                              cfg=cfg)
 
@@ -166,7 +166,7 @@ def test_restore_falls_back_to_pnp_on_notsupported(tmp_path, mocker):
 
 def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path, mocker):
     """Audit-logged `before.parent_path` is the full Graph path
-    (``/drives/<id>/root:/_fazla_smoke2``). PnP's
+    (``/drives/<id>/root:/_smoke2``). PnP's
     ``Find-RecycleBinItem -DirName`` wildcard match expects the
     site-relative tail — we must strip the ``root:`` prefix before
     invoking the PS script, or PnP reports ``NoMatch``."""
@@ -188,7 +188,7 @@ def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_pat
     completed.stdout = json.dumps({
         "recycle_bin_item_id": "abc-123",
         "restored_name": "hello2.txt",
-        "restored_parent_path": "_fazla_smoke2",
+        "restored_parent_path": "_smoke2",
     })
     completed.stderr = ""
     run = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
@@ -199,7 +199,7 @@ def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_pat
                    item_id="i1", args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = execute_restore(op, _client(handler), logger,
-                             before={"parent_path": "/drives/abc/root:/_fazla_smoke2",
+                             before={"parent_path": "/drives/abc/root:/_smoke2",
                                      "name": "hello2.txt"},
                              cfg=cfg)
 
@@ -207,7 +207,7 @@ def test_restore_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_pat
     run.assert_called_once()
     argv = run.call_args[0][0]
     # The full Graph path never reaches PS; only the site-relative tail does.
-    assert argv[argv.index("-DirName") + 1] == "_fazla_smoke2"
+    assert argv[argv.index("-DirName") + 1] == "_smoke2"
     assert argv[argv.index("-LeafName") + 1] == "hello2.txt"
 
 
@@ -280,7 +280,7 @@ def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
                    item_id="i1", args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = execute_restore(op, _client(handler), logger,
-                             before={"parent_path": "/Shared Documents/_fazla_smoke",
+                             before={"parent_path": "/Shared Documents/_smoke",
                                      "name": "hello.txt"},
                              cfg=cfg)
 

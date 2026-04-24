@@ -92,12 +92,12 @@ def normalize_recycle_dir_name(graph_path: str) -> str:
 
     PnP's ``Find-RecycleBinItem`` compares its ``-DirName`` wildcard
     against the site-relative ``DirName`` field of each recycle-bin item
-    (e.g. ``personal/user_fazla_com/Documents/_fazla_smoke2``). If we pass
-    the full Graph path (``/drives/<id>/root:/_fazla_smoke2``) the ``-like
+    (e.g. ``personal/user_example_com/Documents/_smoke2``). If we pass
+    the full Graph path (``/drives/<id>/root:/_smoke2``) the ``-like
     "*$DirName"`` match never fires and PnP reports ``NoMatch``.
 
     Examples:
-      '/drives/b!.../root:/_fazla_smoke2' -> '_fazla_smoke2'
+      '/drives/b!.../root:/_smoke2'       -> '_smoke2'
       '/drive/root:/Folder/Sub'           -> 'Folder/Sub'
       '/Folder/Sub'                       -> 'Folder/Sub'  (already normalized)
       ''                                  -> ''

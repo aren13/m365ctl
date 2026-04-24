@@ -24,7 +24,7 @@ def run_login(config_path: Path) -> int:
 def run_whoami(config_path: Path) -> int:
     cfg = load_config(config_path)
 
-    print("Fazla OneDrive Toolkit")
+    print("m365ctl")
     print("======================")
     print(f"Tenant:                {cfg.tenant_id}")
 

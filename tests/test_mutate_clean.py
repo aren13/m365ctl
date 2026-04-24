@@ -183,7 +183,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                    before={"parent_path": "/Shared Documents/_smoke",
                                             "name": "old.txt"},
                                     cfg=cfg)
 
@@ -200,7 +200,7 @@ def test_purge_falls_back_to_pnp_on_404(tmp_path, mocker):
     assert argv[argv.index("-ClientId") + 1] == "client-1"
     assert argv[argv.index("-SiteUrl") + 1] == "https://fazla.sharepoint.com/sites/Foo"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
-    assert argv[argv.index("-DirName") + 1] == "Shared Documents/_fazla_smoke"
+    assert argv[argv.index("-DirName") + 1] == "Shared Documents/_smoke"
     # Audit-end recorded as ok.
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-p1"]
     assert entries[-1]["result"] == "ok"
@@ -238,14 +238,14 @@ def test_purge_via_pnp_normalizes_graph_path_to_site_relative_dir_name(tmp_path,
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/drives/abc/root:/_fazla_smoke2",
+                                    before={"parent_path": "/drives/abc/root:/_smoke2",
                                             "name": "old.txt"},
                                     cfg=cfg)
 
     assert result.status == "ok"
     run.assert_called_once()
     argv = run.call_args[0][0]
-    assert argv[argv.index("-DirName") + 1] == "_fazla_smoke2"
+    assert argv[argv.index("-DirName") + 1] == "_smoke2"
     assert argv[argv.index("-LeafName") + 1] == "old.txt"
 
 
@@ -318,7 +318,7 @@ def test_purge_pnp_failure_propagates_stderr(tmp_path, mocker):
                    args={}, dry_run_result="")
     cfg = _stub_cfg(tmp_path)
     result = purge_recycle_bin_item(op, _client(handler), logger,
-                                    before={"parent_path": "/Shared Documents/_fazla_smoke",
+                                    before={"parent_path": "/Shared Documents/_smoke",
                                             "name": "old.txt"},
                                     cfg=cfg)
 
