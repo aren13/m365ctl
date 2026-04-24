@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import httpx
 
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
 from m365ctl.onedrive.cli.clean import run_clean

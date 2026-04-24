@@ -12,7 +12,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterator
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.onedrive.catalog.db import open_catalog

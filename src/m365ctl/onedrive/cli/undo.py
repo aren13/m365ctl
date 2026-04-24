@@ -23,8 +23,6 @@ from m365ctl.onedrive.mutate.undo import (
 from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 from m365ctl.common.undo import (
     Dispatcher,
-    IrreversibleOp,
-    UnknownAction,
     normalize_legacy_action,
 )
 

@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from m365ctl.onedrive.catalog.crawl import DriveSpec
 from m365ctl.onedrive.catalog.db import open_catalog

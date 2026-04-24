@@ -5,7 +5,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from m365ctl.onedrive.cli.audit_sharing import run_audit
 

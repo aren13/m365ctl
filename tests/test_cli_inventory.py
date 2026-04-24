@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.onedrive.cli.inventory import run_inventory

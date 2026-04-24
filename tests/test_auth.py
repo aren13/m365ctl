@@ -12,7 +12,6 @@ from m365ctl.common.auth import (
     AuthError,
     CertInfo,
     DelegatedCredential,
-    get_cert_info,
 )
 from m365ctl.common.config import Config, load_config
 

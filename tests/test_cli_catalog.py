@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from m365ctl.onedrive.catalog.crawl import CrawlResult, DriveSpec
 from m365ctl.onedrive.cli.catalog import run_refresh, run_status

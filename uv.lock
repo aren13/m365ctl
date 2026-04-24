@@ -288,38 +288,6 @@ wheels = [
 ]
 
 [[package]]
-name = "fazla-od"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "cryptography" },
-    { name = "duckdb" },
-    { name = "httpx" },
-    { name = "msal" },
-    { name = "msal-extensions" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-mock" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cryptography", specifier = ">=42" },
-    { name = "duckdb", specifier = ">=1.1" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "msal", specifier = ">=1.28" },
-    { name = "msal-extensions", specifier = ">=1.2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -373,6 +341,38 @@ sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484 },
 ]
+
+[[package]]
+name = "m365ctl"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "cryptography" },
+    { name = "duckdb" },
+    { name = "httpx" },
+    { name = "msal" },
+    { name = "msal-extensions" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=42" },
+    { name = "duckdb", specifier = ">=1.1" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "msal", specifier = ">=1.28" },
+    { name = "msal-extensions", specifier = ">=1.2" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "msal"

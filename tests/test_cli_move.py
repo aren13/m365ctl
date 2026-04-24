@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import httpx
-import pytest
 
 from m365ctl.onedrive.cli.move import run_move
 
