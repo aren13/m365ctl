@@ -7,6 +7,7 @@ from fazla_od.cli import audit_sharing as audit_sharing_cli
 from fazla_od.cli import auth as auth_cli
 from fazla_od.cli import catalog as catalog_cli
 from fazla_od.cli import copy as copy_cli
+from fazla_od.cli import delete as delete_cli
 from fazla_od.cli import download as download_cli
 from fazla_od.cli import inventory as inventory_cli
 from fazla_od.cli import move as move_cli
@@ -18,6 +19,7 @@ _SUBCOMMANDS = {
     "auth": auth_cli.main,
     "catalog": catalog_cli.main,
     "copy": copy_cli.main,
+    "delete": delete_cli.main,
     "download": download_cli.main,
     "inventory": inventory_cli.main,
     "move": move_cli.main,
