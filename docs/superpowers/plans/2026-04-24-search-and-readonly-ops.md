@@ -3659,7 +3659,11 @@ Plan 4 (Mutations) picks up from here. It depends on:
     - `--query … --plan-out` emitted a 3-entry plan with `action: "download"` and correct `full_path` values.
     - `--from-plan` replay materialised 3 PDFs (29 KB + 47 KB + 49 KB) concurrently, preserving the `/Microsoft Teams Chat Files/` prefix on disk.
     - Cleaned up with `rm -rf workspaces/p3-smoke-*`.
-- **Step 6 `od-audit-sharing`:** **Skipped — `pwsh` is not installed on the host** and `./scripts/ps/convert-cert.sh` has never been run (no `.pfx`, no Keychain entry). All three are blockers that the Task 9 setup guide (`docs/ops/pnp-powershell-setup.md`) addresses. The wrapper's Python surface and PowerShell script are unit-tested; live validation waits on one-time operator setup.
+- **Step 6 `od-audit-sharing`:** **Verified live** against `site:https://fazla.sharepoint.com/sites/ServisOnboarding`. TSV output = **996 lines** (header + 995 permission rows); JSON parses cleanly with Unicode-escaped Turkish chars (`Fazla İyi`, `Ziyaretçileri`). Summary across the whole audit: **995 rows spanning 212 unique items × 18 principals, 0 external shares** on this site. The external-share detector correctly classified all rows as internal (principals were SharePoint groups like `Servis Onboarding Sahipleri`, none matching `#ext#` or an `@domain` outside `@fazla.`). Setup blockers cleared in-session:
+    - Installed **PowerShell 7.6.1 LTS** via the direct Microsoft `.pkg` install (Homebrew cask is deprecated + broken — docs updated in commit `024e8b7`).
+    - Installed **PnP.PowerShell 3.1.0** to the current user's module scope.
+    - Ran `./scripts/ps/convert-cert.sh` — produced `~/.config/fazla-od/fazla-od.pfx` (mode 600) + Keychain entry `FazlaODToolkit:PfxPassword` / `fazla-od` (40-char password).
+    - Granted the Entra app SharePoint-API permission `Sites.FullControl.All` + admin consent (Graph permissions from Plan 1 were insufficient; SharePoint REST/CSOM has its own permission surface — this caveat is also in the updated setup doc).
 - **Step 7 nothing sensitive staged:** `git status --porcelain` clean after each smoke step. `cache/`, `workspaces/`, and `~/.config/fazla-od/` all remained outside the repo.
 - **Test counts after the Plan 3 bug-fix batch:** **192 passed, 1 skipped** — Plan 3's original 109 + Plan 4's 74 (with my adversarial-undo extras) + 3 new regression tests landed during the live smoke (tenant-skip tokens, admin-blocked skip, and TTY-unavailable abort).
 
