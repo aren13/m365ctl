@@ -4,11 +4,12 @@ import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
 
+from fazla_od.cli.move import run_move
 from fazla_od.config import Config, ScopeConfig
 from fazla_od.safety import (
     ScopeViolation,
@@ -122,8 +123,6 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
 # Each test below cross-references the rule it covers; see the invariant
 # table at the top of the Plan 4 document.
 
-from fazla_od.cli.move import run_move
-
 
 def test_dry_run_is_default_no_mutation(tmp_path, mocker):
     """Spec §7 rule 1: mutating command without --confirm issues zero Graph calls."""
@@ -154,7 +153,8 @@ def test_dry_run_is_default_no_mutation(tmp_path, mocker):
         plan_out=None, confirm=False, unsafe_scope=False,
     )
     assert rc == 0
-    # _lookup_item is mocked, so no GET either; zero mutations must fire.
+    # _lookup_item is mocked, so it never hits the transport.
+    # Zero transport calls total: no GET for lookup, no PATCH/POST/DELETE for mutations.
     assert calls["n"] == 0
 
 
@@ -237,6 +237,20 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
     assert rc == 0
     assert patches["n"] == 2  # NOT 100
 
+    # Additional regression: passing both --pattern AND --from-plan must still
+    # NOT re-expand. The from-plan path should short-circuit before pattern
+    # is examined.
+    rc2 = run_move(
+        config_path=tmp_path / "c.toml",
+        scope=None, drive_id=None, item_id=None,
+        pattern="**/*",  # would match all 100 catalog rows if re-expanded
+        from_plan=plan_path,
+        new_parent_path=None, new_parent_item_id=None,
+        plan_out=None, confirm=True, unsafe_scope=False,
+    )
+    assert rc2 == 0
+    assert patches["n"] == 4  # 2 + 2 = 4 total; NOT 2 + 100 = 102
+
 
 def test_piped_stdin_cannot_auto_confirm_unsafe_scope(tmp_path, monkeypatch):
     """Spec §7 rule 3: /dev/tty, not stdin, drives the unsafe-scope confirm."""
@@ -309,5 +323,7 @@ def test_audit_start_line_persists_even_on_mid_mutation_crash(tmp_path):
                      before={"parent_path": "/A", "name": "x"})
 
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "CRASH"]
-    assert len(entries) >= 1
+    # Start record must be on disk; no end record because the crash propagated
+    # before log_mutation_end could run.
+    assert len(entries) == 1
     assert entries[0]["phase"] == "start"
