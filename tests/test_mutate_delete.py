@@ -198,5 +198,8 @@ def test_restore_pnp_failure_propagates_stderr(tmp_path, mocker):
 
     assert result.status == "error"
     assert "no match" in result.error
+    # Guard against regression that re-wraps PS stderr with the legacy
+    # _ODFB_RESTORE_MANUAL text; that phrase is unique to the manual wrap.
+    assert "Graph v1.0 /restore" not in result.error
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-r2"]
     assert entries[-1]["result"] == "error"

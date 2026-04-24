@@ -28,7 +28,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
 
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
 from fazla_od.config import Config
@@ -116,10 +115,17 @@ def _lookup_site_url(graph: GraphClient, drive_id: str) -> str:
     for sfx in _WEB_URL_LIB_SUFFIXES:
         if low.endswith(sfx.lower()):
             return web_url[: -len(sfx)].rstrip("/")
-    # No known library suffix; fall back to the parent-of-path heuristic:
-    # drop the last path segment, on the assumption webUrl ends at the
-    # library root. Better than guessing.
-    return unquote(web_url).rsplit("/", 1)[0].rstrip("/") or web_url
+    # No known library suffix. Refuse to guess: a wrong site URL combined
+    # with Find-RecycleBinItem's DirName wildcard match could resolve to a
+    # different file with the same name in a different recycle bin — a
+    # data-recovery hazard. Surface as an explicit failure so operators
+    # know to fall back to the SharePoint web UI.
+    raise GraphError(
+        "unknownLibrarySuffix",
+        f"cannot derive site URL from webUrl {web_url!r}: expected suffix "
+        "/Shared%20Documents, /Shared Documents, or /Documents",
+        status_code=None,
+    )
 
 
 def _restore_via_pnp(
