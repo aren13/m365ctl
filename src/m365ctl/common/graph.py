@@ -118,6 +118,16 @@ class GraphClient:
 
         return self._retry(_do)
 
+    def get_bytes(self, path: str) -> bytes:
+        """GET; return raw response body bytes (e.g. attachment $value endpoint)."""
+
+        def _do() -> bytes:
+            resp = self._client.get(path, headers=self._auth_headers())
+            self._maybe_raise(resp)
+            return resp.content
+
+        return self._retry(_do)
+
     def get_absolute(self, url: str) -> dict:
         """GET an absolute URL (e.g. an @odata.nextLink)."""
 

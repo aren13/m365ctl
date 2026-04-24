@@ -34,3 +34,14 @@ def test_get_raises_on_http_error() -> None:
     )
     with pytest.raises(GraphError, match="InvalidAuthenticationToken"):
         client.get("/me")
+
+
+def test_graph_get_bytes_returns_raw_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"payload-bytes")
+
+    transport = httpx.MockTransport(handler)
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=transport, sleep=lambda _s: None
+    )
+    assert graph.get_bytes("/me/messages/m1/attachments/a1/$value") == b"payload-bytes"
