@@ -115,8 +115,11 @@ def main(argv: list[str]) -> int:
             try:
                 msg = get_message(graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
                                   message_id=op.item_id)
+                # internet_message_id is preserved across Graph folder moves;
+                # `mail undo` uses it to recover the rotated id from Deleted Items.
                 before = {"parent_folder_id": msg.parent_folder_id,
-                          "parent_folder_path": msg.parent_folder_path}
+                          "parent_folder_path": msg.parent_folder_path,
+                          "internet_message_id": msg.internet_message_id}
             except Exception:
                 before = {}
             result = execute_soft_delete(op, graph, logger, before=before)
@@ -143,8 +146,11 @@ def main(argv: list[str]) -> int:
         try:
             msg = get_message(graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
                               message_id=args.message_id)
+            # internet_message_id is preserved across Graph folder moves;
+            # `mail undo` uses it to recover the rotated id from Deleted Items.
             before = {"parent_folder_id": msg.parent_folder_id,
-                      "parent_folder_path": msg.parent_folder_path}
+                      "parent_folder_path": msg.parent_folder_path,
+                      "internet_message_id": msg.internet_message_id}
         except Exception:
             before = {}
         op = Operation(

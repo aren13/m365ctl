@@ -8,6 +8,7 @@ import pytest
 from m365ctl.common.graph import GraphError
 from m365ctl.mail.messages import (
     MessageListFilters,
+    find_by_internet_message_id,
     get_message,
     get_thread,
     list_messages,
@@ -389,3 +390,71 @@ def test_list_messages_fallback_applies_all_predicates_client_side():
         ),
     ))
     assert [m.id for m in out] == ["r2"]
+
+
+# ----------------------------------------------------------------------------
+# find_by_internet_message_id — Phase 4.x soft-delete undo recovery helper.
+# Graph rotates a message's literal id when it crosses folder boundaries
+# (e.g. on move-to-Deleted-Items). The RFC-822 internetMessageId is preserved,
+# so we use it to locate the rotated message in Deleted Items at undo time.
+# ----------------------------------------------------------------------------
+
+def test_find_by_internet_message_id_returns_rotated_id_on_hit():
+    graph = MagicMock()
+    graph.get.return_value = {"value": [{"id": "rotated-id-1"}]}
+    out = find_by_internet_message_id(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        folder_id="deleteditems",
+        internet_message_id="<abc@example.com>",
+    )
+    assert out == "rotated-id-1"
+    call_args = graph.get.call_args
+    assert call_args.args[0] == "/me/mailFolders/deleteditems/messages"
+    params = call_args.kwargs["params"]
+    assert params["$filter"] == "internetMessageId eq '<abc@example.com>'"
+    assert params["$top"] == 1
+    assert params["$select"] == "id"
+
+
+def test_find_by_internet_message_id_returns_none_when_no_hit():
+    graph = MagicMock()
+    graph.get.return_value = {"value": []}
+    out = find_by_internet_message_id(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        folder_id="deleteditems",
+        internet_message_id="<abc@example.com>",
+    )
+    assert out is None
+
+
+def test_find_by_internet_message_id_app_only_routes_via_users_upn():
+    graph = MagicMock()
+    graph.get.return_value = {"value": [{"id": "rotated-id-2"}]}
+    find_by_internet_message_id(
+        graph,
+        mailbox_spec="upn:bob@example.com",
+        auth_mode="app-only",
+        folder_id="deleteditems",
+        internet_message_id="<abc@example.com>",
+    )
+    url = graph.get.call_args.args[0]
+    assert url == "/users/bob@example.com/mailFolders/deleteditems/messages"
+
+
+def test_find_by_internet_message_id_escapes_single_quote():
+    graph = MagicMock()
+    graph.get.return_value = {"value": []}
+    find_by_internet_message_id(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        folder_id="deleteditems",
+        internet_message_id="<O'Brien@example.com>",
+    )
+    params = graph.get.call_args.kwargs["params"]
+    assert "''" in params["$filter"]
+    assert params["$filter"] == "internetMessageId eq '<O''Brien@example.com>'"

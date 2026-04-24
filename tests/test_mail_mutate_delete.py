@@ -26,7 +26,11 @@ def test_soft_delete_moves_to_deleteditems_well_known(tmp_path):
     )
     result = execute_soft_delete(
         op, graph, logger,
-        before={"parent_folder_id": "inbox", "parent_folder_path": "/Inbox"},
+        before={
+            "parent_folder_id": "inbox",
+            "parent_folder_path": "/Inbox",
+            "internet_message_id": "<abc@example.com>",
+        },
     )
     assert result.status == "ok"
     assert result.after == {"parent_folder_id": "deleteditems-id",
@@ -37,6 +41,9 @@ def test_soft_delete_moves_to_deleteditems_well_known(tmp_path):
     assert [e["phase"] for e in entries] == ["start", "end"]
     assert entries[0]["cmd"] == "mail-delete-soft"
     assert entries[0]["before"]["parent_folder_id"] == "inbox"
+    # internet_message_id is preserved in audit's before block — undo uses it
+    # to recover the message in Deleted Items after Graph rotates the literal id.
+    assert entries[0]["before"]["internet_message_id"] == "<abc@example.com>"
     assert entries[1]["after"]["parent_folder_id"] == "deleteditems-id"
 
 
