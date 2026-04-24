@@ -1,11 +1,9 @@
 """Tests for m365ctl.mail.cli._bulk — pattern expansion + plan I/O."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
-from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Plan, load_plan
+from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
 from m365ctl.mail.cli._bulk import (
     MessageFilter,
     emit_plan,

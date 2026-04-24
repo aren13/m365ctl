@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from m365ctl.common.graph import GraphClient
 from m365ctl.common.planfile import Operation, Plan, write_plan
