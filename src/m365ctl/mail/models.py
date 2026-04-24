@@ -323,7 +323,8 @@ class Message:
         conv_idx = base64.b64decode(conv_idx_b64) if conv_idx_b64 else b""
 
         received = _parse_graph_datetime(raw.get("receivedDateTime"))
-        assert received is not None, "receivedDateTime missing from Graph message payload"
+        if received is None:
+            raise ValueError("receivedDateTime missing from Graph message payload")
 
         body_raw = raw.get("body")
         body = Body.from_graph_json(body_raw) if body_raw else None
