@@ -37,7 +37,7 @@ _SUBCOMMANDS = {
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     if not argv or argv[0] in {"-h", "--help"}:
-        print("usage: fazla-od <subcommand> [args...]")
+        print("usage: m365ctl od <subcommand> [args...]")
         print(f"  subcommands: {', '.join(_SUBCOMMANDS)}")
         return 0 if argv else 2
     sub = argv[0]
