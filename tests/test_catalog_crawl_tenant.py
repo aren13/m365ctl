@@ -130,6 +130,34 @@ def test_resolve_scope_tenant_enumerates_users_and_sites() -> None:
     assert fin.graph_path == "/drives/drv-fin/root/delta"
 
 
+def test_resolve_scope_tenant_skips_resourcenotfound_mysite() -> None:
+    """Regression: Graph returns 'ResourceNotFound: User's mysite not found.'
+    (not 'itemNotFound') for unlicensed/guest/never-signed-in accounts.
+    Discovered during Plan 3 Task 12 live smoke test."""
+    graph = MagicMock()
+
+    def fake_get(path, *, params=None):
+        if path == "/users":
+            return {"value": [
+                {"id": "u1", "userPrincipalName": "a@fazla.com"},
+                {"id": "u-guest", "userPrincipalName": "g@fazla.com"},
+            ]}
+        if path == "/users/u1/drive":
+            return {"id": "drv-u1", "name": "OneDrive - Fazla",
+                    "driveType": "business",
+                    "owner": {"user": {"email": "a@fazla.com"}}}
+        if path == "/users/u-guest/drive":
+            from fazla_od.graph import GraphError
+            raise GraphError("ResourceNotFound: User's mysite not found.")
+        if path == "/sites" and params == {"search": "*"}:
+            return {"value": []}
+        raise AssertionError(f"unexpected path: {path}")
+
+    graph.get.side_effect = fake_get
+    drives = resolve_scope("tenant", graph)
+    assert [d.drive_id for d in drives] == ["drv-u1"]
+
+
 def test_resolve_scope_tenant_paginates_users() -> None:
     graph = MagicMock()
 

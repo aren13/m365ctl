@@ -178,7 +178,12 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
         try:
             meta = graph.get(f"/users/{uid}/drive")
         except GraphError as exc:
-            if "itemNotFound" in str(exc) or "HTTP404" in str(exc):
+            # Users without a provisioned OneDrive return 404; Graph reports
+            # this as "ResourceNotFound: User's mysite not found." for
+            # unlicensed / guest / never-signed-in accounts, or "itemNotFound"
+            # / bare HTTP404 in other shapes. All mean "no drive" — skip.
+            msg = str(exc)
+            if any(t in msg for t in ("itemNotFound", "HTTP404", "ResourceNotFound")):
                 continue
             raise
         specs.append(
