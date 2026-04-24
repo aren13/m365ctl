@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import io
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from fazla_od.config import Config, ScopeConfig
@@ -113,3 +116,198 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
         with pytest.raises(ScopeViolation):
             assert_scope_allowed(item, cfg, unsafe_scope=False)
         m.assert_not_called()  # never prompted — flag required upfront
+
+
+# ---------------------------------------------------------------- §7 invariants
+# Each test below cross-references the rule it covers; see the invariant
+# table at the top of the Plan 4 document.
+
+from fazla_od.cli.move import run_move
+
+
+def test_dry_run_is_default_no_mutation(tmp_path, mocker):
+    """Spec §7 rule 1: mutating command without --confirm issues zero Graph calls."""
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(200, json={})
+
+    from fazla_od.graph import GraphClient
+    client = GraphClient(token_provider=lambda: "t",
+                         transport=httpx.MockTransport(handler),
+                         sleep=lambda s: None)
+    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=client)
+    mocker.patch(
+        "fazla_od.cli.move._lookup_item",
+        return_value={"drive_id": "d1", "item_id": "i1",
+                      "full_path": "/x", "name": "x", "parent_path": "/"},
+    )
+
+    rc = run_move(
+        config_path=tmp_path / "c.toml",
+        scope="drive:d1", drive_id="d1", item_id="i1",
+        pattern=None, from_plan=None,
+        new_parent_path="/B", new_parent_item_id="PB",
+        plan_out=None, confirm=False, unsafe_scope=False,
+    )
+    assert rc == 0
+    # _lookup_item is mocked, so no GET either; zero mutations must fire.
+    assert calls["n"] == 0
+
+
+def test_pattern_plus_confirm_is_rejected(tmp_path, mocker, capsys):
+    """Spec §7 rule 2: bulk destructive requires plan file."""
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+    rc = run_move(
+        config_path=tmp_path / "c.toml",
+        scope="drive:d1", drive_id=None, item_id=None,
+        pattern="**/*.tmp", from_plan=None,
+        new_parent_path="/T", new_parent_item_id="T",
+        plan_out=None, confirm=True, unsafe_scope=False,
+    )
+    assert rc == 2
+    assert "plan" in capsys.readouterr().err.lower()
+
+
+def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
+    """Spec §7 rule 2: --from-plan does NOT re-expand globs."""
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+
+    from fazla_od.catalog.db import open_catalog
+    with open_catalog(cfg.catalog.path) as conn:
+        for i in range(100):
+            conn.execute(
+                "INSERT INTO items (drive_id, item_id, name, full_path, "
+                "parent_path, is_folder, is_deleted) VALUES "
+                "(?, ?, ?, ?, ?, false, false)",
+                ["d1", f"i{i}", f"x{i}.tmp", f"/junk/x{i}.tmp", "/junk"],
+            )
+
+    patches = {"n": 0}
+
+    def handler(request):
+        if request.method == "PATCH":
+            patches["n"] += 1
+        return httpx.Response(
+            200, json={"id": "x",
+                       "parentReference": {"id": "P", "path": "/B"},
+                       "name": "x"},
+        )
+
+    from fazla_od.graph import GraphClient
+    client = GraphClient(token_provider=lambda: "t",
+                         transport=httpx.MockTransport(handler),
+                         sleep=lambda s: None)
+    mocker.patch("fazla_od.cli.move.build_graph_client", return_value=client)
+    mocker.patch(
+        "fazla_od.cli.move._lookup_item",
+        side_effect=lambda g, d, i: {"drive_id": d, "item_id": i,
+                                     "full_path": f"/junk/{i}", "name": i,
+                                     "parent_path": "/junk"},
+    )
+
+    from fazla_od.planfile import PLAN_SCHEMA_VERSION
+    plan_payload = {
+        "version": PLAN_SCHEMA_VERSION,
+        "created_at": "2026-04-24T10:00:00+00:00",
+        "source_cmd": "od-move --pattern '/junk/**' ...",
+        "scope": "drive:d1",
+        "operations": [
+            {"op_id": f"op-{i}", "action": "move",
+             "drive_id": "d1", "item_id": f"i{i}",
+             "args": {"new_parent_item_id": "PB"},
+             "dry_run_result": ""} for i in range(2)
+        ],
+    }
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan_payload))
+
+    rc = run_move(
+        config_path=tmp_path / "c.toml",
+        scope=None, drive_id=None, item_id=None, pattern=None,
+        from_plan=plan_path,
+        new_parent_path=None, new_parent_item_id=None,
+        plan_out=None, confirm=True, unsafe_scope=False,
+    )
+    assert rc == 0
+    assert patches["n"] == 2  # NOT 100
+
+
+def test_piped_stdin_cannot_auto_confirm_unsafe_scope(tmp_path, monkeypatch):
+    """Spec §7 rule 3: /dev/tty, not stdin, drives the unsafe-scope confirm."""
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("y\ny\ny\n"))
+    real_open = open
+
+    def fake_open(path, *a, **kw):
+        if path == "/dev/tty":
+            raise OSError("no controlling tty")
+        return real_open(path, *a, **kw)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+
+    with pytest.raises(ScopeViolation, match="declined"):
+        assert_scope_allowed(item, cfg, unsafe_scope=True)
+
+
+def test_deny_paths_never_appear_in_plan_or_tsv(tmp_path, mocker, capsys):
+    """Spec §7 rule 4: deny-paths filtered BEFORE plan emission."""
+    cfg = _cfg(allow=["d1"], deny=["/Confidential/**"], tmp_path=tmp_path)
+    mocker.patch("fazla_od.cli.move.load_config", return_value=cfg)
+
+    from fazla_od.catalog.db import open_catalog
+    with open_catalog(cfg.catalog.path) as conn:
+        conn.execute(
+            "INSERT INTO items (drive_id, item_id, name, full_path, "
+            "parent_path, is_folder, is_deleted) VALUES "
+            "('d1','ok','pub.txt','/Public/pub.txt','/Public',false,false),"
+            "('d1','no','sec.docx','/Confidential/sec.docx','/Confidential',false,false)"
+        )
+
+    plan_path = tmp_path / "plan.json"
+    rc = run_move(
+        config_path=tmp_path / "c.toml",
+        scope="drive:d1", drive_id=None, item_id=None,
+        pattern="/*/*",
+        from_plan=None,
+        new_parent_path="/Elsewhere", new_parent_item_id="X",
+        plan_out=plan_path, confirm=False, unsafe_scope=False,
+    )
+    assert rc == 0
+    plan = json.loads(plan_path.read_text())
+    names = [op["item_id"] for op in plan["operations"]]
+    assert "ok" in names
+    assert "no" not in names
+
+
+def test_audit_start_line_persists_even_on_mid_mutation_crash(tmp_path):
+    """Spec §7 rule 5: audit 'start' is written BEFORE the Graph call."""
+    from fazla_od.audit import AuditLogger, iter_audit_entries
+    from fazla_od.mutate.move import execute_move
+    from fazla_od.planfile import Operation
+
+    def handler(request):
+        raise httpx.ConnectError("connection reset by peer")
+
+    from fazla_od.graph import GraphClient
+    client = GraphClient(token_provider=lambda: "t",
+                         transport=httpx.MockTransport(handler),
+                         sleep=lambda s: None)
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="CRASH", action="move", drive_id="d1", item_id="i1",
+                   args={"new_parent_item_id": "P"}, dry_run_result="")
+
+    with pytest.raises(httpx.ConnectError):
+        execute_move(op, client, logger,
+                     before={"parent_path": "/A", "name": "x"})
+
+    entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "CRASH"]
+    assert len(entries) >= 1
+    assert entries[0]["phase"] == "start"
