@@ -1,24 +1,44 @@
-# Fazla OneDrive Toolkit - configuration template.
-# Copy to `config.toml` (gitignored) and fill in.
+# m365ctl - configuration template.
+# Copy to `config.toml` (gitignored) and fill in for your tenant.
+# Setup guide: docs/setup/first-run.md
 
-tenant_id    = "361efb70-ca20-41ae-b204-9045df001350"
-client_id    = "b22e6fd3-4859-43ae-b997-997ad3aaf14b"
-cert_path    = "~/.config/fazla-od/fazla-od.key"   # PEM, private key, mode 600
-cert_public  = "~/.config/fazla-od/fazla-od.cer"   # PEM, public cert (also uploaded to Entra)
-default_auth = "delegated"                          # or "app-only"
+tenant_id    = "00000000-0000-0000-0000-000000000000"   # Azure AD Directory (tenant) ID
+client_id    = "00000000-0000-0000-0000-000000000000"   # App registration (client) ID
+cert_path    = "~/.config/m365ctl/m365ctl.key"          # PEM private key, mode 600
+cert_public  = "~/.config/m365ctl/m365ctl.cer"          # PEM public cert (uploaded to Entra)
+default_auth = "delegated"                              # "delegated" or "app-only"
 
 [scope]
 # Drives the toolkit is allowed to touch.
-# Examples: "me", "site:Finance", "site:Legal", "drive:b!abcdef..."
-# Tenant-wide mutations require items to be inside this list (or --unsafe-scope).
+# Forms: "me", "site:<site-id-or-url>", "drive:<drive-id>".
 allow_drives         = ["me"]
+# Mailboxes the toolkit is allowed to touch.
+# Forms: "me", "upn:user@example.com", "shared:team@example.com", "*".
+allow_mailboxes      = ["me"]
 allow_users          = ["*"]
-deny_paths           = ["/Confidential/**", "/HR/**"]
+# OneDrive/SharePoint path globs that are always denied (no override possible).
+deny_paths           = []
+# Mail folder globs that are always denied (no override possible).
+deny_folders         = []
 unsafe_requires_flag = true
 
 [catalog]
 path             = "cache/catalog.duckdb"
 refresh_on_start = false
 
+[mail]
+catalog_path           = "cache/mail.duckdb"
+default_deleted_folder = "Deleted Items"
+default_junk_folder    = "Junk Email"
+default_drafts_folder  = "Drafts"
+default_sent_folder    = "Sent Items"
+default_triage_root    = "Inbox/Triage"
+categories_master      = []                             # e.g. ["Followup", "Waiting", "Done"]
+signature_path         = ""                             # e.g. "~/.config/m365ctl/signature.html"
+drafts_before_send     = true
+schedule_send_enabled  = false
+
 [logging]
-ops_dir = "logs/ops"
+ops_dir        = "logs/ops"
+purged_dir     = "logs/purged"                          # hard-delete EML captures
+retention_days = 30
