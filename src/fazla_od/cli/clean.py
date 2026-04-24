@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from fazla_od.audit import AuditLogger
+from fazla_od.audit import AuditLogger, find_most_recent_delete_before
 from fazla_od.cli._common import (
     CandidateItem,
     build_graph_client,
@@ -88,9 +88,31 @@ def run_clean(
                 meta = _lookup_item(graph, op.drive_id, op.item_id)
             except GraphError as exc:
                 if any(t in str(exc) for t in ("itemNotFound", "HTTP404")):
-                    meta = {"drive_id": op.drive_id, "item_id": op.item_id,
-                            "full_path": "(recycle bin)", "name": "",
-                            "parent_path": "(recycle bin)"}
+                    # Item is in the recycle bin. Recover name + parent_path
+                    # from the most recent matching od-delete audit record,
+                    # so PnP's Find-RecycleBinItem has enough info to
+                    # locate it.
+                    prior = find_most_recent_delete_before(
+                        logger, drive_id=op.drive_id, item_id=op.item_id
+                    ) or {}
+                    meta = {
+                        "drive_id": op.drive_id,
+                        "item_id": op.item_id,
+                        "full_path": "(recycle bin)",
+                        "name": prior.get("name", ""),
+                        "parent_path": prior.get("parent_path", "(recycle bin)"),
+                    }
+                    if not meta["name"]:
+                        print(
+                            f"[{op.op_id}] warning: no prior od-delete "
+                            f"audit record found for "
+                            f"(drive_id={op.drive_id}, item_id={op.item_id}); "
+                            f"recycle-bin lookup will likely fail because "
+                            f"we don't know the original filename. If the "
+                            f"item was deleted outside this toolkit, purge "
+                            f"it via SharePoint web UI instead.",
+                            file=sys.stderr,
+                        )
                 else:
                     raise
             try:

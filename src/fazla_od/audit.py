@@ -112,3 +112,26 @@ def find_op_by_id(
         elif rec.get("phase") == "end":
             end = rec
     return start, end
+
+
+def find_most_recent_delete_before(
+    logger: AuditLogger, *, drive_id: str, item_id: str
+) -> dict[str, Any] | None:
+    """Scan the audit log for the most recent ``od-delete`` start record
+    matching ``(drive_id, item_id)``. Return its ``before`` dict, or None
+    if no such record exists.
+
+    Used by recycle-purge to recover the original filename/parent_path
+    when the item is already in the recycle bin (live Graph lookup 404s).
+    """
+    match: dict[str, Any] | None = None
+    for entry in iter_audit_entries(logger):
+        if entry.get("phase") != "start":
+            continue
+        if entry.get("cmd") != "od-delete":
+            continue
+        if entry.get("drive_id") == drive_id and entry.get("item_id") == item_id:
+            match = entry  # keep walking to find the most recent
+    if match is None:
+        return None
+    return match.get("before") or None

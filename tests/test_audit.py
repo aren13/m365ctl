@@ -8,6 +8,7 @@ import pytest
 
 from fazla_od.audit import (
     AuditLogger,
+    find_most_recent_delete_before,
     find_op_by_id,
     iter_audit_entries,
     log_mutation_end,
@@ -112,6 +113,54 @@ def test_find_op_by_id_returns_paired_records(tmp_path: Path) -> None:
 def test_find_op_by_id_missing_returns_none(tmp_path: Path) -> None:
     logger = _logger(tmp_path)
     assert find_op_by_id(logger, "nope") == (None, None)
+
+
+def test_find_most_recent_delete_before_single_match(tmp_path: Path) -> None:
+    logger = _logger(tmp_path)
+    log_mutation_start(
+        logger, op_id="D1", cmd="od-delete", args={},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/F", "name": "hello.txt"},
+    )
+    log_mutation_end(logger, op_id="D1",
+                     after={"parent_path": "(recycle bin)", "name": "hello.txt"},
+                     result="ok")
+    got = find_most_recent_delete_before(logger, drive_id="d", item_id="i")
+    assert got == {"parent_path": "/F", "name": "hello.txt"}
+
+
+def test_find_most_recent_delete_before_returns_most_recent(tmp_path: Path) -> None:
+    logger = _logger(tmp_path)
+    log_mutation_start(
+        logger, op_id="D1", cmd="od-delete", args={},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/F", "name": "old.txt"},
+    )
+    log_mutation_start(
+        logger, op_id="D2", cmd="od-delete", args={},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/G", "name": "new.txt"},
+    )
+    got = find_most_recent_delete_before(logger, drive_id="d", item_id="i")
+    assert got == {"parent_path": "/G", "name": "new.txt"}
+
+
+def test_find_most_recent_delete_before_no_match(tmp_path: Path) -> None:
+    logger = _logger(tmp_path)
+    got = find_most_recent_delete_before(logger, drive_id="d", item_id="i")
+    assert got is None
+
+
+def test_find_most_recent_delete_before_wrong_cmd_ignored(tmp_path: Path) -> None:
+    """od-move with matching (drive,item) must NOT be returned."""
+    logger = _logger(tmp_path)
+    log_mutation_start(
+        logger, op_id="M1", cmd="od-move", args={},
+        drive_id="d", item_id="i",
+        before={"parent_path": "/A", "name": "x.txt"},
+    )
+    got = find_most_recent_delete_before(logger, drive_id="d", item_id="i")
+    assert got is None
 
 
 def test_audit_log_append_only(tmp_path: Path) -> None:
