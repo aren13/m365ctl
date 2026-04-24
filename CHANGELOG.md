@@ -5,6 +5,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-25
+
+### Added
+- **Safe message mutations (Phase 3).** All undoable.
+  - `m365ctl mail move` — single-item (`--message-id --to-folder --confirm`) or bulk plan-file workflow (filter flags + `--to-folder --plan-out plan.json` → review → `--from-plan plan.json --confirm`).
+  - `m365ctl mail copy` — same shape as move; creates a new message in the destination folder.
+  - `m365ctl mail flag` — `--status flagged|notFlagged|complete` with optional `--start`/`--due`.
+  - `m365ctl mail read` — `--yes` / `--no` toggles `isRead`.
+  - `m365ctl mail focus` — `--focused` / `--other` sets inferenceClassification.
+  - `m365ctl mail categorize` — `--add X` / `--remove X` / `--set X [--set Y]` with add/remove on current categories or set-exact semantics.
+- **First mail-side plan-file workflow**: filter flags → `--plan-out plan.json` → `--from-plan plan.json --confirm`. Bulk plans ≥20 items require interactive `/dev/tty` confirm (non-bypassable by piped stdin).
+- **All Phase 3 verbs are undoable** via `m365ctl undo <op-id>`:
+  - `mail.move` ↔ move back to prior parent folder
+  - `mail.flag` ↔ restore prior flag status / start / due
+  - `mail.read` ↔ flip `isRead`
+  - `mail.focus` ↔ restore prior inferenceClassification
+  - `mail.categorize` ↔ restore prior category list
+  - `mail.copy` ↔ `mail.delete.soft` on the new message id — **inverse executor lands Phase 4**. For now, the undo CLI prints the new message id and a pointer.
+- `GraphClient.patch` + `GraphClient.post` now accept optional `headers={}` for `If-Match: <change_key>` (ETag) plumbing. Executors pass it when `op.args["change_key"]` is set.
+- `src/m365ctl/mail/cli/_bulk.py` — `MessageFilter`, `expand_messages_for_pattern`, `emit_plan`, `confirm_bulk_proceed`.
+- 6 new `bin/mail-{move,copy,flag,read,focus,categorize}` wrappers and corresponding dispatcher routes.
+
+### Safety
+- `--confirm` required for every mutation. Dry-run default.
+- `assert_mail_target_allowed` runs before credential construction and Graph (mailbox scope + hardcoded compliance folder deny).
+- Bulk ≥20 items → `/dev/tty` confirm (non-bypassable by piped stdin).
+
+### Deferred
+- `mail.delete.soft` executor → Phase 4 (first mail message soft-delete verb).
+- Automatic ETag 412 → refresh → retry loop → Phase 3.5 or Phase 4 (Phase 3 threads `change_key` into `If-Match` header but surfaces 412 as a GraphError without auto-retry).
+
 ## [0.3.0] — 2026-04-24
 
 ### Added
