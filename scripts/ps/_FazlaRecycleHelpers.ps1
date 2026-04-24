@@ -100,14 +100,23 @@ function Find-RecycleBinItem {
 
     .EXAMPLE
       $item = Find-RecycleBinItem -LeafName 'Q1.xlsx' -DirName 'Shared Documents/Finance'
+
+    .NOTES
+      Recycle-bin enumeration is capped at 100000 items per call (the
+      -RowLimit passed to Get-PnPRecycleBinItem). PnP.PowerShell does not
+      expose native paging on this cmdlet, so bins larger than the ceiling
+      will truncate silently at the PnP layer. If the total hits the cap,
+      a "RowLimitReached" warning is emitted so operators know the search
+      may have missed the target. True paging (e.g. split by FirstStage /
+      SecondStage) is a future enhancement.
     #>
     param(
         [Parameter(Mandatory=$true)] [string] $LeafName,
         [Parameter(Mandatory=$true)] [string] $DirName
     )
     $escapedDirName = [System.Management.Automation.WildcardPattern]::Escape($DirName)
-    $all = Get-PnPRecycleBinItem -RowLimit 5000
-    if ($all.Count -ge 5000) { Write-Warning "RowLimitReached: recycle bin returned 5000 items; target may be beyond the ceiling. Consider expanding search or emptying older items." }
+    $all = Get-PnPRecycleBinItem -RowLimit 100000
+    if ($all.Count -ge 100000) { Write-Warning "RowLimitReached: recycle bin returned 100000 items (the enumeration cap); target may be beyond the ceiling. Empty older items or narrow the search before retrying." }
     $candidates = @($all | Where-Object {
         $_.LeafName -eq $LeafName -and $_.DirName -like "*$escapedDirName"
     } | Sort-Object -Property DeletedDate -Descending)

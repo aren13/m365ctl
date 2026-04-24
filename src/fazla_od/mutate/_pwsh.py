@@ -21,6 +21,11 @@ from pathlib import Path
 from fazla_od.graph import GraphClient, GraphError
 
 
+# Path to the repo's PowerShell scripts directory, for module-level
+# constants like _RESTORE_PS1 / _PURGE_PS1 / _LABEL_PS1 to use as a base.
+PS_SCRIPTS_DIR = Path(__file__).resolve().parents[2].parent / "scripts" / "ps"
+
+
 def invoke_pwsh(script_path: Path | str, args: list[str]) -> tuple[int, str, str]:
     """Run ``pwsh -NoProfile -File <script> <args>`` and return its result.
 

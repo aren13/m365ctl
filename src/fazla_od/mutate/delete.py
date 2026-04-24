@@ -25,23 +25,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
 from fazla_od.config import Config
 from fazla_od.graph import GraphClient, GraphError
 from fazla_od.mutate._pwsh import (
+    PS_SCRIPTS_DIR,
     invoke_pwsh,
     lookup_site_url_from_drive_id,
     normalize_recycle_dir_name,
 )
 from fazla_od.planfile import Operation
 
-_RESTORE_PS1 = (
-    Path(__file__).resolve().parents[2].parent
-    / "scripts" / "ps" / "recycle-restore.ps1"
-)
+_RESTORE_PS1 = PS_SCRIPTS_DIR / "recycle-restore.ps1"
 
 
 @dataclass(frozen=True)
@@ -84,8 +81,14 @@ _ODFB_RESTORE_MANUAL = (
     "the audit log's 'before.parent_path' field for this op_id."
 )
 
-# Graph error codes that signal "this is the OneDrive-for-Business no-public-
-# restore-endpoint case"; trigger the PnP.PowerShell fallback.
+# Graph error codes that trigger the PnP.PowerShell fallback. The ODfB
+# /restore endpoint surfaces as different codes depending on tenant
+# config: 'notSupported' is the documented response, 'invalidRequest' is
+# the typical one for this endpoint on Business tenants, and 'BadRequest'
+# covers the older response style and the case where the Graph SDK
+# returns an HTTP 400 without parsing out a specific error code. If this
+# tuple ever proves too broad (e.g. masking a legit BadRequest unrelated
+# to recycle-bin restore), narrow it to the first two tokens.
 _ODFB_RESTORE_TOKENS = ("notSupported", "BadRequest", "invalidRequest")
 
 

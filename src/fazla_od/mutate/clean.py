@@ -22,13 +22,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
 from fazla_od.config import Config
 from fazla_od.graph import GraphClient, GraphError
 from fazla_od.mutate._pwsh import (
+    PS_SCRIPTS_DIR,
     invoke_pwsh,
     lookup_site_url_from_drive_id,
     normalize_recycle_dir_name,
@@ -36,10 +36,7 @@ from fazla_od.mutate._pwsh import (
 from fazla_od.planfile import Operation
 
 
-_PURGE_PS1 = (
-    Path(__file__).resolve().parents[2].parent
-    / "scripts" / "ps" / "recycle-purge.ps1"
-)
+_PURGE_PS1 = PS_SCRIPTS_DIR / "recycle-purge.ps1"
 
 
 @dataclass(frozen=True)

@@ -2,14 +2,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from fazla_od.audit import AuditLogger, log_mutation_end, log_mutation_start
-from fazla_od.mutate._pwsh import invoke_pwsh
+from fazla_od.mutate._pwsh import PS_SCRIPTS_DIR, invoke_pwsh
 from fazla_od.planfile import Operation
 
-_PS1 = Path(__file__).resolve().parents[2].parent / "scripts" / "ps" / "Set-FazlaLabel.ps1"
+_PS1 = PS_SCRIPTS_DIR / "Set-FazlaLabel.ps1"
+
+# Shown when pwsh isn't on PATH so the od-label path mirrors the
+# recycle-bin fallback paths in delete.py / clean.py instead of letting a
+# FileNotFoundError bubble up as an unhandled exception.
+_PWSH_NOT_INSTALLED = (
+    "pwsh (PowerShell 7+) is not installed or not on PATH. "
+    "Install via 'brew install --cask powershell' (macOS) or per "
+    "docs/ops/pnp-powershell-setup.md, then retry."
+)
 
 
 @dataclass(frozen=True)
@@ -26,12 +34,18 @@ def execute_label_apply(
     log_mutation_start(logger, op_id=op.op_id, cmd="od-label(apply)",
                        args=op.args, drive_id=op.drive_id,
                        item_id=op.item_id, before=before)
-    code, out, err = invoke_pwsh(_PS1, [
-        "-Action", "apply",
-        "-SiteUrl", op.args["site_url"],
-        "-ServerRelativeUrl", before["server_relative_url"],
-        "-Label", op.args["label"],
-    ])
+    try:
+        code, out, err = invoke_pwsh(_PS1, [
+            "-Action", "apply",
+            "-SiteUrl", op.args["site_url"],
+            "-ServerRelativeUrl", before["server_relative_url"],
+            "-Label", op.args["label"],
+        ])
+    except FileNotFoundError:
+        log_mutation_end(logger, op_id=op.op_id, after=None,
+                         result="error", error=_PWSH_NOT_INSTALLED)
+        return LabelResult(op_id=op.op_id, status="error",
+                           error=_PWSH_NOT_INSTALLED)
     if code != 0:
         log_mutation_end(logger, op_id=op.op_id, after=None,
                          result="error", error=err.strip() or out.strip())
@@ -50,11 +64,17 @@ def execute_label_remove(
     log_mutation_start(logger, op_id=op.op_id, cmd="od-label(remove)",
                        args=op.args, drive_id=op.drive_id,
                        item_id=op.item_id, before=before)
-    code, out, err = invoke_pwsh(_PS1, [
-        "-Action", "remove",
-        "-SiteUrl", op.args["site_url"],
-        "-ServerRelativeUrl", before["server_relative_url"],
-    ])
+    try:
+        code, out, err = invoke_pwsh(_PS1, [
+            "-Action", "remove",
+            "-SiteUrl", op.args["site_url"],
+            "-ServerRelativeUrl", before["server_relative_url"],
+        ])
+    except FileNotFoundError:
+        log_mutation_end(logger, op_id=op.op_id, after=None,
+                         result="error", error=_PWSH_NOT_INSTALLED)
+        return LabelResult(op_id=op.op_id, status="error",
+                           error=_PWSH_NOT_INSTALLED)
     if code != 0:
         log_mutation_end(logger, op_id=op.op_id, after=None,
                          result="error", error=err.strip() or out.strip())

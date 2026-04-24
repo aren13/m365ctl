@@ -34,6 +34,28 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     assert entries[-1]["result"] == "ok"
 
 
+def test_label_apply_handles_pwsh_missing(tmp_path, mocker):
+    mocker.patch(
+        "fazla_od.mutate._pwsh.subprocess.run",
+        side_effect=FileNotFoundError(2, "No such file", "pwsh"),
+    )
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-3", action="label-apply", drive_id="d1",
+                   item_id="i1", args={"label": "Confidential",
+                                        "site_url": "https://fazla.sharepoint.com/"},
+                   dry_run_result="")
+    result = execute_label_apply(op, logger,
+                                 before={"parent_path": "/", "name": "x",
+                                         "server_relative_url": "/Documents/x"})
+    assert result.status == "error"
+    assert result.error is not None
+    assert "pwsh" in result.error.lower()
+    assert "PATH" in result.error
+    entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-3"]
+    assert entries[-1]["result"] == "error"
+
+
 def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     completed = MagicMock()
     completed.returncode = 1
