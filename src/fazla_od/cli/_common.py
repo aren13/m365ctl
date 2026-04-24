@@ -17,7 +17,7 @@ from typing import Iterable, Iterator
 from fazla_od.auth import AppOnlyCredential, DelegatedCredential
 from fazla_od.catalog.db import open_catalog
 from fazla_od.config import Config
-from fazla_od.graph import GraphClient
+from fazla_od.graph import GraphClient, GraphError
 from fazla_od.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan
 
 
@@ -36,7 +36,39 @@ def build_graph_client(cfg: Config, scope: str | None) -> GraphClient:
         else AppOnlyCredential(cfg)
     )
     token = cred.get_token()
-    return GraphClient(token_provider=lambda: token)
+    graph = GraphClient(token_provider=lambda: token)
+    _expand_me_in_allow_drives(cfg, graph, scope)
+    return graph
+
+
+def _expand_me_in_allow_drives(
+    cfg: Config, graph: GraphClient, scope: str | None
+) -> None:
+    """Resolve the ``"me"`` sentinel in ``cfg.scope.allow_drives`` to the
+    delegated user's actual drive id.
+
+    Users commonly configure ``allow_drives = ["me"]``, but ``safety.py``
+    compares against real drive ids, so the literal ``"me"`` would never
+    match. This expansion is idempotent: if already resolved (no ``"me"``
+    in the list), it's a no-op. App-only scopes have no delegated user,
+    so we leave ``"me"`` in place as a harmless no-op sentinel there.
+    """
+    allow = cfg.scope.allow_drives
+    if "me" not in allow:
+        return
+    if scope != "me":
+        # Only expand when the delegated credential is actually in use.
+        # App-only token has no "/me/drive".
+        return
+    try:
+        me_drive = graph.get("/me/drive")
+    except GraphError:
+        return  # leave as no-op sentinel
+    real_id = (me_drive or {}).get("id")
+    if not real_id:
+        return
+    idx = allow.index("me")
+    allow[idx] = real_id
 
 
 def expand_pattern(

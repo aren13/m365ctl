@@ -51,3 +51,24 @@ def test_restore_calls_restore_endpoint(tmp_path):
                              before={"parent_path": "(recycle bin)", "name": "x.txt"})
     assert result.status == "ok"
     assert seen == [("POST", "/v1.0/drives/d1/items/i1/restore")]
+
+
+def test_restore_notsupported_wraps_with_manual_instructions(tmp_path):
+    """OneDrive-for-Business restore fails with notSupported; we add
+    a line pointing operators at the SharePoint/PnP workaround."""
+    def handler(request):
+        return httpx.Response(
+            400, json={"error": {"code": "notSupported",
+                                 "message": "Operation not supported"}}
+        )
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-restore", action="restore", drive_id="d1",
+                   item_id="i1", args={}, dry_run_result="")
+    result = execute_restore(op, _client(handler), logger,
+                             before={"parent_path": "(recycle bin)",
+                                     "name": "x.txt"})
+    assert result.status == "error"
+    assert "notSupported" in result.error
+    assert "PnP.PowerShell" in result.error
+    assert "Restore-PnPRecycleBinItem" in result.error

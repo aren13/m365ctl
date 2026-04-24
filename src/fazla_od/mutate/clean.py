@@ -1,4 +1,16 @@
-"""Specialised cleanup ops: recycle-bin purge, old-versions, stale-shares."""
+"""Specialised cleanup ops: recycle-bin purge, old-versions, stale-shares.
+
+**Recycle-bin purge caveat (discovered during Plan 4 live smoke test):**
+Microsoft Graph v1.0's ``POST /drives/{d}/items/{i}/permanentDelete`` is
+designed for *live* items (bypass-recycle-bin hard delete). Items
+already in the recycle bin return HTTP 404 at that endpoint — there is
+no public Graph v1.0 API to empty the OneDrive-for-Business recycle bin
+by item id. Supported paths: SharePoint REST
+(``/Web/RecycleBin('<rb_id>')/DeleteObject()``) or PnP.PowerShell
+(``Clear-PnPRecycleBinItem``). ``purge_recycle_bin_item`` keeps calling
+the Graph endpoint (it works for live items and for some tenants) but
+translates the 404 into an actionable operator message.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,6 +34,20 @@ def _parse_ts(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+_ODFB_PURGE_MANUAL = (
+    "Graph v1.0 /permanentDelete targets live items only; "
+    "OneDrive-for-Business recycle-bin items must be purged via "
+    "SharePoint web UI (Recycle bin → Delete), the SharePoint REST API "
+    "(/Web/RecycleBin('<rb_id>')/DeleteObject()), or PnP.PowerShell "
+    "(Clear-PnPRecycleBinItem)."
+)
+
+# Graph error codes that signal "the item is in the recycle bin, not live".
+# (accessDenied shows up in some tenants; itemNotFound/HTTP404 is the common
+# case observed during the Plan 4 live smoke.)
+_ODFB_PURGE_TOKENS = ("itemNotFound", "HTTP404", "accessDenied")
+
+
 def purge_recycle_bin_item(
     op: Operation, graph: GraphClient, logger: AuditLogger,
     *, before: dict[str, Any],
@@ -36,9 +62,12 @@ def purge_recycle_bin_item(
             json_body=None,
         )
     except GraphError as e:
+        err = str(e)
+        if any(t in err for t in _ODFB_PURGE_TOKENS):
+            err = f"{err} | {_ODFB_PURGE_MANUAL}"
         log_mutation_end(logger, op_id=op.op_id, after=None,
-                         result="error", error=str(e))
-        return CleanResult(op_id=op.op_id, status="error", error=str(e))
+                         result="error", error=err)
+        return CleanResult(op_id=op.op_id, status="error", error=err)
     after = {"parent_path": "(permanently deleted)",
              "name": before.get("name", ""),
              "irreversible": True}

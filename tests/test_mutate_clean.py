@@ -97,3 +97,24 @@ def test_revoke_stale_shares_only_touches_links_older_than_cutoff(tmp_path):
                                  before={"parent_path": "/", "name": "x"})
     assert result.status == "ok"
     assert deleted == ["p-stale"]
+
+
+def test_purge_404_wraps_with_manual_instructions(tmp_path):
+    """Graph /permanentDelete 404s on recycle-bin items; we add a line
+    pointing operators at SharePoint REST / PnP for the real purge."""
+    def handler(request):
+        return httpx.Response(
+            404, json={"error": {"code": "itemNotFound",
+                                 "message": "Item not found"}}
+        )
+
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    op = Operation(op_id="op-purge", action="recycle-purge",
+                   drive_id="d1", item_id="I",
+                   args={}, dry_run_result="")
+    result = purge_recycle_bin_item(op, _client(handler), logger,
+                                    before={"parent_path": "(recycle bin)",
+                                            "name": "old.txt"})
+    assert result.status == "error"
+    assert "itemNotFound" in result.error
+    assert "Clear-PnPRecycleBinItem" in result.error
