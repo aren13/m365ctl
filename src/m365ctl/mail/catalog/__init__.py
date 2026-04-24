@@ -1,0 +1,1 @@
+"""Mail local catalog (DuckDB)."""
