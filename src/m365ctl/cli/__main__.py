@@ -25,12 +25,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.onedrive.cli.__main__ import main as od_main
         return od_main(rest) or 0
     if domain == "mail":
-        print(
-            "m365ctl: mail domain is not yet implemented - scaffold only. "
-            "See docs/superpowers/specs/2026-04-24-m365ctl-mail-module.md Phase 1 for delivery target.",
-            file=sys.stderr,
-        )
-        return 2
+        from m365ctl.mail.cli.__main__ import main as mail_main
+        return mail_main(rest) or 0
     if domain == "undo":
         from m365ctl.cli.undo import main as undo_main
         return undo_main(rest) or 0
