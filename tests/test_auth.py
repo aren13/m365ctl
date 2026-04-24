@@ -151,3 +151,34 @@ def test_delegated_get_token_raises_when_not_logged_in(cfg: Config, mocker) -> N
     cred = DelegatedCredential(cfg)
     with pytest.raises(AuthError, match="not logged in"):
         cred.get_token()
+
+
+def test_load_persistent_cache_migrates_legacy_fazla_od_dir(tmp_path, monkeypatch):
+    from m365ctl.common import auth as auth_mod
+    fake_home = tmp_path
+    monkeypatch.setattr(auth_mod.Path, "home", staticmethod(lambda: fake_home))
+    # Re-evaluate the module-level constants against the patched home.
+    monkeypatch.setattr(auth_mod, "_CACHE_DIR", fake_home / ".config" / "m365ctl")
+    monkeypatch.setattr(auth_mod, "_CACHE_FILE", fake_home / ".config" / "m365ctl" / "token_cache.bin")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_DIR", fake_home / ".config" / "fazla-od")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_FILE", fake_home / ".config" / "fazla-od" / "token_cache.bin")
+    legacy = fake_home / ".config" / "fazla-od"
+    legacy.mkdir(parents=True)
+    (legacy / "token_cache.bin").write_text("{}")
+    cache = auth_mod._load_persistent_cache()
+    assert cache is not None
+    assert (fake_home / ".config" / "m365ctl" / "token_cache.bin").exists()
+    # Legacy file moved, not copied.
+    assert not (legacy / "token_cache.bin").exists()
+
+
+def test_load_persistent_cache_returns_empty_when_no_cache(tmp_path, monkeypatch):
+    from m365ctl.common import auth as auth_mod
+    monkeypatch.setattr(auth_mod, "_CACHE_DIR", tmp_path / ".config" / "m365ctl")
+    monkeypatch.setattr(auth_mod, "_CACHE_FILE", tmp_path / ".config" / "m365ctl" / "token_cache.bin")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_DIR", tmp_path / ".config" / "fazla-od")
+    monkeypatch.setattr(auth_mod, "_LEGACY_CACHE_FILE", tmp_path / ".config" / "fazla-od" / "token_cache.bin")
+    cache = auth_mod._load_persistent_cache()
+    # msal returns an empty SerializableTokenCache when nothing on disk.
+    assert cache is not None
+    assert not (tmp_path / ".config" / "m365ctl" / "token_cache.bin").exists()

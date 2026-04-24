@@ -28,8 +28,10 @@ GRAPH_SCOPES_DELEGATED = [
     "User.Read",
 ]
 
-_CACHE_DIR = Path.home() / ".config" / "fazla-od"
+_CACHE_DIR = Path.home() / ".config" / "m365ctl"
 _CACHE_FILE = _CACHE_DIR / "token_cache.bin"
+_LEGACY_CACHE_DIR = Path.home() / ".config" / "fazla-od"
+_LEGACY_CACHE_FILE = _LEGACY_CACHE_DIR / "token_cache.bin"
 
 
 class AuthError(RuntimeError):
@@ -94,17 +96,33 @@ class AppOnlyCredential:
         return result["access_token"]
 
 
-def _load_persistent_cache() -> msal.SerializableTokenCache | None:
-    """Load the MSAL token cache from disk, if present.
+def _load_persistent_cache() -> msal.SerializableTokenCache:
+    """Load the MSAL token cache, migrating any legacy ~/.config/fazla-od/ file.
 
-    We use a plain file at mode 600 rather than msal-extensions' Keychain
-    integration because the latter has historical stability issues on
-    macOS. The file sits in ~/.config/fazla-od/ alongside the cert and
-    inherits the directory's 700 permissions.
+    The cache file sits at mode 600 inside ~/.config/m365ctl/ (mode 700).
+    On first run after the rebrand, we opportunistically move a pre-existing
+    fazla-od token cache into the new location. If the move fails (permission
+    issue, already-exists race), we log and fall back to a clean login --
+    safer than deserializing from the legacy file and leaving the two paths
+    divergent.
     """
     cache = msal.SerializableTokenCache()
     if _CACHE_FILE.exists():
         cache.deserialize(_CACHE_FILE.read_text())
+        return cache
+    if _LEGACY_CACHE_FILE.exists():
+        try:
+            _CACHE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+            _LEGACY_CACHE_FILE.rename(_CACHE_FILE)
+            os.chmod(_CACHE_FILE, 0o600)
+            cache.deserialize(_CACHE_FILE.read_text())
+        except OSError as e:
+            import sys
+            print(
+                f"m365ctl: could not migrate legacy token cache from "
+                f"{_LEGACY_CACHE_FILE} ({e}); re-run `m365ctl od auth login`.",
+                file=sys.stderr,
+            )
     return cache
 
 
