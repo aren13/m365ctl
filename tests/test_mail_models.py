@@ -15,7 +15,6 @@ from m365ctl.mail.models import (
     MailboxSettings,
     Message,
     Rule,
-    WorkingHours,
 )
 
 

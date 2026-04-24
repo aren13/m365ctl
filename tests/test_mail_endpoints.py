@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 
 from m365ctl.mail.endpoints import (
-    AuthMode,
     InvalidMailboxSpec,
     user_base,
     parse_mailbox_spec,
