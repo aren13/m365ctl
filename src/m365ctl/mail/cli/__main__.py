@@ -1,18 +1,24 @@
-"""`m365ctl mail <verb>` — reader dispatcher.
+"""`m365ctl mail <verb>` — mail CLI dispatcher.
 
-Verbs that land in Phase 1:
+Phase 1 (readers):
 - auth          device-code login (alias of od-auth; shared cache)
 - whoami        identity + scopes + mailbox access summary
 - list          list messages in a folder
 - get           fetch one message
 - search        server-side /search/query
-- folders       list folders (tree / flat / with-counts)
-- categories    list master categories
+- folders       list folders (Phase 2 also adds create/rename/move/delete subcommands)
+- categories    list master categories (Phase 2 adds add/update/remove/sync)
 - rules         list / show inbox rules
 - settings      show mailbox settings
 - attach        list / get attachments
 
-Mutation verbs (move, delete, flag, compose, ...) land in Phase 2+.
+Phase 3 (safe message mutations):
+- move          move one or more messages (single or bulk plan)
+- copy          copy one or more messages
+- flag          set / clear flag
+- read          mark read / unread
+- focus         set inferenceClassification (focused / other)
+- categorize    add / remove / set categories
 """
 from __future__ import annotations
 
@@ -21,17 +27,25 @@ import sys
 _USAGE = (
     "usage: m365ctl mail <verb> [args...]\n"
     "\n"
-    "Read-only verbs (Phase 1):\n"
+    "Readers:\n"
     "  auth         login | whoami\n"
     "  whoami       identity + scopes + mailbox access\n"
     "  list         list messages in a folder\n"
     "  get          fetch a single message\n"
     "  search       server-side message search\n"
-    "  folders      list mail folders\n"
-    "  categories   list master categories\n"
+    "  folders      list mail folders (+ create/rename/move/delete subcommands)\n"
+    "  categories   list master categories (+ add/update/remove/sync subcommands)\n"
     "  rules        list / show inbox rules\n"
     "  settings     show mailbox settings\n"
     "  attach       list / get attachments\n"
+    "\n"
+    "Mutations (safe — all undoable):\n"
+    "  move         move one or more messages\n"
+    "  copy         copy one or more messages\n"
+    "  flag         set / clear flag\n"
+    "  read         mark read / unread\n"
+    "  focus        set inferenceClassification\n"
+    "  categorize   add / remove / set categories\n"
 )
 
 
@@ -62,6 +76,18 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.settings import main as f
     elif verb == "attach":
         from m365ctl.mail.cli.attach import main as f
+    elif verb == "move":
+        from m365ctl.mail.cli.move import main as f
+    elif verb == "copy":
+        from m365ctl.mail.cli.copy import main as f
+    elif verb == "flag":
+        from m365ctl.mail.cli.flag import main as f
+    elif verb == "read":
+        from m365ctl.mail.cli.read import main as f
+    elif verb == "focus":
+        from m365ctl.mail.cli.focus import main as f
+    elif verb == "categorize":
+        from m365ctl.mail.cli.categorize import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
