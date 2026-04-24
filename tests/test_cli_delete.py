@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from m365ctl.cli.delete import run_delete
+from m365ctl.onedrive.cli.delete import run_delete
 
 
 def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
@@ -28,11 +28,11 @@ def _stub_cfg(tmp_path: Path, *, allow=None, deny=None):
 
 def test_dry_run_is_default_no_graph_call(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.delete.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.delete.load_config", return_value=cfg)
     client = MagicMock()
-    mocker.patch("m365ctl.cli.delete.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.onedrive.cli.delete.build_graph_client", return_value=client)
     mocker.patch(
-        "m365ctl.cli.delete._lookup_item",
+        "m365ctl.onedrive.cli.delete._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/A/x.tmp", "name": "x.tmp",
                       "parent_path": "/A"},
@@ -52,7 +52,7 @@ def test_dry_run_is_default_no_graph_call(tmp_path, mocker, capsys):
 
 def test_confirm_required_for_single_delete_executes(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.delete.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.delete.load_config", return_value=cfg)
 
     calls = {"n": 0}
 
@@ -67,9 +67,9 @@ def test_confirm_required_for_single_delete_executes(tmp_path, mocker):
         transport=httpx.MockTransport(handler),
         sleep=lambda s: None,
     )
-    mocker.patch("m365ctl.cli.delete.build_graph_client", return_value=real)
+    mocker.patch("m365ctl.onedrive.cli.delete.build_graph_client", return_value=real)
     mocker.patch(
-        "m365ctl.cli.delete._lookup_item",
+        "m365ctl.onedrive.cli.delete._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/A/x", "name": "x",
                       "parent_path": "/A"},
@@ -87,7 +87,7 @@ def test_confirm_required_for_single_delete_executes(tmp_path, mocker):
 
 def test_pattern_with_confirm_requires_from_plan(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.delete.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.delete.load_config", return_value=cfg)
     rc = run_delete(
         config_path=tmp_path / "config.toml",
         scope="drive:d1", drive_id=None, item_id=None,
@@ -101,10 +101,10 @@ def test_pattern_with_confirm_requires_from_plan(tmp_path, mocker, capsys):
 def test_deny_paths_filtered_from_plan(tmp_path, mocker):
     """Deny-paths never appear in an emitted plan."""
     cfg = _stub_cfg(tmp_path, deny=["/Confidential/**"])
-    mocker.patch("m365ctl.cli.delete.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.delete.load_config", return_value=cfg)
 
     # Seed a catalog with one allowed and one denied item.
-    from m365ctl.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "

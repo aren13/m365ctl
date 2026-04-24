@@ -9,7 +9,7 @@
   and emits a single JSON line on stdout with the restored metadata.
 
   Errors are surfaced via non-zero exit + Write-Error so the Python caller
-  (m365ctl.mutate.delete._restore_via_pnp) can propagate stderr into
+  (m365ctl.onedrive.mutate.delete._restore_via_pnp) can propagate stderr into
   DeleteResult.error and the audit log.
 
 .EXAMPLE

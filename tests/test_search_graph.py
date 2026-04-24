@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from m365ctl.search.graph_search import SearchHit, graph_search
+from m365ctl.onedrive.search.graph_search import SearchHit, graph_search
 
 
 def _resource(drive_id: str, item_id: str, name: str,

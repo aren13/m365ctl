@@ -3,19 +3,19 @@ from __future__ import annotations
 
 import sys
 
-from m365ctl.cli import audit_sharing as audit_sharing_cli
-from m365ctl.cli import auth as auth_cli
-from m365ctl.cli import catalog as catalog_cli
-from m365ctl.cli import clean as clean_cli
-from m365ctl.cli import copy as copy_cli
-from m365ctl.cli import delete as delete_cli
-from m365ctl.cli import download as download_cli
-from m365ctl.cli import inventory as inventory_cli
-from m365ctl.cli import label as label_cli
-from m365ctl.cli import move as move_cli
-from m365ctl.cli import rename as rename_cli
-from m365ctl.cli import search as search_cli
-from m365ctl.cli import undo as undo_cli
+from m365ctl.onedrive.cli import audit_sharing as audit_sharing_cli
+from m365ctl.onedrive.cli import auth as auth_cli
+from m365ctl.onedrive.cli import catalog as catalog_cli
+from m365ctl.onedrive.cli import clean as clean_cli
+from m365ctl.onedrive.cli import copy as copy_cli
+from m365ctl.onedrive.cli import delete as delete_cli
+from m365ctl.onedrive.cli import download as download_cli
+from m365ctl.onedrive.cli import inventory as inventory_cli
+from m365ctl.onedrive.cli import label as label_cli
+from m365ctl.onedrive.cli import move as move_cli
+from m365ctl.onedrive.cli import rename as rename_cli
+from m365ctl.onedrive.cli import search as search_cli
+from m365ctl.onedrive.cli import undo as undo_cli
 
 _SUBCOMMANDS = {
     "audit-sharing": audit_sharing_cli.main,

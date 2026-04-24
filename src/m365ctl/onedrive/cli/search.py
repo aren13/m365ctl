@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Iterable
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.catalog.crawl import resolve_scope
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.crawl import resolve_scope
+from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import load_config
 from m365ctl.common.graph import GraphClient
-from m365ctl.search.catalog_search import catalog_search
-from m365ctl.search.graph_search import SearchHit, graph_search
-from m365ctl.search.merge import merge_hits
+from m365ctl.onedrive.search.catalog_search import catalog_search
+from m365ctl.onedrive.search.graph_search import SearchHit, graph_search
+from m365ctl.onedrive.search.merge import merge_hits
 
 
 def _drive_ids_for_scope(scope: str, graph) -> list[str] | None:

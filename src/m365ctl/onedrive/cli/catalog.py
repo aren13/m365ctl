@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
+from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import load_config
 from m365ctl.common.graph import GraphClient
 from m365ctl.common.prompts import TTYUnavailable, confirm_or_abort

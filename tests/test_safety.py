@@ -9,7 +9,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from m365ctl.cli.move import run_move
+from m365ctl.onedrive.cli.move import run_move
 from m365ctl.common.config import Config, ScopeConfig
 from m365ctl.common.safety import (
     ScopeViolation,
@@ -127,7 +127,7 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
 def test_dry_run_is_default_no_mutation(tmp_path, mocker):
     """Spec §7 rule 1: mutating command without --confirm issues zero Graph calls."""
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.move.load_config", return_value=cfg)
     calls = {"n": 0}
 
     def handler(request):
@@ -138,9 +138,9 @@ def test_dry_run_is_default_no_mutation(tmp_path, mocker):
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
-    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.onedrive.cli.move.build_graph_client", return_value=client)
     mocker.patch(
-        "m365ctl.cli.move._lookup_item",
+        "m365ctl.onedrive.cli.move._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/x", "name": "x", "parent_path": "/"},
     )
@@ -161,7 +161,7 @@ def test_dry_run_is_default_no_mutation(tmp_path, mocker):
 def test_pattern_plus_confirm_is_rejected(tmp_path, mocker, capsys):
     """Spec §7 rule 2: bulk destructive requires plan file."""
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.move.load_config", return_value=cfg)
     rc = run_move(
         config_path=tmp_path / "c.toml",
         scope="drive:d1", drive_id=None, item_id=None,
@@ -176,9 +176,9 @@ def test_pattern_plus_confirm_is_rejected(tmp_path, mocker, capsys):
 def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
     """Spec §7 rule 2: --from-plan does NOT re-expand globs."""
     cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
-    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.move.load_config", return_value=cfg)
 
-    from m365ctl.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         for i in range(100):
             conn.execute(
@@ -203,9 +203,9 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
-    mocker.patch("m365ctl.cli.move.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.onedrive.cli.move.build_graph_client", return_value=client)
     mocker.patch(
-        "m365ctl.cli.move._lookup_item",
+        "m365ctl.onedrive.cli.move._lookup_item",
         side_effect=lambda g, d, i: {"drive_id": d, "item_id": i,
                                      "full_path": f"/junk/{i}", "name": i,
                                      "parent_path": "/junk"},
@@ -274,9 +274,9 @@ def test_piped_stdin_cannot_auto_confirm_unsafe_scope(tmp_path, monkeypatch):
 def test_deny_paths_never_appear_in_plan_or_tsv(tmp_path, mocker, capsys):
     """Spec §7 rule 4: deny-paths filtered BEFORE plan emission."""
     cfg = _cfg(allow=["d1"], deny=["/Confidential/**"], tmp_path=tmp_path)
-    mocker.patch("m365ctl.cli.move.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.move.load_config", return_value=cfg)
 
-    from m365ctl.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
             "INSERT INTO items (drive_id, item_id, name, full_path, "
@@ -304,7 +304,7 @@ def test_deny_paths_never_appear_in_plan_or_tsv(tmp_path, mocker, capsys):
 def test_audit_start_line_persists_even_on_mid_mutation_crash(tmp_path):
     """Spec §7 rule 5: audit 'start' is written BEFORE the Graph call."""
     from m365ctl.common.audit import AuditLogger, iter_audit_entries
-    from m365ctl.mutate.move import execute_move
+    from m365ctl.onedrive.mutate.move import execute_move
     from m365ctl.common.planfile import Operation
 
     def handler(request):

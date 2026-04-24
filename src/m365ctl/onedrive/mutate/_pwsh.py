@@ -5,7 +5,7 @@ modules:
 
 * :func:`invoke_pwsh` — runs ``pwsh -NoProfile -File <script> <args>`` and
   returns ``(returncode, stdout, stderr)``. Callers patch
-  ``m365ctl.mutate._pwsh.subprocess.run`` in tests.
+  ``m365ctl.onedrive.mutate._pwsh.subprocess.run`` in tests.
 * :func:`lookup_site_url_from_drive_id` — resolves a Graph ``drive_id`` to
   the owning SharePoint/OneDrive site URL (by trimming the default-library
   suffix off ``webUrl``). Used by every PnP.PowerShell fallback path.
@@ -23,7 +23,7 @@ from m365ctl.common.graph import GraphClient, GraphError
 
 # Path to the repo's PowerShell scripts directory, for module-level
 # constants like _RESTORE_PS1 / _PURGE_PS1 / _LABEL_PS1 to use as a base.
-PS_SCRIPTS_DIR = Path(__file__).resolve().parents[2].parent / "scripts" / "ps"
+PS_SCRIPTS_DIR = Path(__file__).resolve().parents[3].parent / "scripts" / "ps"
 
 
 def invoke_pwsh(script_path: Path | str, args: list[str]) -> tuple[int, str, str]:

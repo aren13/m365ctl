@@ -5,7 +5,7 @@ from typing import Iterator, Literal
 
 import duckdb
 
-from m365ctl.search.graph_search import SearchHit
+from m365ctl.onedrive.search.graph_search import SearchHit
 
 Type = Literal["file", "folder", "all"]
 

@@ -9,7 +9,7 @@
   -Force, and emits a single JSON line on stdout with the purged metadata.
 
   Errors are surfaced via non-zero exit + Write-Error so the Python caller
-  (m365ctl.mutate.clean._purge_via_pnp) can propagate stderr into
+  (m365ctl.onedrive.mutate.clean._purge_via_pnp) can propagate stderr into
   CleanResult.error and the audit log.
 
 .EXAMPLE

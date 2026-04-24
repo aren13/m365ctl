@@ -7,7 +7,7 @@ from typing import Iterator
 
 import duckdb
 
-from m365ctl.catalog.schema import apply_schema
+from m365ctl.onedrive.catalog.schema import apply_schema
 
 
 @contextmanager

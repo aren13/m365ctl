@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-exec uv run --project "$REPO" python -m m365ctl.cli label "$@"
+exec uv run --project "$REPO" python -m m365ctl.onedrive.cli label "$@"

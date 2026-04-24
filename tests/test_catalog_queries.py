@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from m365ctl.catalog.db import open_catalog
-from m365ctl.catalog.queries import (
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.queries import (
     by_owner,
     duplicates,
     stale_since,

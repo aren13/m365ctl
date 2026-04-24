@@ -4,7 +4,7 @@ import json
 from unittest.mock import MagicMock
 
 from m365ctl.common.audit import AuditLogger, iter_audit_entries
-from m365ctl.mutate.label import execute_label_apply, execute_label_remove
+from m365ctl.onedrive.mutate.label import execute_label_apply, execute_label_remove
 from m365ctl.common.planfile import Operation
 
 
@@ -13,7 +13,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok", "label": "Confidential"})
     completed.stderr = ""
-    run = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
+    run = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                        return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
@@ -36,7 +36,7 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
 
 def test_label_apply_handles_pwsh_missing(tmp_path, mocker):
     mocker.patch(
-        "m365ctl.mutate._pwsh.subprocess.run",
+        "m365ctl.onedrive.mutate._pwsh.subprocess.run",
         side_effect=FileNotFoundError(2, "No such file", "pwsh"),
     )
 
@@ -61,7 +61,7 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     completed.returncode = 1
     completed.stdout = ""
     completed.stderr = "Set-PnPFileSensitivityLabel : access denied"
-    mocker.patch("m365ctl.mutate._pwsh.subprocess.run", return_value=completed)
+    mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run", return_value=completed)
 
     logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
     op = Operation(op_id="op-2", action="label-remove", drive_id="d1",

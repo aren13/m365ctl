@@ -30,7 +30,7 @@ from typing import Any
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
 from m365ctl.common.config import Config
 from m365ctl.common.graph import GraphClient, GraphError
-from m365ctl.mutate._pwsh import (
+from m365ctl.onedrive.mutate._pwsh import (
     PS_SCRIPTS_DIR,
     invoke_pwsh,
     lookup_site_url_from_drive_id,

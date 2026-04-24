@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
 
-from m365ctl.catalog.normalize import normalize_item
+from m365ctl.onedrive.catalog.normalize import normalize_item
 
 
 class _GraphLike(Protocol):

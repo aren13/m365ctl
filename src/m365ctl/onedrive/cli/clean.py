@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger, find_most_recent_delete_before
-from m365ctl.cli._common import (
+from m365ctl.onedrive.cli._common import (
     CandidateItem,
     build_graph_client,
     emit_plan,
@@ -14,10 +14,10 @@ from m365ctl.cli._common import (
     new_plan,
     require_plan_for_bulk,
 )
-from m365ctl.cli.move import _lookup_item
+from m365ctl.onedrive.cli.move import _lookup_item
 from m365ctl.common.config import load_config
 from m365ctl.common.graph import GraphError
-from m365ctl.mutate.clean import (
+from m365ctl.onedrive.mutate.clean import (
     purge_recycle_bin_item,
     remove_old_versions,
     revoke_stale_shares,

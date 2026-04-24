@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from m365ctl.catalog.normalize import normalize_item
+from m365ctl.onedrive.catalog.normalize import normalize_item
 
 FILE_ITEM = {
     "id": "01ABCDEF",

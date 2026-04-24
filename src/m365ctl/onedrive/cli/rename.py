@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
-from m365ctl.cli._common import build_graph_client, emit_plan, new_plan
-from m365ctl.cli.move import _lookup_item  # reuse
+from m365ctl.onedrive.cli._common import build_graph_client, emit_plan, new_plan
+from m365ctl.onedrive.cli.move import _lookup_item  # reuse
 from m365ctl.common.config import load_config
-from m365ctl.mutate.rename import execute_rename
+from m365ctl.onedrive.mutate.rename import execute_rename
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
 from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 

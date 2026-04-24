@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import Config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan

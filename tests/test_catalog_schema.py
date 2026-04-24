@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import duckdb
 
-from m365ctl.catalog.schema import CURRENT_SCHEMA_VERSION, apply_schema
+from m365ctl.onedrive.catalog.schema import CURRENT_SCHEMA_VERSION, apply_schema
 
 
 def test_apply_schema_creates_expected_tables() -> None:

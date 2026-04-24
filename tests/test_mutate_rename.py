@@ -4,7 +4,7 @@ import httpx
 
 from m365ctl.common.audit import AuditLogger, iter_audit_entries
 from m365ctl.common.graph import GraphClient
-from m365ctl.mutate.rename import execute_rename
+from m365ctl.onedrive.mutate.rename import execute_rename
 from m365ctl.common.planfile import Operation
 
 

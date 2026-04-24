@@ -6,16 +6,16 @@ import sys
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
-from m365ctl.cli._common import build_graph_client
-from m365ctl.cli.label import _lookup_label_item
-from m365ctl.cli.move import _lookup_item
+from m365ctl.onedrive.cli._common import build_graph_client
+from m365ctl.onedrive.cli.label import _lookup_label_item
+from m365ctl.onedrive.cli.move import _lookup_item
 from m365ctl.common.config import load_config
 from m365ctl.common.graph import GraphError
-from m365ctl.mutate.delete import execute_recycle_delete, execute_restore
-from m365ctl.mutate.label import execute_label_apply, execute_label_remove
-from m365ctl.mutate.move import execute_move
-from m365ctl.mutate.rename import execute_rename
-from m365ctl.mutate.undo import Irreversible, build_reverse_operation
+from m365ctl.onedrive.mutate.delete import execute_recycle_delete, execute_restore
+from m365ctl.onedrive.mutate.label import execute_label_apply, execute_label_remove
+from m365ctl.onedrive.mutate.move import execute_move
+from m365ctl.onedrive.mutate.rename import execute_rename
+from m365ctl.onedrive.mutate.undo import Irreversible, build_reverse_operation
 from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 
 

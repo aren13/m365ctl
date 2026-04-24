@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.catalog.crawl import DriveSpec, resolve_scope
+from m365ctl.onedrive.catalog.crawl import DriveSpec, resolve_scope
 
 
 def test_resolve_scope_site_by_numeric_id_lists_drives() -> None:

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.catalog.db import open_catalog
-from m365ctl.cli.inventory import run_inventory
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.cli.inventory import run_inventory
 
 
 def _stub_config(tmp_path: Path):
@@ -33,7 +33,7 @@ def _seed(db: Path) -> None:
 
 def test_top_by_size_tsv(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     rc = run_inventory(
         config_path=tmp_path / "config.toml",
@@ -55,7 +55,7 @@ def test_top_by_size_tsv(tmp_path, mocker, capsys) -> None:
 
 def test_top_by_size_json(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -74,7 +74,7 @@ def test_top_by_size_json(tmp_path, mocker, capsys) -> None:
 
 def test_by_owner(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -94,7 +94,7 @@ def test_by_owner(tmp_path, mocker, capsys) -> None:
 
 def test_duplicates(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -113,7 +113,7 @@ def test_duplicates(tmp_path, mocker, capsys) -> None:
 
 def test_sql_passthrough(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     _seed(cfg.catalog.path)
     run_inventory(
         config_path=tmp_path / "config.toml",
@@ -131,7 +131,7 @@ def test_sql_passthrough(tmp_path, mocker, capsys) -> None:
 
 def test_requires_exactly_one_mode(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.inventory.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.inventory.load_config", return_value=cfg)
     rc = run_inventory(
         config_path=tmp_path / "config.toml",
         top_by_size=None,

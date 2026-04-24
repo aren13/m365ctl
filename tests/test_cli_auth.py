@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.cli.auth import run_whoami
+from m365ctl.onedrive.cli.auth import run_whoami
 
 
 def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
@@ -14,11 +14,11 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
     cfg.client_id = "client-uuid"
     cfg.cert_path = tmp_path / "k"
     cfg.cert_public = tmp_path / "c"
-    mocker.patch("m365ctl.cli.auth.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.auth.load_config", return_value=cfg)
 
     delegated = MagicMock()
     delegated.get_token.return_value = "deleg"
-    mocker.patch("m365ctl.cli.auth.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.auth.DelegatedCredential", return_value=delegated)
 
     app_only = MagicMock()
     app_only.cert_info.subject = "CN=FazlaODToolkit"
@@ -26,14 +26,14 @@ def test_whoami_prints_both_flows(tmp_path: Path, mocker, capsys) -> None:
     app_only.cert_info.days_until_expiry = 728
     app_only.cert_info.not_after_utc = "2028-04-22T22:12:10+00:00"
     app_only.get_token.return_value = "app"
-    mocker.patch("m365ctl.cli.auth.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.auth.AppOnlyCredential", return_value=app_only)
 
     graph = MagicMock()
     graph.get.side_effect = [
         {"displayName": "Arda Eren", "userPrincipalName": "arda@fazla.com"},
         {"displayName": "FazlaODToolkit"},
     ]
-    mocker.patch("m365ctl.cli.auth.GraphClient", return_value=graph)
+    mocker.patch("m365ctl.onedrive.cli.auth.GraphClient", return_value=graph)
 
     rc = run_whoami(config_path=tmp_path / "config.toml")
     out = capsys.readouterr().out
@@ -55,11 +55,11 @@ def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
     cfg.client_id = "c"
     cfg.cert_public = tmp_path / "c"
     cfg.cert_path = tmp_path / "k"
-    mocker.patch("m365ctl.cli.auth.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.auth.load_config", return_value=cfg)
 
     delegated = MagicMock()
     delegated.get_token.side_effect = AuthError("not logged in; run `od-auth login` first")
-    mocker.patch("m365ctl.cli.auth.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.auth.DelegatedCredential", return_value=delegated)
 
     app_only = MagicMock()
     app_only.cert_info.subject = "CN=x"
@@ -67,11 +67,11 @@ def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
     app_only.cert_info.days_until_expiry = 700
     app_only.cert_info.not_after_utc = "2028-01-01T00:00:00+00:00"
     app_only.get_token.return_value = "app"
-    mocker.patch("m365ctl.cli.auth.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.auth.AppOnlyCredential", return_value=app_only)
 
     graph = MagicMock()
     graph.get.return_value = {"displayName": "FazlaODToolkit"}
-    mocker.patch("m365ctl.cli.auth.GraphClient", return_value=graph)
+    mocker.patch("m365ctl.onedrive.cli.auth.GraphClient", return_value=graph)
 
     rc = run_whoami(config_path=tmp_path / "config.toml")
     out = capsys.readouterr().out

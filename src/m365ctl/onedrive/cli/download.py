@@ -8,10 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import load_config
-from m365ctl.download.fetcher import fetch_item
-from m365ctl.download.planner import (
+from m365ctl.onedrive.download.fetcher import fetch_item
+from m365ctl.onedrive.download.planner import (
     DownloadItem,
     load_plan_file,
     plan_from_query,

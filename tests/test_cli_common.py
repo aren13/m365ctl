@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from m365ctl.cli._common import _expand_me_in_allow_drives
+from m365ctl.onedrive.cli._common import _expand_me_in_allow_drives
 
 
 def _cfg(allow: list[str]) -> object:

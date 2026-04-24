@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from m365ctl.cli.rename import run_rename
+from m365ctl.onedrive.cli.rename import run_rename
 
 
 def _stub_cfg(tmp_path: Path):
@@ -21,15 +21,15 @@ def _stub_cfg(tmp_path: Path):
 
 def test_single_rename_dry_run_no_graph_call(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.rename.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.rename.load_config", return_value=cfg)
     mocker.patch(
-        "m365ctl.cli.rename._lookup_item",
+        "m365ctl.onedrive.cli.rename._lookup_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/x.txt", "name": "x.txt",
                       "parent_path": "/"},
     )
     client = MagicMock()
-    mocker.patch("m365ctl.cli.rename.build_graph_client", return_value=client)
+    mocker.patch("m365ctl.onedrive.cli.rename.build_graph_client", return_value=client)
 
     rc = run_rename(
         config_path=tmp_path / "config.toml",

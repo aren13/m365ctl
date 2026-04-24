@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 
 from m365ctl.common.audit import AuditLogger, iter_audit_entries
-from m365ctl.mutate.move import execute_move
+from m365ctl.onedrive.mutate.move import execute_move
 from m365ctl.common.planfile import Operation
 
 

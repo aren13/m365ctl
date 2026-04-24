@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from m365ctl.search.graph_search import SearchHit
-from m365ctl.search.merge import merge_hits
+from m365ctl.onedrive.search.graph_search import SearchHit
+from m365ctl.onedrive.search.merge import merge_hits
 
 
 def _hit(drive, item, modified, source, name="x", is_folder=False):

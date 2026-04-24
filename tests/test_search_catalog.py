@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from m365ctl.catalog.db import open_catalog
-from m365ctl.search.catalog_search import catalog_search
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.search.catalog_search import catalog_search
 
 
 def _seed(db: Path) -> None:

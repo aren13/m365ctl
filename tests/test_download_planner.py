@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from m365ctl.catalog.db import open_catalog
-from m365ctl.download.planner import (
+from m365ctl.onedrive.catalog.db import open_catalog
+from m365ctl.onedrive.download.planner import (
     DownloadItem,
     PlanFileError,
     load_plan_file,

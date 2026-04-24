@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.catalog.crawl import CrawlResult, DriveSpec
-from m365ctl.cli.catalog import run_refresh, run_status
+from m365ctl.onedrive.catalog.crawl import CrawlResult, DriveSpec
+from m365ctl.onedrive.cli.catalog import run_refresh, run_status
 
 
 def _stub_config(tmp_path: Path):
@@ -21,16 +21,16 @@ def _stub_config(tmp_path: Path):
 
 def test_run_refresh_me_uses_delegated_and_crawls(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
 
     delegated = MagicMock()
     delegated.get_token.return_value = "deleg-token"
-    mocker.patch("m365ctl.cli.catalog.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.catalog.DelegatedCredential", return_value=delegated)
     app_only = MagicMock()
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=app_only)
 
     mocker.patch(
-        "m365ctl.cli.catalog.resolve_scope",
+        "m365ctl.onedrive.cli.catalog.resolve_scope",
         return_value=[
             DriveSpec(
                 drive_id="d1",
@@ -42,7 +42,7 @@ def test_run_refresh_me_uses_delegated_and_crawls(tmp_path, mocker, capsys) -> N
         ],
     )
     mocker.patch(
-        "m365ctl.cli.catalog.crawl_drive",
+        "m365ctl.onedrive.cli.catalog.crawl_drive",
         return_value=CrawlResult(
             drive_id="d1", items_seen=42, delta_link="https://x/delta?t=1"
         ),
@@ -63,16 +63,16 @@ def test_run_refresh_me_uses_delegated_and_crawls(tmp_path, mocker, capsys) -> N
 
 def test_run_refresh_drive_uses_app_only(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
 
     delegated = MagicMock()
-    mocker.patch("m365ctl.cli.catalog.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.catalog.DelegatedCredential", return_value=delegated)
     app_only = MagicMock()
     app_only.get_token.return_value = "app-token"
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=app_only)
 
     mocker.patch(
-        "m365ctl.cli.catalog.resolve_scope",
+        "m365ctl.onedrive.cli.catalog.resolve_scope",
         return_value=[
             DriveSpec(
                 drive_id="dx",
@@ -84,7 +84,7 @@ def test_run_refresh_drive_uses_app_only(tmp_path, mocker, capsys) -> None:
         ],
     )
     mocker.patch(
-        "m365ctl.cli.catalog.crawl_drive",
+        "m365ctl.onedrive.cli.catalog.crawl_drive",
         return_value=CrawlResult(drive_id="dx", items_seen=7, delta_link="d"),
     )
 
@@ -99,10 +99,10 @@ def test_run_refresh_drive_uses_app_only(tmp_path, mocker, capsys) -> None:
 
 def test_run_status_prints_summary(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
 
     # Seed a catalog
-    from m365ctl.catalog.db import open_catalog
+    from m365ctl.onedrive.catalog.db import open_catalog
 
     with open_catalog(cfg.catalog.path) as conn:
         conn.execute(
@@ -129,13 +129,13 @@ def test_run_status_prints_summary(tmp_path, mocker, capsys) -> None:
 
 def test_run_refresh_tenant_uses_app_only(tmp_path, mocker, capsys) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
 
     delegated = MagicMock()
-    mocker.patch("m365ctl.cli.catalog.DelegatedCredential", return_value=delegated)
+    mocker.patch("m365ctl.onedrive.cli.catalog.DelegatedCredential", return_value=delegated)
     app_only = MagicMock()
     app_only.get_token.return_value = "app-token"
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=app_only)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=app_only)
 
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"S/D{i}",
@@ -143,9 +143,9 @@ def test_run_refresh_tenant_uses_app_only(tmp_path, mocker, capsys) -> None:
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(3)
     ]
-    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.onedrive.cli.catalog.resolve_scope", return_value=specs)
     mocker.patch(
-        "m365ctl.cli.catalog.crawl_drive",
+        "m365ctl.onedrive.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 1, "dl") for s in specs],
     )
 
@@ -160,17 +160,17 @@ def test_refresh_over_5_drives_prompts_and_aborts_on_no(
     tmp_path, mocker, capsys
 ) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(6)
     ]
-    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
-    mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=False)
-    crawl_mock = mocker.patch("m365ctl.cli.catalog.crawl_drive")
+    mocker.patch("m365ctl.onedrive.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.onedrive.cli.catalog.confirm_or_abort", return_value=False)
+    crawl_mock = mocker.patch("m365ctl.onedrive.cli.catalog.crawl_drive")
 
     rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
                     assume_yes=False)
@@ -182,18 +182,18 @@ def test_refresh_over_5_drives_prompts_and_aborts_on_no(
 
 def test_refresh_over_5_drives_proceeds_on_yes(tmp_path, mocker) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(6)
     ]
-    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
-    mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch("m365ctl.onedrive.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("m365ctl.onedrive.cli.catalog.confirm_or_abort", return_value=True)
     mocker.patch(
-        "m365ctl.cli.catalog.crawl_drive",
+        "m365ctl.onedrive.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
     )
 
@@ -204,18 +204,18 @@ def test_refresh_over_5_drives_proceeds_on_yes(tmp_path, mocker) -> None:
 
 def test_refresh_yes_flag_skips_prompt(tmp_path, mocker) -> None:
     cfg = _stub_config(tmp_path)
-    mocker.patch("m365ctl.cli.catalog.load_config", return_value=cfg)
-    mocker.patch("m365ctl.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.catalog.AppOnlyCredential", return_value=MagicMock())
     specs = [
         DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
                   drive_type="documentLibrary",
                   graph_path=f"/drives/d{i}/root/delta")
         for i in range(10)
     ]
-    mocker.patch("m365ctl.cli.catalog.resolve_scope", return_value=specs)
-    prompt = mocker.patch("m365ctl.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch("m365ctl.onedrive.cli.catalog.resolve_scope", return_value=specs)
+    prompt = mocker.patch("m365ctl.onedrive.cli.catalog.confirm_or_abort", return_value=True)
     mocker.patch(
-        "m365ctl.cli.catalog.crawl_drive",
+        "m365ctl.onedrive.cli.catalog.crawl_drive",
         side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
     )
 

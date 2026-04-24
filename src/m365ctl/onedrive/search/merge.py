@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Iterable, Iterator
 
-from m365ctl.search.graph_search import SearchHit
+from m365ctl.onedrive.search.graph_search import SearchHit
 
 
 def merge_hits(

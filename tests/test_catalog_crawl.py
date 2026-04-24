@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from m365ctl.catalog.crawl import (
+from m365ctl.onedrive.catalog.crawl import (
     CrawlResult,
     DriveSpec,
     crawl_drive,
     resolve_scope,
 )
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.db import open_catalog
 
 
 def test_resolve_scope_me_calls_me_drive(mocker) -> None:

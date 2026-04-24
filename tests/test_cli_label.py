@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from m365ctl.cli.label import run_label
+from m365ctl.onedrive.cli.label import run_label
 
 
 def _stub_cfg(tmp_path: Path):
@@ -22,17 +22,17 @@ def _stub_cfg(tmp_path: Path):
 
 def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     mocker.patch(
-        "m365ctl.cli.label._lookup_label_item",
+        "m365ctl.onedrive.cli.label._lookup_label_item",
         return_value={"drive_id": "d1", "item_id": "i1",
                       "full_path": "/X/x.docx", "name": "x.docx",
                       "parent_path": "/X",
                       "server_relative_url": "/X/x.docx"},
     )
     client = MagicMock()
-    mocker.patch("m365ctl.cli.label.build_graph_client", return_value=client)
-    run_mock = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
+    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=client)
+    run_mock = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                             side_effect=AssertionError("subprocess must NOT run"))
 
     rc = run_label(
@@ -53,7 +53,7 @@ def test_apply_dry_run_no_subprocess(tmp_path, mocker, capsys):
 
 def test_apply_requires_label(tmp_path, mocker, capsys):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     rc = run_label(
         config_path=tmp_path / "config.toml",
         subcmd="apply",
@@ -70,9 +70,9 @@ def test_apply_requires_label(tmp_path, mocker, capsys):
 
 def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
     cfg = _stub_cfg(tmp_path)
-    mocker.patch("m365ctl.cli.label.load_config", return_value=cfg)
+    mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
     mocker.patch(
-        "m365ctl.cli.label._lookup_label_item",
+        "m365ctl.onedrive.cli.label._lookup_label_item",
         side_effect=lambda g, d, i: {
             "drive_id": d, "item_id": i,
             "full_path": f"/A/{i}", "name": i,
@@ -80,13 +80,13 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
             "server_relative_url": f"/A/{i}",
         },
     )
-    mocker.patch("m365ctl.cli.label.build_graph_client", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=MagicMock())
 
     completed = MagicMock()
     completed.returncode = 0
     completed.stdout = json.dumps({"status": "ok"})
     completed.stderr = ""
-    run_mock = mocker.patch("m365ctl.mutate._pwsh.subprocess.run",
+    run_mock = mocker.patch("m365ctl.onedrive.mutate._pwsh.subprocess.run",
                             return_value=completed)
 
     from m365ctl.common.planfile import PLAN_SCHEMA_VERSION

@@ -18,7 +18,7 @@ def run_audit(
     *, config_path: Path, scope: str, output_format: str
 ) -> int:
     cfg = load_config(config_path)
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = Path(__file__).resolve().parents[4]
     script = repo_root / "scripts" / "ps" / "audit-sharing.ps1"
     if not script.exists():
         print(f"error: {script} not found", file=sys.stderr)

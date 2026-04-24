@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from m365ctl.mutate._pwsh import normalize_recycle_dir_name
+from m365ctl.onedrive.mutate._pwsh import normalize_recycle_dir_name
 
 
 def test_normalize_strips_graph_drives_prefix_with_root_marker():

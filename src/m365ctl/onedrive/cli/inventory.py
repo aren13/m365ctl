@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from m365ctl.catalog.db import open_catalog
+from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import load_config
 
 
@@ -79,22 +79,22 @@ def run_inventory(
 
 # Thin indirection so tests can monkey-patch single modes if they want.
 def _top_by_size_impl(conn, limit: int):
-    from m365ctl.catalog.queries import top_by_size as q
+    from m365ctl.onedrive.catalog.queries import top_by_size as q
     return q(conn, limit=limit)
 
 
 def _stale_since_impl(conn, cutoff: str):
-    from m365ctl.catalog.queries import stale_since as q
+    from m365ctl.onedrive.catalog.queries import stale_since as q
     return q(conn, cutoff=cutoff)
 
 
 def _by_owner_impl(conn):
-    from m365ctl.catalog.queries import by_owner as q
+    from m365ctl.onedrive.catalog.queries import by_owner as q
     return q(conn)
 
 
 def _duplicates_impl(conn):
-    from m365ctl.catalog.queries import duplicates as q
+    from m365ctl.onedrive.catalog.queries import duplicates as q
     return q(conn)
 
 
