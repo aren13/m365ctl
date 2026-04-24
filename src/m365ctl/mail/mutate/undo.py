@@ -194,6 +194,24 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
                            f"{before.get('categories', [])}",
         )
 
+    if cmd == "mail-delete-soft":
+        prior_parent = before.get("parent_folder_id")
+        if not prior_parent:
+            raise Irreversible(
+                f"mail-delete-soft op {op_id!r} has no before.parent_folder_id; "
+                f"cannot determine where to restore to. "
+                f"(If the message was already in Deleted Items when deleted, "
+                f"the original folder is unrecoverable.)"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.move",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"destination_id": prior_parent,
+                  "destination_path": before.get("parent_folder_path", "")},
+            dry_run_result=f"(undo of {op_id}) restore {start['item_id']!r} "
+                           f"to {before.get('parent_folder_path', prior_parent)!r}",
+        )
+
     raise Irreversible(f"no reverse-op known for mail cmd {cmd!r}")
 
 
@@ -269,9 +287,8 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
         "action": "mail.categorize",
         "args": {"categories": list(b.get("categories", []))},
     })
-    # Phase 4 lands the actual execute_soft_delete; Phase 3 registers a
-    # placeholder so preflight (is_registered) returns True and the mail-undo
-    # CLI can route to the deferral branch.
     dispatcher.register("mail.delete.soft", lambda b, a: {
-        "action": "mail.delete.soft", "args": {},
+        "action": "mail.move",
+        "args": {"destination_id": b.get("parent_folder_id", ""),
+                 "destination_path": b.get("parent_folder_path", "")},
     })
