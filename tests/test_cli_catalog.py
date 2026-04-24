@@ -125,3 +125,104 @@ def test_run_status_prints_summary(tmp_path, mocker, capsys) -> None:
     # Should show: 1 drive, 3 items (2 files), 300 bytes
     assert "3" in out
     assert "300" in out or "300 B" in out
+
+
+def test_run_refresh_tenant_uses_app_only(tmp_path, mocker, capsys) -> None:
+    cfg = _stub_config(tmp_path)
+    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
+
+    delegated = MagicMock()
+    mocker.patch("fazla_od.cli.catalog.DelegatedCredential", return_value=delegated)
+    app_only = MagicMock()
+    app_only.get_token.return_value = "app-token"
+    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=app_only)
+
+    specs = [
+        DriveSpec(drive_id=f"d{i}", display_name=f"S/D{i}",
+                  owner=f"o{i}@fazla.com", drive_type="documentLibrary",
+                  graph_path=f"/drives/d{i}/root/delta")
+        for i in range(3)
+    ]
+    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch(
+        "fazla_od.cli.catalog.crawl_drive",
+        side_effect=[CrawlResult(s.drive_id, 1, "dl") for s in specs],
+    )
+
+    rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
+                    assume_yes=True)
+    assert rc == 0
+    delegated.get_token.assert_not_called()
+    app_only.get_token.assert_called_once()
+
+
+def test_refresh_over_5_drives_prompts_and_aborts_on_no(
+    tmp_path, mocker, capsys
+) -> None:
+    cfg = _stub_config(tmp_path)
+    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    specs = [
+        DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
+                  drive_type="documentLibrary",
+                  graph_path=f"/drives/d{i}/root/delta")
+        for i in range(6)
+    ]
+    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=False)
+    crawl_mock = mocker.patch("fazla_od.cli.catalog.crawl_drive")
+
+    rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
+                    assume_yes=False)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "aborted" in err.lower()
+    crawl_mock.assert_not_called()
+
+
+def test_refresh_over_5_drives_proceeds_on_yes(tmp_path, mocker) -> None:
+    cfg = _stub_config(tmp_path)
+    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    specs = [
+        DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
+                  drive_type="documentLibrary",
+                  graph_path=f"/drives/d{i}/root/delta")
+        for i in range(6)
+    ]
+    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
+    mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch(
+        "fazla_od.cli.catalog.crawl_drive",
+        side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
+    )
+
+    rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
+                    assume_yes=False)
+    assert rc == 0
+
+
+def test_refresh_yes_flag_skips_prompt(tmp_path, mocker) -> None:
+    cfg = _stub_config(tmp_path)
+    mocker.patch("fazla_od.cli.catalog.load_config", return_value=cfg)
+    mocker.patch("fazla_od.cli.catalog.AppOnlyCredential", return_value=MagicMock())
+    specs = [
+        DriveSpec(drive_id=f"d{i}", display_name=f"X{i}", owner="o",
+                  drive_type="documentLibrary",
+                  graph_path=f"/drives/d{i}/root/delta")
+        for i in range(10)
+    ]
+    mocker.patch("fazla_od.cli.catalog.resolve_scope", return_value=specs)
+    prompt = mocker.patch("fazla_od.cli.catalog.confirm_or_abort", return_value=True)
+    mocker.patch(
+        "fazla_od.cli.catalog.crawl_drive",
+        side_effect=[CrawlResult(s.drive_id, 0, "dl") for s in specs],
+    )
+
+    rc = run_refresh(config_path=tmp_path / "config.toml", scope="tenant",
+                    assume_yes=True)
+    assert rc == 0
+    # assume_yes short-circuits inside confirm_or_abort; still called once
+    # with assume_yes=True so it returns True without opening tty.
+    prompt.assert_called_once()
+    assert prompt.call_args.kwargs.get("assume_yes") is True

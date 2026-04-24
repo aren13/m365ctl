@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from fazla_od.auth import AppOnlyCredential, DelegatedCredential
@@ -9,23 +10,40 @@ from fazla_od.catalog.crawl import CrawlResult, crawl_drive, resolve_scope
 from fazla_od.catalog.db import open_catalog
 from fazla_od.config import load_config
 from fazla_od.graph import GraphClient
+from fazla_od.prompts import confirm_or_abort
+
+_LARGE_SCOPE_THRESHOLD = 5
 
 
 def _credential_for_scope(scope: str, cfg):
-    """'me' -> delegated; 'drive:<id>' -> app-only."""
+    """'me' -> delegated; everything else (drive:, site:, tenant) -> app-only."""
     if scope == "me":
         return DelegatedCredential(cfg)
     return AppOnlyCredential(cfg)
 
 
-def run_refresh(*, config_path: Path, scope: str) -> int:
+def run_refresh(*, config_path: Path, scope: str, assume_yes: bool = False) -> int:
     cfg = load_config(config_path)
     cred = _credential_for_scope(scope, cfg)
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)
 
     drives = resolve_scope(scope, graph)
-    print(f"Refreshing {len(drives)} drive(s) under scope {scope!r}:")
+    print(f"Resolved {len(drives)} drive(s) under scope {scope!r}.")
+
+    if len(drives) > _LARGE_SCOPE_THRESHOLD:
+        print("Preview:")
+        for d in drives[:20]:
+            print(f"  - {d.drive_id}  {d.display_name}  ({d.owner})")
+        if len(drives) > 20:
+            print(f"  ... and {len(drives) - 20} more")
+        proceed = confirm_or_abort(
+            f"Proceed with refreshing {len(drives)} drive(s)?",
+            assume_yes=assume_yes,
+        )
+        if not proceed:
+            print("Aborted by user.", file=sys.stderr)
+            return 1
 
     results: list[CrawlResult] = []
     with open_catalog(cfg.catalog.path) as conn:
@@ -73,7 +91,13 @@ def build_parser() -> argparse.ArgumentParser:
     refresh.add_argument(
         "--scope",
         required=True,
-        help="'me' or 'drive:<drive-id>'",
+        help="'me', 'drive:<id>', 'site:<slug-or-id>', or 'tenant'",
+    )
+    refresh.add_argument(
+        "--yes",
+        dest="assume_yes",
+        action="store_true",
+        help="Skip the >5-drive preview/confirm prompt.",
     )
     sub.add_parser("status", help="Print catalog summary.")
     return p
@@ -83,7 +107,11 @@ def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     config_path = Path(args.config)
     if args.subcommand == "refresh":
-        return run_refresh(config_path=config_path, scope=args.scope)
+        return run_refresh(
+            config_path=config_path,
+            scope=args.scope,
+            assume_yes=args.assume_yes,
+        )
     if args.subcommand == "status":
         return run_status(config_path=config_path)
     return 2
