@@ -63,7 +63,7 @@ cannot accidentally run a mutation plan with `od-download`.
 
 One-time setup: see `docs/ops/pnp-powershell-setup.md`. Converts the PEM
 cert to PFX at `~/.config/m365ctl/m365ctl.pfx` and stores an export
-password in macOS Keychain under `m365ctlODToolkit:PfxPassword`.
+password in macOS Keychain under `m365ctl:PfxPassword`.
 
 ### Mutation safety envelope (Plan 4)
 
