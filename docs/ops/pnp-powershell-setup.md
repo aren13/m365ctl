@@ -81,6 +81,8 @@ Fix (one-time, tenant admin required):
 
 If you don't need full control, `Sites.Manage.All` works for `od-audit-sharing` (read-only on permissions). `od-label` requires `Sites.FullControl.All` to set sensitivity labels.
 
+The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps/recycle-purge.ps1`, both dot-sourcing `scripts/ps/_FazlaRecycleHelpers.ps1`) call `Restore-PnPRecycleBinItem` and `Clear-PnPRecycleBinItem` respectively. These are covered by the same `Sites.FullControl.All` grant above — no additional permission is needed.
+
 ## 4. Smoke-test the connection
 
 ```bash

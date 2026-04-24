@@ -262,3 +262,54 @@ Adapt `test_purge_404_wraps_with_manual_instructions` for the new behaviour, sam
 
 - **Full 3-stage review:** Task 2 (restore fallback) — data-recovery correctness. Getting the recycle-bin-id lookup wrong could restore the wrong file.
 - **Implementer + quick diff:** Task 1 (helpers), Task 3 (purge — identical pattern to Task 2), Task 4 (docs + smoke).
+
+---
+
+## Completion log
+
+**Completed (2026-04-24):** Tasks 1–4 landed on branch `plan-5/recycle-bin-odfb-followup`.
+
+### Commits
+
+- `52319c7` / `6ba6f55` — Task 1: `_FazlaRecycleHelpers.ps1` (+ review fixups).
+- `ecf4663` / `83308f9` — Task 2: restore fallback (+ data-recovery hazard fix: raise on unknown library suffix).
+- `dc2ce07` — Cross-cutting refactor: shared `invoke_pwsh` and `lookup_site_url_from_drive_id` in `fazla_od/mutate/_pwsh.py`.
+- `4ddc796` — Task 3: purge fallback.
+- `2d59da6` (or whichever SHA this log commit ends up at after any rebase) — Task 4: docs + completion log.
+
+### Test delta
+
+- Baseline (before this plan): 197 passed + 1 skipped.
+- After: 201 passed + 1 skipped. (+4 tests: 2 in `test_mutate_delete.py`, 2 in `test_mutate_clean.py`.)
+
+Full-suite run at commit `4ddc796` (headless dev machine, no tenant access): `201 passed, 1 skipped in 0.89s`. The one skip is the live-gated `test_auth.py::test_live_whoami`, unchanged from Plan 4.
+
+### Design deviations from the original plan
+
+- Moved `_lookup_site_url` into `fazla_od/mutate/_pwsh.py` as `lookup_site_url_from_drive_id` (public in module) rather than keeping it in `delete.py`. Avoids a cross-mutate-module import when Task 3's `clean.py` needed the same helper. Same semantics; function now raises `GraphError("unknownLibrarySuffix", ...)` on unrecognized library suffix instead of the originally-implemented silent `rsplit` heuristic — the silent heuristic was a data-recovery hazard (wrong site URL → wrong recycle bin → could restore a different file with the same name).
+- Extracted shared `invoke_pwsh` helper to avoid triplicate `subprocess.run(["pwsh", ...])` across `label.py`, `delete.py`, `clean.py`. Unplanned but code-review-driven.
+- `Find-RecycleBinItem` ambiguity handling: the plan said "throws with a specific error code (`NoMatch` / `AmbiguousMatch`)" AND "On ambiguity, log all matches to stderr, pick the newest." Resolved to the second form — `AmbiguousMatch` is a `Write-Warning`; only `NoMatch` throws. Rationale: the most-recent delete is almost certainly the undo target, and failing-closed on ambiguity would block common restores.
+
+### Live smoke (TO BE RUN BY OPERATOR)
+
+Steps 1–3 of Task 4 require live tenant access (Keychain unlocked, PFX in place, real OneDrive file) and were not executed during this plan run. Operator should run them against `_fazla_smoke2/hello2.txt` (same shape as Plan 4 Task 13 smoke). Expected outcomes:
+
+- **Step 1 — `od-delete` + `od-undo` round-trip:** `[<uuid>] ok (reverse of <delete_op>)`; file reappears via `od-search --scope me "hello2.txt"`.
+- **Step 2 — re-delete + `od-clean recycle-bin --from-plan`:** purge prints `[<uuid>] ok`; subsequent `od-undo` on the purge op exits 2 with `irreversible: op ... was a recycle-bin purge — items are permanently deleted ...`.
+- **Step 3 — audit log:** 4 paired `start`/`end` records with `result: ok`; the final undo-on-purge never writes an audit record (raises before the first log call).
+
+Once the operator runs the smoke, append the actual op IDs and audit-log excerpts here:
+
+- **Step 1 delete op_id:** `<TBD>`
+- **Step 1 undo op_id:** `<TBD>`
+- **Step 2 re-delete op_id:** `<TBD>`
+- **Step 2 purge op_id:** `<TBD>`
+- **Step 2 undo-on-purge exit status + stderr:** `<TBD>`
+- **Step 3 audit-log excerpts:** `<TBD>`
+
+### Intentionally deferred (per plan)
+
+- Version-history restore (`od-clean old-versions` — unrecoverable by design).
+- Stale-share re-issue (`od-clean stale-shares` — link URLs not reproducible).
+- Batched recycle-bin ops (`Clear-PnPRecycleBinItem -All`).
+- Cross-tenant restore.

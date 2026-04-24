@@ -76,6 +76,8 @@ All mutating commands:
 
 Audit log is append-only. `./bin/od-undo <op_id>` reads start/end records and builds an inverse op (rename→rename, move→move-back, copy→delete-copy, delete→restore, label-apply→label-remove). Irreversible ops (recycle-bin purge, version delete, share revoke) raise a clear error.
 
+ODfB recycle-bin restore and purge shell out to PnP.PowerShell (see `docs/ops/pnp-powershell-setup.md`); OneDrive-Personal continues to use Graph directly.
+
 ## Safety model (already in effect)
 
 - `config.toml` is **gitignored**. Never `git add` it. The tracked template is `config.toml.example`.
