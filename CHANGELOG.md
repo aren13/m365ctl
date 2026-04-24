@@ -5,6 +5,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-04-25
+
+### Added
+- **Mail compose (Phase 5a).** Drafts + send + reply + forward + attachment write-side.
+  - `m365ctl mail draft {create,update,delete}` — full draft lifecycle. All undoable (draft.create ↔ draft.delete; draft.update restores prior fields; draft.delete recreates from captured body).
+  - `m365ctl mail send <draft-id>` — send an existing draft.
+  - `m365ctl mail send --new --subject ... --body-file ... --to ...` — inline send. **Blocked when `[mail].drafts_before_send=true` (default)**; set to false in config to enable.
+  - `m365ctl mail send --from-plan plan.json --confirm` — bulk send from a plan file. Bulk ≥20 → `/dev/tty` confirm.
+  - `m365ctl mail reply <msg-id>` — creates a draft-reply; `--all` for reply-all; `--inline --body "..."` for one-shot send.
+  - `m365ctl mail forward <msg-id>` — creates a draft-forward; `--inline --body "..." --to ...` for one-shot send.
+  - `m365ctl mail attach add <msg-id> --file <path>` / `remove <msg-id> <att-id>` — small attachments (<3 MB). Large attachments (≥3 MB) detect + defer to Phase 5a-2 with a clear error.
+- `src/m365ctl/mail/compose.py` — pure helpers: `parse_recipients`, `build_message_payload`, `count_external_recipients`, `BodyFormatError`.
+- 5 new executor modules under `src/m365ctl/mail/mutate/`: `draft.py`, `send.py`, `reply.py`, `forward.py`, `attach.py` (write side — small + remove).
+- **`mail send --new` with >20 external recipients → interactive `/dev/tty` confirm** (non-bypassable).
+- `bin/mail-draft`, `bin/mail-send`, `bin/mail-reply`, `bin/mail-forward` short wrappers.
+
+### Changed
+- `mail/mutate/undo.py`: +5 new reverse-op builders (`mail.draft.{create,update,delete}`, `mail.attach.{add,remove}`); +4 `register_irreversible` calls for `mail.send`, `mail.reply`, `mail.reply.all`, `mail.forward` with operator-facing guidance (e.g. "Sent mail cannot be recalled programmatically").
+- `mail/cli/undo.py`: 5 new executor dispatch branches for Phase 5a reversibles.
+- `mail/cli/attach.py`: Phase 1's read-only list/get CLI grows `add` + `remove` subcommands.
+
+### Safety
+- `--confirm` required for every mutation; dry-run default.
+- `mail.send`/`mail.reply*`/`mail.forward` are **irreversible** — clearly surfaced in Dispatcher rejection messages.
+- `[mail].drafts_before_send` (default true) blocks `mail send --new` to enforce draft-first review workflow.
+- External-recipient TTY confirm on >20 recipients.
+
+### Deferred
+- Large attachment upload session (chunked ≥3 MB) → Phase 5a-2.
+- Scheduled send (`--schedule-at`) → Phase 5b.
+- `internet_message_id` backfill in `after.internet_message_id` → Phase 7 catalog (Graph's 202 response has no body).
+- Automatic ETag 412 → refresh → retry loop → Phase 3.5 or later.
+
 ## [0.5.0] — 2026-04-25
 
 ### Added
