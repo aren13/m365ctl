@@ -7,7 +7,7 @@ tree.
 ## Dev setup
 
 ```bash
-uv sync
+uv sync --all-extras
 ```
 
 That installs the project plus its dev extras (`pytest`, `ruff`, `mypy`).

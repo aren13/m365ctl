@@ -17,7 +17,7 @@ If it takes longer, [file an issue](https://github.com/aren13/m365ctl/issues)
 ```bash
 git clone https://github.com/<you>/m365ctl
 cd m365ctl
-uv sync
+uv sync --all-extras
 ```
 
 ## 2. Copy the config template (≈ 1 min)
@@ -61,7 +61,9 @@ Then per [certificate-auth.md](certificate-auth.md):
 ./bin/od-auth login
 ```
 
-This opens a browser for device-code sign-in. Approve the permissions.
+This starts the device-code flow: it prints a short code and a URL in the
+terminal. Open the URL in any browser, enter the code, and approve the
+permissions. The login shell returns when auth completes.
 
 ## 6. Verify (≈ 1 min)
 

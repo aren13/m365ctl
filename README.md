@@ -38,7 +38,7 @@ allow-lists, audit log, and undo on every mutation.
 ```bash
 git clone https://github.com/<you>/m365ctl
 cd m365ctl
-uv sync
+uv sync --all-extras
 cp config.toml.example config.toml
 # Follow docs/setup/first-run.md to fill in config + cert.
 ./bin/od-auth login
