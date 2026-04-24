@@ -97,18 +97,22 @@ def test_resolve_folder_path_hits_nested_tree():
 
 
 def test_resolve_folder_path_case_insensitive_match():
-    graph = _graph_flat_tree([_folder_raw("f1", "Inbox", well_known="inbox")])
-    # "inbox" as a path argument (lowercase) should match "Inbox" display name via case-insensitive lookup,
-    # and also the well-known fallback. We expect the well-known path to win.
+    # Well-known names hit Graph's /mailFolders/{wellKnownName} endpoint
+    # directly — Graph's listing doesn't return wellKnownName so the
+    # iteration approach can't work (verified live 2026-04-25).
+    graph = MagicMock()
+    graph.get.return_value = {"id": "f1", "displayName": "Inbox"}
     fid = resolve_folder_path("inbox", graph, mailbox_spec="me", auth_mode="delegated")
     assert fid == "f1"
+    graph.get.assert_called_once_with("/me/mailFolders/inbox")
 
 
 def test_resolve_folder_path_resolves_well_known_names():
-    graph = _graph_flat_tree([
-        _folder_raw("f1", "Inbox", well_known="inbox"),
-        _folder_raw("f2", "Sent Items", well_known="sentitems"),
-    ])
+    graph = MagicMock()
+    graph.get.side_effect = [
+        {"id": "f1", "displayName": "Inbox"},
+        {"id": "f2", "displayName": "Sent Items"},
+    ]
     assert resolve_folder_path("inbox", graph, mailbox_spec="me", auth_mode="delegated") == "f1"
     assert resolve_folder_path("sentitems", graph, mailbox_spec="me", auth_mode="delegated") == "f2"
 
@@ -120,7 +124,8 @@ def test_resolve_folder_path_missing_raises():
 
 
 def test_resolve_folder_path_leading_slash_tolerated():
-    graph = _graph_flat_tree([_folder_raw("inbox", "Inbox", well_known="inbox")])
+    graph = MagicMock()
+    graph.get.return_value = {"id": "inbox", "displayName": "Inbox"}
     fid = resolve_folder_path("/Inbox", graph, mailbox_spec="me", auth_mode="delegated")
     assert fid == "inbox"
 

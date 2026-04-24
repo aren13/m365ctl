@@ -128,23 +128,49 @@ def _drain_delta(
     start_path: str,
     page_top: int,
 ) -> tuple[int, str | None]:
+    """Drain ``/messages/delta`` until a deltaLink-only round returns no items.
+
+    Graph's mail delta works in **rounds** — each round ends with a
+    ``deltaLink`` rather than draining the entire mailbox in one chain of
+    nextLinks. To do a full first-time sync we have to follow each
+    deltaLink immediately and keep going until a round comes back empty.
+
+    Page size is set via ``Prefer: odata.maxpagesize=N`` because Graph's
+    ``/messages/delta`` ignores ``$top`` and falls back to its 10-item
+    default (verified live, 2026-04-25).
+    """
     seen = 0
-    final_delta: str | None = None
-    # Only the first request carries $top; nextLinks already encode it.
-    if start_path.startswith("http"):
-        pages = graph.get_paginated(start_path)
-    else:
-        pages = graph.get_paginated(start_path, params={"$top": page_top})
-    for items, delta_link in pages:
-        for raw in items:
-            row = normalize_message(mailbox_upn, raw, parent_folder_path=folder_path)
-            if row.get("parent_folder_id") is None:
-                row["parent_folder_id"] = folder_id
-            conn.execute(_UPSERT_MESSAGE, row)
-            seen += 1
-        if delta_link:
-            final_delta = delta_link
-    return seen, final_delta
+    cursor = start_path
+    last_delta: str | None = None
+    headers = {"Prefer": f"odata.maxpagesize={page_top}"}
+    while True:
+        round_items = 0
+        round_delta: str | None = None
+        if cursor.startswith("http"):
+            pages = graph.get_paginated(cursor, headers=headers)
+        else:
+            pages = graph.get_paginated(cursor, headers=headers)
+        for items, delta_link in pages:
+            for raw in items:
+                row = normalize_message(mailbox_upn, raw, parent_folder_path=folder_path)
+                if row.get("parent_folder_id") is None:
+                    row["parent_folder_id"] = folder_id
+                conn.execute(_UPSERT_MESSAGE, row)
+                seen += 1
+                round_items += 1
+            if delta_link:
+                round_delta = delta_link
+        if round_delta:
+            last_delta = round_delta
+        # Stop when a round closed with a deltaLink and produced no new items.
+        if round_delta is not None and round_items == 0:
+            break
+        # If the round had items but no deltaLink, the iterator already
+        # exhausted nextLinks; bail out (shouldn't happen with delta).
+        if round_delta is None:
+            break
+        cursor = round_delta
+    return seen, last_delta
 
 
 def crawl_folder(
@@ -240,10 +266,27 @@ def refresh_mailbox(
     if folder_filter is not None:
         targets = [f for f in seen_folders if f["id"] == folder_filter]
     else:
-        targets = [
-            f for f in seen_folders
-            if (f["well_known_name"] or "").lower() in _DEFAULT_WELL_KNOWN
-        ]
+        # Graph's /mailFolders listing does NOT return wellKnownName, so we
+        # can't filter ``seen_folders`` by ``well_known_name``. Resolve each
+        # well-known name to its id by hitting /mailFolders/{wk} directly,
+        # then map back to the upserted folder row for the path.
+        seen_by_id = {f["id"]: f for f in seen_folders}
+        targets = []
+        for wk in _DEFAULT_WELL_KNOWN:
+            try:
+                raw = graph.get(f"{ub}/mailFolders/{wk}")
+            except GraphError:
+                continue  # mailbox doesn't have this well-known folder
+            seen_row = seen_by_id.get(raw["id"])
+            if seen_row is not None:
+                targets.append(seen_row)
+            else:
+                # Listing missed it (hidden / regional quirk) — synthesise.
+                targets.append({
+                    "id": raw["id"],
+                    "path": raw.get("displayName", wk),
+                    "well_known_name": wk,
+                })
 
     outcomes: list[CrawlOutcome] = []
     for f in targets:
