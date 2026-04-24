@@ -8,6 +8,8 @@ from fazla_od.cli import auth as auth_cli
 from fazla_od.cli import catalog as catalog_cli
 from fazla_od.cli import download as download_cli
 from fazla_od.cli import inventory as inventory_cli
+from fazla_od.cli import move as move_cli
+from fazla_od.cli import rename as rename_cli
 from fazla_od.cli import search as search_cli
 
 _SUBCOMMANDS = {
@@ -16,6 +18,8 @@ _SUBCOMMANDS = {
     "catalog": catalog_cli.main,
     "download": download_cli.main,
     "inventory": inventory_cli.main,
+    "move": move_cli.main,
+    "rename": rename_cli.main,
     "search": search_cli.main,
 }
 
