@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 
+from m365ctl.common.graph import GraphError
 from m365ctl.mail.messages import (
     MessageListFilters,
     get_message,
@@ -244,3 +246,146 @@ def test_get_thread_walks_conversation_id():
     params = graph.get_paginated.call_args.kwargs["params"]
     assert "conversationId eq 'conv-m1'" in params["$filter"]
     assert params["$orderby"] == "receivedDateTime asc"
+
+
+def _msg_raw_at(msg_id: str, received: str, subject: str = "") -> dict:
+    raw = _msg_raw(msg_id)
+    raw["receivedDateTime"] = received
+    if subject:
+        raw["subject"] = subject
+    return raw
+
+
+def test_list_messages_falls_back_on_inefficient_filter(capsys):
+    """When Graph rejects $filter+$orderby with InefficientFilter, retry without
+    them and apply the predicates client-side, sorting by receivedDateTime desc.
+    """
+    raw_pages = [
+        # Mixed-ordered, mostly non-matching, with a few matching subjects.
+        {"value": [
+            _msg_raw_at("a1", "2026-04-20T08:00:00Z", "no match"),
+            _msg_raw_at("a2", "2026-04-21T08:00:00Z", "m365ctl smoke run 1"),
+            _msg_raw_at("a3", "2026-04-19T08:00:00Z", "M365CTL SMOKE shouty"),
+            _msg_raw_at("a4", "2026-04-22T08:00:00Z", "totally unrelated"),
+            _msg_raw_at("a5", "2026-04-23T08:00:00Z", "preamble m365ctl smoke trailing"),
+            _msg_raw_at("a6", "2026-04-18T08:00:00Z", "m365ctl smoke older"),
+            _msg_raw_at("a7", "2026-04-24T08:00:00Z", "newest m365ctl smoke"),
+            _msg_raw_at("a8", "2026-04-17T08:00:00Z", "m365ctl smoke oldest"),
+            _msg_raw_at("a9", "2026-04-15T08:00:00Z", "noise"),
+        ]},
+    ]
+
+    calls: list[dict] = []
+
+    def fake_get_paginated(path, *, params=None, headers=None):
+        calls.append({"path": path, "params": dict(params or {})})
+        if len(calls) == 1:
+            # First call: should include $filter — raise InefficientFilter
+            raise GraphError(
+                "BadRequest:InefficientFilter: The restriction or sort order "
+                "is too complex for this operation."
+            )
+        # Second call: should be without $filter / $orderby
+        def gen():
+            for p in raw_pages:
+                yield (p["value"], None)
+        return gen()
+
+    graph = MagicMock()
+    graph.get_paginated.side_effect = fake_get_paginated
+
+    out = list(list_messages(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        folder_id="AAMkAD..inbox",
+        parent_folder_path="/Inbox",
+        filters=MessageListFilters(subject_contains="m365ctl smoke"),
+        limit=5,
+    ))
+
+    # Limit honoured.
+    assert len(out) == 5
+    # All matched the subject_contains predicate (case-insensitive substring).
+    assert all("m365ctl smoke" in m.subject.lower() for m in out)
+    # Sorted by receivedDateTime descending.
+    received = [m.received_at for m in out]
+    assert received == sorted(received, reverse=True)
+
+    # Two calls: first with $filter+$orderby, second without.
+    assert len(calls) == 2
+    first_params = calls[0]["params"]
+    assert "$filter" in first_params
+    assert "$orderby" in first_params
+    second_params = calls[1]["params"]
+    assert "$filter" not in second_params
+    assert "$orderby" not in second_params
+
+    # Stderr notice printed once.
+    err = capsys.readouterr().err
+    assert err.count(
+        "[mail list] Graph rejected $filter as inefficient; "
+        "retrying with client-side filtering."
+    ) == 1
+
+
+def test_list_messages_does_not_swallow_other_graph_errors():
+    graph = MagicMock()
+    graph.get_paginated.side_effect = GraphError("Forbidden: nope")
+    with pytest.raises(GraphError, match="Forbidden"):
+        list(list_messages(
+            graph,
+            mailbox_spec="me",
+            auth_mode="delegated",
+            folder_id="inbox",
+            parent_folder_path="/Inbox",
+            filters=MessageListFilters(subject_contains="anything"),
+        ))
+
+
+def test_list_messages_fallback_applies_all_predicates_client_side():
+    """The fallback path must apply every filter clause, not just subject."""
+    pages = [{"value": [
+        # Should not match: read.
+        {**_msg_raw_at("r1", "2026-04-22T10:00:00Z", "hello world"), "isRead": True},
+        # Should match: unread + subject contains + has_attachments + category.
+        {
+            **_msg_raw_at("r2", "2026-04-23T10:00:00Z", "Hello WORLD"),
+            "isRead": False,
+            "hasAttachments": True,
+            "categories": ["Followup"],
+        },
+        # Should not match: missing category.
+        {
+            **_msg_raw_at("r3", "2026-04-24T10:00:00Z", "hello world"),
+            "isRead": False,
+            "hasAttachments": True,
+            "categories": [],
+        },
+    ]}]
+
+    def fake_get_paginated(path, *, params=None, headers=None):
+        if "$filter" in (params or {}):
+            raise GraphError("InefficientFilter: too complex")
+        def gen():
+            for p in pages:
+                yield (p["value"], None)
+        return gen()
+
+    graph = MagicMock()
+    graph.get_paginated.side_effect = fake_get_paginated
+
+    out = list(list_messages(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        folder_id="inbox",
+        parent_folder_path="/Inbox",
+        filters=MessageListFilters(
+            unread=True,
+            subject_contains="hello",
+            has_attachments=True,
+            category="Followup",
+        ),
+    ))
+    assert [m.id for m in out] == ["r2"]

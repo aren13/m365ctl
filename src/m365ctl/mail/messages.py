@@ -5,10 +5,11 @@ All functions take a ``GraphClient`` and return ``Message`` dataclasses
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Iterator
 
-from m365ctl.common.graph import GraphClient
+from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.mail.endpoints import AuthMode, user_base
 from m365ctl.mail.models import Message
 
@@ -60,6 +61,49 @@ def _build_filter_expr(f: MessageListFilters) -> str:
     return " and ".join(clauses)
 
 
+def _is_inefficient_filter(exc: BaseException) -> bool:
+    """Detect Graph's "InefficientFilter" 400 — emitted on large folders when
+    ``$filter`` (e.g. ``contains(subject, ...)``) is combined with ``$orderby``.
+    """
+    return isinstance(exc, GraphError) and "InefficientFilter" in str(exc)
+
+
+def _matches_filter(raw: dict, f: MessageListFilters) -> bool:
+    """Python-side mirror of ``_build_filter_expr`` for the fallback path.
+
+    Each clause must match in the same way Graph would evaluate it server-side.
+    """
+    if f.unread is True and raw.get("isRead"):
+        return False
+    if f.unread is False and not raw.get("isRead"):
+        return False
+    if f.from_address:
+        addr = (
+            (raw.get("from") or {}).get("emailAddress", {}).get("address")
+        )
+        if addr != f.from_address:
+            return False
+    if f.subject_contains:
+        if f.subject_contains.lower() not in (raw.get("subject") or "").lower():
+            return False
+    received = raw.get("receivedDateTime") or ""
+    if f.since and received < f.since:
+        return False
+    if f.until and received > f.until:
+        return False
+    if f.has_attachments is True and not raw.get("hasAttachments"):
+        return False
+    if f.has_attachments is False and raw.get("hasAttachments"):
+        return False
+    if f.importance and raw.get("importance") != f.importance:
+        return False
+    if f.focus and raw.get("inferenceClassification") != f.focus:
+        return False
+    if f.category and f.category not in (raw.get("categories") or []):
+        return False
+    return True
+
+
 def _derive_mailbox_upn(mailbox_spec: str) -> str:
     """Return the address-or-keyword for Message.mailbox_upn."""
     if mailbox_spec == "me":
@@ -97,15 +141,66 @@ def list_messages(
         params["$filter"] = filter_expr
 
     mailbox_upn = _derive_mailbox_upn(mailbox_spec)
-    count = 0
-    for items, _ in graph.get_paginated(path, params=params):
-        for raw in items:
+
+    def _emit_happy_path() -> Iterator[Message]:
+        count = 0
+        for items, _ in graph.get_paginated(path, params=params):
+            for raw in items:
+                yield Message.from_graph_json(
+                    raw,
+                    mailbox_upn=mailbox_upn,
+                    parent_folder_path=parent_folder_path,
+                )
+                count += 1
+                if limit is not None and count >= limit:
+                    return
+
+    def _emit_fallback() -> Iterator[Message]:
+        # Retry without $filter/$orderby and apply both client-side. Honour
+        # ``limit`` so we don't pull the whole folder to surface a few hits.
+        fallback_params: dict = {
+            "$top": page_size,
+        }
+        collected: list[dict] = []
+        for items, _ in graph.get_paginated(path, params=fallback_params):
+            for raw in items:
+                if _matches_filter(raw, filters):
+                    collected.append(raw)
+                    if limit is not None and len(collected) >= limit:
+                        break
+            if limit is not None and len(collected) >= limit:
+                break
+        # Client-side sort: receivedDateTime desc, matching server $orderby.
+        collected.sort(
+            key=lambda r: r.get("receivedDateTime") or "",
+            reverse=True,
+        )
+        for raw in collected:
             yield Message.from_graph_json(
-                raw, mailbox_upn=mailbox_upn, parent_folder_path=parent_folder_path,
+                raw,
+                mailbox_upn=mailbox_upn,
+                parent_folder_path=parent_folder_path,
             )
-            count += 1
-            if limit is not None and count >= limit:
-                return
+
+    # Try happy path; if Graph rejects $filter as inefficient on the very first
+    # page request, fall back to client-side filtering. Other GraphErrors and
+    # any failure mid-stream propagate untouched.
+    try:
+        iterator = _emit_happy_path()
+        first = next(iterator, None)
+    except GraphError as exc:
+        if not _is_inefficient_filter(exc):
+            raise
+        print(
+            "[mail list] Graph rejected $filter as inefficient; "
+            "retrying with client-side filtering.",
+            file=sys.stderr,
+        )
+        yield from _emit_fallback()
+        return
+    if first is not None:
+        yield first
+    yield from iterator
 
 
 def get_message(
