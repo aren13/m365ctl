@@ -1,0 +1,129 @@
+"""Build reverse-ops from audit-log entries.
+
+Reversible table:
+- rename       -> rename back to ``before.name``
+- move         -> move back (use ``before.parent_id`` if present, else
+                  ``before.parent_path`` (best-effort))
+- copy         -> delete the copy (use ``after.new_item_id`` as target)
+- delete       -> restore from recycle bin
+- label-apply  -> label-remove
+- label-remove -> label-apply (if label recorded in ``before``)
+
+Irreversible:
+- recycle-purge (permanentDelete)
+- any op whose original result != 'ok'
+- share-revoke (stale-shares) — can't re-create a sharing link with the
+  same id, so undo emits an Irreversible with manual-share instructions
+"""
+from __future__ import annotations
+
+from fazla_od.audit import AuditLogger, find_op_by_id
+from fazla_od.planfile import Operation, new_op_id
+
+
+class Irreversible(RuntimeError):
+    """Raised when an op cannot be automatically reversed."""
+
+
+def build_reverse_operation(logger: AuditLogger, op_id: str) -> Operation:
+    start, end = find_op_by_id(logger, op_id)
+    if start is None or end is None:
+        raise Irreversible(f"op {op_id!r} not found in audit log")
+    if end.get("result") != "ok":
+        raise Irreversible(
+            f"op {op_id!r} did not succeed originally (result={end.get('result')!r})"
+        )
+
+    cmd = start.get("cmd", "")
+    before = start.get("before", {}) or {}
+    after = end.get("after", {}) or {}
+    drive_id = start["drive_id"]
+    item_id = start["item_id"]
+
+    if cmd == "od-rename":
+        return Operation(
+            op_id=new_op_id(), action="rename",
+            drive_id=drive_id, item_id=item_id,
+            args={"new_name": before["name"]},
+            dry_run_result=f"(undo of {op_id}) rename back to {before['name']!r}",
+        )
+
+    if cmd == "od-move":
+        args: dict = {}
+        if "parent_id" in before:
+            args["new_parent_item_id"] = before["parent_id"]
+        else:
+            args["new_parent_path"] = before.get("parent_path", "/")
+        return Operation(
+            op_id=new_op_id(), action="move",
+            drive_id=drive_id, item_id=item_id,
+            args=args,
+            dry_run_result=f"(undo of {op_id}) move back to "
+                           f"{before.get('parent_path', '?')}",
+        )
+
+    if cmd == "od-copy":
+        new_item = after.get("new_item_id")
+        if not new_item:
+            raise Irreversible(
+                f"copy op {op_id!r} has no recorded new_item_id — cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="delete",
+            drive_id=after.get("target_drive_id", drive_id),
+            item_id=new_item,
+            args={},
+            dry_run_result=f"(undo of {op_id}) delete copy {new_item!r}",
+        )
+
+    if cmd == "od-delete":
+        return Operation(
+            op_id=new_op_id(), action="restore",
+            drive_id=drive_id, item_id=item_id,
+            args={},
+            dry_run_result=f"(undo of {op_id}) restore {before.get('name','?')} "
+                           f"from recycle bin",
+        )
+
+    if cmd == "od-clean(recycle-bin)":
+        raise Irreversible(
+            f"op {op_id!r} was a recycle-bin purge — items are permanently "
+            f"deleted and not recoverable by this toolkit. If retention "
+            f"backup is available, contact Microsoft 365 admin."
+        )
+
+    if cmd == "od-label(apply)":
+        return Operation(
+            op_id=new_op_id(), action="label-remove",
+            drive_id=drive_id, item_id=item_id,
+            args={"site_url": start["args"]["site_url"]},
+            dry_run_result=f"(undo of {op_id}) remove label "
+                           f"{start['args'].get('label','?')!r}",
+        )
+
+    if cmd == "od-label(remove)":
+        prior_label = before.get("label")
+        if not prior_label:
+            raise Irreversible(
+                f"op {op_id!r} removed a label but prior label unknown"
+            )
+        return Operation(
+            op_id=new_op_id(), action="label-apply",
+            drive_id=drive_id, item_id=item_id,
+            args={"site_url": start["args"]["site_url"], "label": prior_label},
+            dry_run_result=f"(undo of {op_id}) re-apply {prior_label!r}",
+        )
+
+    if cmd == "od-clean(old-versions)":
+        raise Irreversible(
+            f"op {op_id!r} deleted file versions — version history cannot "
+            f"be reconstructed. Original version content is gone."
+        )
+
+    if cmd == "od-clean(stale-shares)":
+        raise Irreversible(
+            f"op {op_id!r} revoked sharing link(s). Sharing links cannot be "
+            f"reissued with the same URL. Re-share manually if needed."
+        )
+
+    raise Irreversible(f"no reverse-op known for cmd {cmd!r}")

@@ -15,6 +15,7 @@ from fazla_od.cli import label as label_cli
 from fazla_od.cli import move as move_cli
 from fazla_od.cli import rename as rename_cli
 from fazla_od.cli import search as search_cli
+from fazla_od.cli import undo as undo_cli
 
 _SUBCOMMANDS = {
     "audit-sharing": audit_sharing_cli.main,
@@ -29,6 +30,7 @@ _SUBCOMMANDS = {
     "move": move_cli.main,
     "rename": rename_cli.main,
     "search": search_cli.main,
+    "undo": undo_cli.main,
 }
 
 
