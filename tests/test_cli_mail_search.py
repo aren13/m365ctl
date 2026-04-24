@@ -1,5 +1,5 @@
 """Parser tests for `m365ctl mail search`."""
-from m365ctl.mail.cli.search import build_parser, main
+from m365ctl.mail.cli.search import build_parser
 
 
 def test_mail_search_parser_defaults():
@@ -14,8 +14,6 @@ def test_mail_search_parser_custom_limit():
     assert args.limit == 100
 
 
-def test_mail_search_local_defers_to_phase_7(capsys):
-    rc = main(["--config", "/nonexistent", "query", "--local"])
-    assert rc == 2
-    out = capsys.readouterr()
-    assert "phase 7" in (out.err + out.out).lower() or "catalog" in (out.err + out.out).lower()
+def test_mail_search_parser_local_flag():
+    args = build_parser().parse_args(["query", "--local"])
+    assert args.local is True

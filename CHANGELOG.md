@@ -5,6 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 0.7.0 — Phase 7: local mail catalog (DuckDB + /delta)
+
+### Added
+- `m365ctl.mail.catalog.{schema,db,normalize,crawl,queries}` — DuckDB mirror
+  of mailbox folders + messages, refreshed via Graph `/messages/delta`.
+- CLI: `mail catalog refresh` (per-mailbox or `--folder <path>`),
+  `mail catalog status`. Bin wrappers: `bin/mail-catalog-refresh`,
+  `bin/mail-catalog-status`.
+- `mail search --local` now queries the catalog via case-insensitive LIKE
+  across subject/from/to/body-preview (the Phase 7 stub is gone).
+- `mail whoami` now reports real catalog stats (messages, folders,
+  last refresh) instead of the Phase 7 placeholder line.
+
+### Catalog semantics
+- Composite PK `(mailbox_upn, …)` everywhere — multi-mailbox-ready for
+  Phase 12 delegation without migration.
+- Per-folder delta with stored `delta_link`; `syncStateNotFound` (HTTP 410)
+  triggers a clean full restart, marked `last_status='restarted'`.
+- Soft-delete tombstones from `/delta` (`@removed`) become
+  `is_deleted = true` rows; queries exclude them by default.
+
+### Deferred
+- `size_estimate` is a placeholder column for now (always 0 from the
+  delta crawl). Phase 7.5 / Phase 11 export will backfill it from
+  attachment metadata.
+- `mail search --hybrid` (Graph + catalog dedupe) — server-side path
+  still works; hybrid merging waits for a real demand signal.
+
 ## [0.6.0] — 2026-04-25
 
 ### Added

@@ -74,7 +74,24 @@ def run_whoami(config_path: Path) -> int:
     except Exception as e:
         print(f"App-only cert:         (not available - {e})")
 
-    print("Mail catalog:          (not yet built — Phase 7)")
+    # Catalog stats (best effort — missing file is fine, just say "not built").
+    try:
+        from m365ctl.mail.catalog.db import open_catalog
+        from m365ctl.mail.catalog.queries import summary
+        cat_path = cfg.mail.catalog_path
+        if cat_path.exists():
+            with open_catalog(cat_path) as conn:
+                s = summary(conn, mailbox_upn="me")
+            print(
+                f"Mail catalog:          {cat_path} — "
+                f"{s['messages_total']} messages, "
+                f"{s['folders_total']} folders, "
+                f"refreshed {s['last_refreshed_at'] or '(never)'}"
+            )
+        else:
+            print(f"Mail catalog:          {cat_path} (not built — run `mail catalog refresh`)")
+    except Exception as e:
+        print(f"Mail catalog:          (error reading: {e})")
     return 0
 
 
