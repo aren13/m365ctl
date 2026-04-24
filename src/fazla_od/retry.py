@@ -50,4 +50,9 @@ def with_retry(
                 base_delay * (2 ** (attempt - 1)), max_delay
             )
             sleep(delay)
+    # With max_attempts == 1 there was no retry attempted; re-raise the
+    # original exception directly so callers see the underlying error type
+    # (and any attached metadata, e.g. ``retry_after_seconds``).
+    if max_attempts <= 1 and last_exc is not None:
+        raise last_exc
     raise RetryExhausted(f"giving up after {max_attempts} attempts") from last_exc
