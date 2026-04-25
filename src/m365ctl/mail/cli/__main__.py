@@ -64,6 +64,7 @@ _USAGE = (
     "  digest       unread-mail digest [--since|--limit|--send-to|--confirm|--json]\n"
     "  archive      bulk-move messages older than N days into Archive/<YYYY>/<MM>\n"
     "  size-report  per-folder message-count + total-size breakdown [--top|--json]\n"
+    "  top-senders  top senders by message count [--since|--limit|--json]\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -133,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.archive import main as f
     elif verb == "size-report":
         from m365ctl.mail.cli.size_report import main as f
+    elif verb == "top-senders":
+        from m365ctl.mail.cli.top_senders import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
