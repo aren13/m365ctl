@@ -15,20 +15,16 @@ import argparse
 from pathlib import Path
 
 from m365ctl.common.graph import GraphClient
-from m365ctl.mail.cli._common import add_common_args, load_and_authorize
+from m365ctl.mail.cli._common import (
+    add_common_args,
+    derive_mailbox_upn,
+    load_and_authorize,
+)
 from m365ctl.mail.export.attachments import export_attachments
 from m365ctl.mail.export.eml import export_message_to_eml
 from m365ctl.mail.export.mailbox import export_mailbox
 from m365ctl.mail.export.mbox import export_folder_to_mbox
 from m365ctl.mail.folders import resolve_folder_path
-
-
-def _derive_mailbox_upn(mailbox_spec: str) -> str:
-    if mailbox_spec == "me":
-        return "me"
-    if mailbox_spec.startswith("upn:") or mailbox_spec.startswith("shared:"):
-        return mailbox_spec.split(":", 1)[1]
-    return mailbox_spec
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -103,7 +99,7 @@ def _run_mailbox(args: argparse.Namespace) -> int:
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)
     out_dir = Path(args.out_dir)
-    mailbox_upn = _derive_mailbox_upn(args.mailbox)
+    mailbox_upn = derive_mailbox_upn(args.mailbox)
     manifest = export_mailbox(
         graph,
         mailbox_spec=args.mailbox,

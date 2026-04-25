@@ -59,6 +59,7 @@ _USAGE = (
     "  ooo          ooo show | ooo on --message ... | ooo off (auto-reply / OOO)\n"
     "  signature    signature show | signature set --from-file|--content\n"
     "  export       export {message,folder,mailbox,attachments} (read-only)\n"
+    "  delegate     delegate list|grant|revoke (PnP.PowerShell — ExchangeOnline)\n"
     "\n"
     "Convenience (Phase 14):\n"
     "  digest       unread-mail digest [--since|--limit|--send-to|--confirm|--json]\n"
@@ -132,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.signature import main as f
     elif verb == "export":
         from m365ctl.mail.cli.export import main as f
+    elif verb == "delegate":
+        from m365ctl.mail.cli.delegate import main as f
     elif verb == "digest":
         from m365ctl.mail.cli.digest import main as f
     elif verb == "archive":

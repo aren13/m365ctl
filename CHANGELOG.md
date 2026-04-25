@@ -5,6 +5,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.2.0 — Phase 12: multi-mailbox & delegation
+
+### Added
+- `m365ctl.mail.cli._common.derive_mailbox_upn` — canonical helper
+  promoted from three duplicates (catalog/export/triage CLIs).
+- `m365ctl.mail.mutate.delegate.{list_delegates, execute_grant,
+  execute_revoke}` + `scripts/ps/Set-MailboxDelegate.ps1` — mailbox
+  delegation via Exchange Online PowerShell. Grant ↔ revoke registered
+  as inverses in the undo dispatcher.
+- CLI: `mail delegate {list, grant, revoke}` with `--rights {FullAccess,
+  SendAs, SendOnBehalf}`. Bin wrapper `bin/mail-delegate`.
+
+### Confirmed
+- `--mailbox shared:<addr>` routes correctly through every shipped
+  reader and mutator (added integration tests covering list/get/search/
+  folders/settings/triage/catalog/export). `user_base` already handled
+  this; tests now lock it in.
+
+### Requires
+- PowerShell 7+ on PATH and the `ExchangeOnlineManagement` module
+  (`Install-Module ExchangeOnlineManagement -Scope CurrentUser`) for
+  `mail delegate` actions only. All other verbs continue to use Graph
+  exclusively.
+
 ## 1.1.0 — Phase 6: hard delete + `mail clean` / `mail empty`
 
 ### Added

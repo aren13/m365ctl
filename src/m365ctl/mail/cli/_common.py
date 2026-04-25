@@ -14,6 +14,21 @@ from m365ctl.common.config import AuthMode, Config, load_config
 from m365ctl.common.safety import assert_mailbox_allowed
 
 
+def derive_mailbox_upn(spec: str) -> str:
+    """Translate a mailbox spec to its UPN form for catalog keys.
+
+    me                          -> me
+    upn:alice@example.com       -> alice@example.com
+    shared:team@example.com     -> team@example.com
+    alice@example.com           -> alice@example.com  (passthrough)
+    """
+    if spec == "me":
+        return "me"
+    if spec.startswith("upn:") or spec.startswith("shared:"):
+        return spec.split(":", 1)[1]
+    return spec
+
+
 def add_common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--config", default="config.toml", help="Path to config.toml (default: config.toml).")
     p.add_argument("--mailbox", default="me",

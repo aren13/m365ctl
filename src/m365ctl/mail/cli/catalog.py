@@ -11,15 +11,8 @@ from m365ctl.common.safety import assert_mailbox_allowed
 from m365ctl.mail.catalog.crawl import refresh_mailbox
 from m365ctl.mail.catalog.db import open_catalog
 from m365ctl.mail.catalog.queries import summary
+from m365ctl.mail.cli._common import derive_mailbox_upn
 from m365ctl.mail.folders import resolve_folder_path
-
-
-def _derive_mailbox_upn(mailbox_spec: str) -> str:
-    if mailbox_spec == "me":
-        return "me"
-    if mailbox_spec.startswith("upn:") or mailbox_spec.startswith("shared:"):
-        return mailbox_spec.split(":", 1)[1]
-    return mailbox_spec
 
 
 def _credential(cfg, *, auth_mode: str):
@@ -46,7 +39,7 @@ def _run_refresh(args: argparse.Namespace) -> int:
             mailbox_spec=mailbox_spec, auth_mode=auth_mode,
         )
 
-    mailbox_upn = _derive_mailbox_upn(mailbox_spec)
+    mailbox_upn = derive_mailbox_upn(mailbox_spec)
     print(f"Mail catalog: {cfg.mail.catalog_path}")
     print(f"Mailbox:      {mailbox_upn}")
     if folder_filter:
@@ -76,7 +69,7 @@ def _run_refresh(args: argparse.Namespace) -> int:
 
 def _run_status(args: argparse.Namespace) -> int:
     cfg = load_config(Path(args.config))
-    mailbox_upn = _derive_mailbox_upn(args.mailbox)
+    mailbox_upn = derive_mailbox_upn(args.mailbox)
     print(f"Mail catalog: {cfg.mail.catalog_path}")
     print(f"Mailbox:      {mailbox_upn}")
     with open_catalog(cfg.mail.catalog_path) as conn:

@@ -59,6 +59,10 @@ allow-lists, audit log, and undo on every mutation.
   `mail empty <folder>` — irreversible deletes with full EML capture to
   `[logging].purged_dir` BEFORE the wire-delete. Triple-gated: `--confirm`,
   TTY-typed phrase, and a common-folder/≥1000-item escalation.
+- **Multi-mailbox + delegation (Phase 12, 1.2):** every shipped verb
+  accepts `--mailbox shared:<addr>` for shared-mailbox routing.
+  `mail delegate {list,grant,revoke} --rights …` manages FullAccess /
+  SendAs / SendOnBehalf via Exchange Online PowerShell with audit + undo.
 
 ## Quickstart
 
