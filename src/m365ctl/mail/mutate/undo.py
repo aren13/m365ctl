@@ -468,6 +468,16 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             f"live under {capture}."
         )
 
+    if cmd == "mail-sendas":
+        eff = (after.get("effective_sender") if after else None) or "<unknown>"
+        princ = (after.get("authenticated_principal")
+                 if after else None) or "<unknown>"
+        raise Irreversible(
+            f"op {op_id!r} sent mail as {eff!r} (authenticated principal: "
+            f"{princ}); send-as is irreversible — the message has been "
+            f"delivered. The audit log records both fields for compliance."
+        )
+
     if cmd == "mail-delegate-grant":
         return Operation(
             op_id=new_op_id(), action="mail.delegate.revoke",
@@ -719,4 +729,12 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
         "mail.empty.recycle-bin",
         "Recycle-bin empty is irreversible; per-message EMLs captured under "
         "logs/purged/<YYYY-MM-DD>/<op-id>/.",
+    )
+
+    # Phase 13 — send-as is irreversible (sent mail cannot be recalled).
+    dispatcher.register_irreversible(
+        "mail.send.as",
+        "Send-as is irreversible — the message is delivered. The audit log "
+        "records both the effective_sender and the authenticated_principal "
+        "for compliance.",
     )

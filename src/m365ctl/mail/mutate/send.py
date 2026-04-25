@@ -139,3 +139,61 @@ def execute_send_scheduled(
     after: dict[str, Any] = {"sent_at": _now_utc_iso(), "schedule_at": schedule_at}
     log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
     return MailResult(op_id=op.op_id, status="ok", after=after)
+
+
+def execute_send_as(
+    op: Operation,
+    graph: GraphClient,
+    logger: AuditLogger,
+    *,
+    before: dict[str, Any],
+) -> MailResult:
+    """POST /users/{from_upn}/sendMail (app-only, send-as).
+
+    Audit records both the effective sender (the mailbox being sent
+    as) and the authenticated principal (the app client_id).
+    Send-as is irreversible by design — the message is delivered.
+    """
+    from_upn = op.args["from_upn"]
+    ub = f"/users/{from_upn}"  # forced app-only — caller must enforce
+    try:
+        message = build_message_payload(
+            subject=op.args.get("subject", ""),
+            body=op.args.get("body", ""),
+            body_type=op.args.get("body_type", "text"),
+            to=list(op.args.get("to", [])),
+            cc=list(op.args.get("cc", []) or []),
+            bcc=list(op.args.get("bcc", []) or []),
+            importance=op.args.get("importance"),
+            require_subject=True,
+        )
+    except BodyFormatError as e:
+        log_mutation_start(
+            logger, op_id=op.op_id, cmd="mail-sendas",
+            args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
+        )
+        log_mutation_end(
+            logger, op_id=op.op_id, after=None, result="error", error=str(e),
+        )
+        return MailResult(op_id=op.op_id, status="error", error=str(e))
+
+    log_mutation_start(
+        logger, op_id=op.op_id, cmd="mail-sendas",
+        args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
+    )
+    payload = {"message": message, "saveToSentItems": True}
+    try:
+        graph.post_raw(f"{ub}/sendMail", json_body=payload)
+    except GraphError as e:
+        log_mutation_end(
+            logger, op_id=op.op_id, after=None, result="error", error=str(e),
+        )
+        return MailResult(op_id=op.op_id, status="error", error=str(e))
+
+    after: dict[str, Any] = {
+        "sent_at": _now_utc_iso(),
+        "effective_sender": from_upn,
+        "authenticated_principal": op.args.get("authenticated_principal", ""),
+    }
+    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
+    return MailResult(op_id=op.op_id, status="ok", after=after)

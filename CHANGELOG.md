@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.4.0 — Phase 13: send-as / on-behalf-of
+
+### Added
+- `m365ctl.mail.mutate.send.execute_send_as` — POST `/users/{from_upn}/sendMail` (app-only). Audit records both `effective_sender` (the mailbox being sent as) and `authenticated_principal` (the app `client_id`).
+- CLI: `mail sendas <from-upn> --to <addr> ... --subject ... --body ... --confirm`. Bin wrapper `bin/mail-sendas`.
+- Out-of-scope from-UPNs require `--unsafe-scope` plus a TTY confirmation, reusing the existing `assert_mailbox_allowed` flow.
+
+### Irreversible
+- `mail.send.as` is registered as irreversible in the undo dispatcher; `m365ctl undo <op-id>` returns a clear error citing the audit-log compliance fields.
+
 ## 1.3.0 — Phase 5b: scheduled send
 
 ### Added
