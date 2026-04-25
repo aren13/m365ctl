@@ -3,6 +3,31 @@
 All notable changes to m365ctl are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.8.0 — Phase 11.x: mid-folder export resume
+
+### Added
+- `mail export mailbox` now resumes interrupted folders mid-stream.
+  After each successfully exported message the manifest is checkpointed
+  with `last_exported_id` + `last_exported_received_at`; the next run
+  opens the same `.mbox` in append mode and skips messages at or before
+  the cursor.
+- Manifest schema bumped to v2 (additive — `last_exported_id` and
+  `last_exported_received_at` per folder). v1 manifests load
+  transparently with the new fields defaulting to None.
+
+### Skip semantics
+Cursor comparison is `received_at > last_exported_received_at`, with
+`message_id == last_exported_id` as the exact-match tie-breaker. ISO-8601
+strings sort lexicographically so the comparison is exact. **Caveat:**
+if Outlook backfills a message with an older `receivedDateTime` during
+the pause, that message is skipped — re-run `mail export folder <path>`
+to capture it.
+
+### Contract change
+`export_folder_to_mbox` returns `(count, last_id, last_ts)` instead of
+just `count`. CLI callers in `mail export folder` continue to work
+(they only use the count).
+
 ## 1.7.0 — Phase 10.y: thread.has_reply predicate
 
 ### Added

@@ -79,6 +79,10 @@ allow-lists, audit log, and undo on every mutation.
 - **Thread predicate (Phase 10.y, 1.7):** `thread: { has_reply: false }`
   catches sent mail with no reply yet. Pure catalog reasoning, no per-
   message Graph fetches.
+- **Mid-folder export resume (Phase 11.x, 1.8):** `mail export mailbox`
+  now resumes interrupted folders message-by-message via
+  `last_exported_id` checkpoints in the manifest. Killing mid-export
+  and re-running picks up where it left off; no re-uploads.
 
 ## Quickstart
 
