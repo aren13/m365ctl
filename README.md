@@ -66,6 +66,9 @@ allow-lists, audit log, and undo on every mutation.
 - **Scheduled send (Phase 5b, 1.3):** `mail send <draft> --schedule-at <iso>`
   defers delivery via the MAPI `PR_DEFERRED_DELIVERY_TIME` extended
   property. Gated behind `[mail].schedule_send_enabled`.
+- **Send-as (Phase 13, 1.4):** `mail sendas <from-upn> --to <addr> ... --confirm`
+  sends as another mailbox via app-only `/users/{upn}/sendMail`. Both the
+  effective sender and the authenticated principal are audit-logged.
 
 ## Quickstart
 
