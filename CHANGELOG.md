@@ -5,6 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 0.8.0 — Phase 10: triage DSL + engine
+
+### Added
+- `m365ctl.mail.triage.{dsl,match,plan,runner}` — YAML rules → typed
+  `RuleSet` AST → predicate evaluator → tagged `Plan`.
+- CLI: `mail triage validate <yaml>` (CI-friendly, no Graph calls) and
+  `mail triage run --rules <yaml> [--plan-out <p> | --confirm]`. Bin
+  wrapper `bin/mail-triage`.
+- Three reference rule files in `scripts/mail/rules/` — every example
+  uses `example.com` domains only.
+- New `pyyaml>=6.0` runtime dependency.
+
+### Predicates shipped
+`from`, `subject`, `folder`, `age`, `unread`, `is_flagged`,
+`has_attachments`, `categories`, `focus`, `importance`. Composable with
+`all` / `any` / `none`.
+
+### Actions shipped
+`move`, `copy`, `delete` (soft), `flag`, `read`, `focus`, `categorize`
+(add/remove/set). Each emitted op carries `args.rule_name` for
+attribution; existing audit + undo intact.
+
+### Deferred
+- `to`, `cc`, `body`, `thread`, `headers` predicates — need either Graph
+  fetches or richer catalog coverage. Phase 10.x.
+- KQL pushdown for "obvious" predicates — Phase 7 catalog covers the
+  needed surface area, so the first cut runs entirely local. Phase 10.x.
+
 ## 0.7.0 — Phase 7: local mail catalog (DuckDB + /delta)
 
 ### Added

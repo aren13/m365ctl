@@ -1,0 +1,29 @@
+# Daily triage routine. Run each morning before opening Outlook.
+version: 1
+mailbox: me
+rules:
+  - name: clear-read-newsletters
+    match:
+      all:
+        - from: { domain_in: [newsletter.example.com] }
+        - unread: false
+      none:
+        - is_flagged: true
+    actions:
+      - delete: {}    # soft-delete; reversible via `mail undo`
+
+  - name: flag-leadership
+    match:
+      all:
+        - unread: true
+        - from: { address_in: [alice@example.com, bob@example.com] }
+    actions:
+      - flag: { status: flagged, due_days: 1 }
+
+  - name: focus-noise
+    match:
+      all:
+        - folder: Inbox
+        - from: { domain_in: [notifications.example.com] }
+    actions:
+      - focus: other

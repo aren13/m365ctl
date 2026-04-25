@@ -1,0 +1,12 @@
+# Archive newsletter mail older than a week into Archive/Newsletters.
+version: 1
+mailbox: me
+rules:
+  - name: archive-newsletters
+    match:
+      all:
+        - from: { domain_in: [newsletter.example.com, weekly.example.com] }
+        - age: { older_than_days: 7 }
+        - folder: Inbox
+    actions:
+      - move: { to_folder: Archive/Newsletters }
