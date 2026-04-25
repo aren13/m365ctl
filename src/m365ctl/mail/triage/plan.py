@@ -11,7 +11,7 @@ from m365ctl.mail.triage.dsl import (
     Action, CategorizeA, CopyA, DeleteA, FlagA, FocusSetA, MoveA,
     ReadA, Rule, RuleSet,
 )
-from m365ctl.mail.triage.match import evaluate_match
+from m365ctl.mail.triage.match import MatchContext, evaluate_match
 
 
 def build_plan(
@@ -25,11 +25,12 @@ def build_plan(
 ) -> Plan:
     ops: list[Operation] = []
     rows_list = list(rows)
+    context = _build_match_context(rows_list)
     for rule in ruleset.rules:
         if not rule.enabled:
             continue
         for row in rows_list:
-            if not evaluate_match(rule.match, row, now=now):
+            if not evaluate_match(rule.match, row, now=now, context=context):
                 continue
             for action in rule.actions:
                 ops.append(_op_for(rule, action, row, mailbox_upn=mailbox_upn))
@@ -39,6 +40,21 @@ def build_plan(
         source_cmd=source_cmd,
         scope=scope,
         operations=ops,
+    )
+
+
+def _build_match_context(rows: list[dict[str, Any]]) -> MatchContext:
+    """A conversation is 'replied' iff it has >=2 distinct senders."""
+    senders_by_conv: dict[str, set[str]] = {}
+    for r in rows:
+        cid = r.get("conversation_id")
+        sender = (r.get("from_address") or "").lower()
+        if cid and sender:
+            senders_by_conv.setdefault(cid, set()).add(sender)
+    return MatchContext(
+        replied_conversations=frozenset(
+            cid for cid, senders in senders_by_conv.items() if len(senders) > 1
+        ),
     )
 
 

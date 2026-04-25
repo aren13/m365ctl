@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 from m365ctl.mail.triage.dsl import (
     CategorizeA, FlagA, FromP, Match, MoveA, ReadA, Rule, RuleSet,
-    UnreadP,
+    ThreadP, UnreadP,
 )
-from m365ctl.mail.triage.plan import build_plan
+from m365ctl.mail.triage.plan import _build_match_context, build_plan
 
 
 _NOW = datetime(2026, 4, 25, tzinfo=timezone.utc)
@@ -120,6 +120,50 @@ def test_categorize_carries_add_remove_set():
     assert args["add"] == ["A"]
     assert args["remove"] == ["B"]
     assert args["set"] == ["C", "D"]
+
+
+def test_build_match_context_two_distinct_senders_marks_replied():
+    rows = [
+        _row("m1", from_address="me@example.com", conversation_id="conv-A"),
+        _row("m2", from_address="bob@example.com", conversation_id="conv-A"),
+        _row("m3", from_address="me@example.com", conversation_id="conv-B"),
+        # conv-C: two messages, same sender -> not replied
+        _row("m4", from_address="me@example.com", conversation_id="conv-C"),
+        _row("m5", from_address="me@example.com", conversation_id="conv-C"),
+    ]
+    ctx = _build_match_context(rows)
+    assert ctx.replied_conversations == frozenset({"conv-A"})
+
+
+def test_thread_has_reply_false_emits_op_when_no_reply():
+    rs = _ruleset([
+        Rule(name="follow-up", enabled=True,
+             match=Match(all_of=[ThreadP(has_reply=False)]),
+             actions=[FlagA(status="flagged")]),
+    ])
+    rows = [
+        _row("m1", from_address="me@example.com", conversation_id="conv-1"),
+    ]
+    plan = build_plan(rs, rows, mailbox_upn="me", source_cmd="x",
+                     scope="me", now=_NOW)
+    assert len(plan.operations) == 1
+    assert plan.operations[0].item_id == "m1"
+
+
+def test_thread_has_reply_false_skips_when_replied():
+    rs = _ruleset([
+        Rule(name="follow-up", enabled=True,
+             match=Match(all_of=[ThreadP(has_reply=False)]),
+             actions=[FlagA(status="flagged")]),
+    ])
+    rows = [
+        _row("m1", from_address="me@example.com", conversation_id="conv-1"),
+        _row("m2", from_address="bob@example.com", conversation_id="conv-1"),
+    ]
+    plan = build_plan(rs, rows, mailbox_upn="me", source_cmd="x",
+                     scope="me", now=_NOW)
+    # conv-1 has 2 distinct senders -> replied -> no ops emitted.
+    assert plan.operations == []
 
 
 def test_plan_metadata():

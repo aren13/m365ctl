@@ -3,6 +3,39 @@
 All notable changes to m365ctl are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.7.0 — Phase 10.y: thread.has_reply predicate
+
+### Added
+- `thread: { has_reply: true|false }` DSL predicate. A conversation is
+  considered "replied" iff there are >= 2 distinct senders in the same
+  `conversation_id` across the candidate row set. No Graph fetches —
+  pure catalog reasoning, computed once per `mail triage run` via a new
+  `MatchContext` precomputation step in the plan emitter.
+- The spec's `follow-up-on-sent` rule example now works as written:
+  ```yaml
+  - name: follow-up-on-sent
+    match:
+      all:
+        - from: { domain_in: [yourdomain.com] }
+        - thread: { has_reply: false }
+        - age: { older_than_days: 3 }
+    actions:
+      - flag: { status: flagged, due_days: 2 }
+  ```
+
+### Internal
+- `evaluate_match(...)` now accepts an optional `context: MatchContext`
+  kwarg. Existing callers passing positional/keyword args without
+  `context` continue to work; `thread` predicates against an empty
+  context evaluate as False (defensive default).
+
+### Still deferred
+- `headers: { contains | equals }` — needs per-message
+  `internetMessageHeaders` fetch.
+- KQL pushdown — local catalog covers the surface; pushdown is purely
+  an optimization for cases the catalog can't handle.
+
+
 ## [Unreleased]
 
 ## 1.6.0 — Phase 10.x: DSL predicate deferrals (to / body / cc)

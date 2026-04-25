@@ -6,27 +6,45 @@ Operates on dicts that look like rows from
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from m365ctl.mail.triage.dsl import (
     AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
     HasAttachmentsP, ImportanceP, Match, Predicate,
-    SubjectP, ToP, UnreadP,
+    SubjectP, ThreadP, ToP, UnreadP,
 )
 
 
-def evaluate_match(match: Match, row: dict[str, Any], *, now: datetime) -> bool:
-    if match.all_of and not all(_eval(p, row, now=now) for p in match.all_of):
+@dataclass(frozen=True)
+class MatchContext:
+    """Pre-computed cross-row data needed by some predicates.
+
+    Built once per ruleset run by the plan emitter. ``thread`` predicates
+    consult ``replied_conversations`` to avoid per-evaluation rebuilds.
+    """
+    replied_conversations: frozenset[str] = field(default_factory=frozenset)
+
+
+def evaluate_match(
+    match: Match,
+    row: dict[str, Any],
+    *,
+    now: datetime,
+    context: MatchContext | None = None,
+) -> bool:
+    ctx = context if context is not None else MatchContext()
+    if match.all_of and not all(_eval(p, row, now=now, context=ctx) for p in match.all_of):
         return False
-    if match.any_of and not any(_eval(p, row, now=now) for p in match.any_of):
+    if match.any_of and not any(_eval(p, row, now=now, context=ctx) for p in match.any_of):
         return False
-    if match.none_of and any(_eval(p, row, now=now) for p in match.none_of):
+    if match.none_of and any(_eval(p, row, now=now, context=ctx) for p in match.none_of):
         return False
     return True
 
 
-def _eval(p: Predicate, row: dict[str, Any], *, now: datetime) -> bool:
+def _eval(p: Predicate, row: dict[str, Any], *, now: datetime, context: MatchContext) -> bool:
     if isinstance(p, FromP):
         return _eval_from(p, row)
     if isinstance(p, ToP):
@@ -54,6 +72,8 @@ def _eval(p: Predicate, row: dict[str, Any], *, now: datetime) -> bool:
         return (row.get("inference_class") or "") == p.equals
     if isinstance(p, ImportanceP):
         return (row.get("importance") or "") == p.equals
+    if isinstance(p, ThreadP):
+        return _eval_thread(p, row, context=context)
     raise TypeError(f"unhandled predicate type: {type(p).__name__}")
 
 
@@ -183,3 +203,11 @@ def _eval_categories(p: CategoriesP, row: dict[str, Any]) -> bool:
     if p.in_ is not None and not any(c in p.in_ for c in cats):
         return False
     return True
+
+
+def _eval_thread(p: ThreadP, row: dict[str, Any], *, context: MatchContext) -> bool:
+    cid = row.get("conversation_id") or ""
+    if not cid:
+        return False
+    is_replied = cid in context.replied_conversations
+    return is_replied == p.has_reply
