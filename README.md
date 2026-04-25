@@ -90,6 +90,9 @@ allow-lists, audit log, and undo on every mutation.
 - **Headers predicate (Phase 10.z, 1.10):** `headers: { name: List-Unsubscribe, contains: example.com }`
   matches against `internetMessageHeaders` with lazy per-message fetch
   + per-run cache. Rulesets without headers predicates pay zero overhead.
+- **Soft-delete-undo cleanup (Phase 4.x, 1.11):** `m365ctl undo` for
+  `mail.delete.soft` now handles manually-moved-out-of-Deleted-Items
+  and already-restored cases without falling back to "restore manually".
 
 ## Quickstart
 
