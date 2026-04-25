@@ -445,6 +445,29 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             dry_run_result=f"(undo of {op_id}) restore prior automaticRepliesSetting",
         )
 
+    if cmd == "mail-delete-hard":
+        capture = (before.get("purged_eml_path")
+                   or (after.get("purged_eml_path") if after else None)
+                   or "<unknown>")
+        raise Irreversible(
+            f"op {op_id!r} hard-deleted a message; recovery is only possible "
+            f"from the EML capture at {capture}."
+        )
+
+    if cmd == "mail-empty-folder":
+        capture = (after.get("purged_root") if after else None) or "<unknown>"
+        raise Irreversible(
+            f"op {op_id!r} emptied a folder; per-message EML captures live "
+            f"under {capture}."
+        )
+
+    if cmd == "mail-empty-recycle-bin":
+        capture = (after.get("purged_root") if after else None) or "<unknown>"
+        raise Irreversible(
+            f"op {op_id!r} emptied the recycle bin; per-message EML captures "
+            f"live under {capture}."
+        )
+
     if cmd == "mail-attach-remove":
         if not before.get("content_bytes_b64"):
             raise Irreversible(
@@ -639,4 +662,21 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
     dispatcher.register_irreversible(
         "mail.forward",
         "Sent forwards cannot be recalled programmatically.",
+    )
+
+    # Phase 6 — irreversible hard-delete + empty verbs.
+    dispatcher.register_irreversible(
+        "mail.delete.hard",
+        "Hard-delete is irreversible; recovery available only from the EML "
+        "capture at logs/purged/<YYYY-MM-DD>/<op-id>.eml.",
+    )
+    dispatcher.register_irreversible(
+        "mail.empty.folder",
+        "Empty-folder is irreversible; per-message EMLs captured under "
+        "logs/purged/<YYYY-MM-DD>/<op-id>/.",
+    )
+    dispatcher.register_irreversible(
+        "mail.empty.recycle-bin",
+        "Recycle-bin empty is irreversible; per-message EMLs captured under "
+        "logs/purged/<YYYY-MM-DD>/<op-id>/.",
     )
