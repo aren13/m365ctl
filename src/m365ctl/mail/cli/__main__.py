@@ -71,6 +71,7 @@ _USAGE = (
     "\nIrreversible (NOT undoable):\n"
     "  clean        clean <message-id> | clean recycle-bin (hard delete + EML capture)\n"
     "  empty        empty <folder> (hard-delete every message in the folder)\n"
+    "  sendas       sendas <from-upn> --to <addr> ... (app-only; IRREVERSIBLE)\n"
 )
 
 
@@ -151,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.clean import main as f
     elif verb == "empty":
         from m365ctl.mail.cli.empty import main as f
+    elif verb == "sendas":
+        from m365ctl.mail.cli.sendas import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
