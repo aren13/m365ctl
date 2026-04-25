@@ -59,6 +59,9 @@ _USAGE = (
     "  ooo          ooo show | ooo on --message ... | ooo off (auto-reply / OOO)\n"
     "  signature    signature show | signature set --from-file|--content\n"
     "  export       export {message,folder,mailbox,attachments} (read-only)\n"
+    "\n"
+    "Convenience (Phase 14):\n"
+    "  digest       unread-mail digest [--since|--limit|--send-to|--confirm|--json]\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -122,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.signature import main as f
     elif verb == "export":
         from m365ctl.mail.cli.export import main as f
+    elif verb == "digest":
+        from m365ctl.mail.cli.digest import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
