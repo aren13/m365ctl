@@ -65,6 +65,7 @@ _USAGE = (
     "  archive      bulk-move messages older than N days into Archive/<YYYY>/<MM>\n"
     "  size-report  per-folder message-count + total-size breakdown [--top|--json]\n"
     "  top-senders  top senders by message count [--since|--limit|--json]\n"
+    "  unsubscribe  RFC 2369/8058 List-Unsubscribe parser + dispatcher\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -136,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.size_report import main as f
     elif verb == "top-senders":
         from m365ctl.mail.cli.top_senders import main as f
+    elif verb == "unsubscribe":
+        from m365ctl.mail.cli.unsubscribe import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
