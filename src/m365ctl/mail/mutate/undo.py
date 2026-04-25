@@ -468,6 +468,30 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             f"live under {capture}."
         )
 
+    if cmd == "mail-delegate-grant":
+        return Operation(
+            op_id=new_op_id(), action="mail.delegate.revoke",
+            drive_id=drive_id, item_id=start.get("item_id", ""),
+            args={"mailbox": start["args"].get("mailbox", ""),
+                  "delegate": start["args"].get("delegate", ""),
+                  "access_rights": start["args"].get("access_rights", "FullAccess")},
+            dry_run_result=f"(undo of {op_id}) revoke "
+                           f"{start['args'].get('access_rights', 'FullAccess')!r} from "
+                           f"{start['args'].get('delegate', '?')!r}",
+        )
+
+    if cmd == "mail-delegate-revoke":
+        return Operation(
+            op_id=new_op_id(), action="mail.delegate.grant",
+            drive_id=drive_id, item_id=start.get("item_id", ""),
+            args={"mailbox": start["args"].get("mailbox", ""),
+                  "delegate": start["args"].get("delegate", ""),
+                  "access_rights": start["args"].get("access_rights", "FullAccess")},
+            dry_run_result=f"(undo of {op_id}) grant "
+                           f"{start['args'].get('access_rights', 'FullAccess')!r} to "
+                           f"{start['args'].get('delegate', '?')!r}",
+        )
+
     if cmd == "mail-attach-remove":
         if not before.get("content_bytes_b64"):
             raise Irreversible(
@@ -600,6 +624,22 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
             "content_type": b.get("content_type", "application/octet-stream"),
             "content_bytes_b64": b.get("content_bytes_b64", ""),
         },
+    })
+
+    # Phase 12 — mailbox delegation inverses (Grant ↔ Revoke).
+    # Pull from `after` because the executor records mailbox/delegate/
+    # access_rights into the end record; before is empty for these ops.
+    dispatcher.register("mail.delegate.grant", lambda b, a: {
+        "action": "mail.delegate.revoke",
+        "args": {"mailbox": a.get("mailbox", ""),
+                 "delegate": a.get("delegate", ""),
+                 "access_rights": a.get("access_rights", "FullAccess")},
+    })
+    dispatcher.register("mail.delegate.revoke", lambda b, a: {
+        "action": "mail.delegate.grant",
+        "args": {"mailbox": a.get("mailbox", ""),
+                 "delegate": a.get("delegate", ""),
+                 "access_rights": a.get("access_rights", "FullAccess")},
     })
 
     # Phase 8 — server-side inbox rule inverses.
