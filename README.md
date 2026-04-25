@@ -55,6 +55,10 @@ allow-lists, audit log, and undo on every mutation.
   unsubscribe, top-senders, size-report}` — daily-driver composition over
   the core surface. See `docs/mail/convenience-commands.md` for each one's
   synopsis and example output.
+- **Hard delete (Phase 6, 1.1):** `mail clean <id>`, `mail clean recycle-bin`,
+  `mail empty <folder>` — irreversible deletes with full EML capture to
+  `[logging].purged_dir` BEFORE the wire-delete. Triple-gated: `--confirm`,
+  TTY-typed phrase, and a common-folder/≥1000-item escalation.
 
 ## Quickstart
 
