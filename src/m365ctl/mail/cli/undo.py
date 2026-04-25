@@ -17,7 +17,11 @@ from m365ctl.common.auth import AppOnlyCredential, DelegatedCredential
 from m365ctl.common.config import AuthMode, load_config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.mail.folders import get_folder
-from m365ctl.mail.messages import find_by_internet_message_id, get_message
+from m365ctl.mail.messages import (
+    find_by_internet_message_id,
+    find_message_anywhere,
+    get_message,
+)
 from m365ctl.mail.mutate.folders import (
     execute_create_folder,
     execute_delete_folder,
@@ -169,14 +173,36 @@ def run_undo_mail(*, config_path: Path, op_id: str, confirm: bool) -> int:
                     internet_message_id=recorded_imid,
                 )
                 if not resolved_id:
+                    # Phase 4.x: not in Deleted Items — try the whole mailbox.
+                    # Catches the "user dragged it to Archive in Outlook"
+                    # case between soft-delete and undo.
+                    found = find_message_anywhere(
+                        graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
+                        internet_message_id=recorded_imid,
+                    )
+                    if not found:
+                        print(
+                            f"undo: message not found anywhere "
+                            f"(internetMessageId={recorded_imid!r}); the message "
+                            f"may already be hard-deleted. "
+                            f"(original error: {exc})",
+                            file=sys.stderr,
+                        )
+                        return 1
+                    resolved_id, current_folder_id = found
+                    target_folder_id = rev.args.get("destination_id")
+                    if target_folder_id and current_folder_id == target_folder_id:
+                        print(
+                            f"undo: message already in original folder "
+                            f"(folder_id={current_folder_id!r}); nothing to do.",
+                            file=sys.stderr,
+                        )
+                        return 0
                     print(
-                        f"undo: message not found in Deleted Items "
-                        f"(internetMessageId={recorded_imid!r}); the message "
-                        f"may already be hard-deleted or moved manually. "
-                        f"Restore manually if needed. (original error: {exc})",
+                        f"undo: message manually moved to folder_id="
+                        f"{current_folder_id!r}; restoring from there.",
                         file=sys.stderr,
                     )
-                    return 1
                 rev = replace(rev, item_id=resolved_id)
                 try:
                     msg = get_message(graph, mailbox_spec=mailbox_spec,
