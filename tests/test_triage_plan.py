@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from m365ctl.mail.triage.dsl import (
-    CategorizeA, FlagA, FromP, Match, MoveA, ReadA, Rule, RuleSet,
+    CategorizeA, FlagA, FromP, HeadersP, Match, MoveA, ReadA, Rule, RuleSet,
     ThreadP, UnreadP,
 )
 from m365ctl.mail.triage.plan import _build_match_context, build_plan
@@ -164,6 +164,41 @@ def test_thread_has_reply_false_skips_when_replied():
                      scope="me", now=_NOW)
     # conv-1 has 2 distinct senders -> replied -> no ops emitted.
     assert plan.operations == []
+
+
+def test_build_match_context_accepts_header_fetcher():
+    def fetcher(_msg_id: str) -> list[dict[str, str]]:
+        return []
+
+    ctx = _build_match_context([], header_fetcher=fetcher)
+    assert ctx.header_fetcher is fetcher
+    # Cache starts empty.
+    assert ctx.header_cache == {}
+
+
+def test_build_plan_threads_header_fetcher_into_context():
+    """A rule using a HeadersP predicate triggers the fetcher exactly once per row."""
+    rs = _ruleset([
+        Rule(
+            name="hdr",
+            enabled=True,
+            match=Match(all_of=[HeadersP(name="List-Unsubscribe")]),
+            actions=[ReadA(value=True)],
+        ),
+    ])
+    calls: list[str] = []
+
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        calls.append(msg_id)
+        return [{"name": "List-Unsubscribe", "value": "<x>"}]
+
+    plan = build_plan(
+        rs, [_row("m1"), _row("m2")],
+        mailbox_upn="me", source_cmd="x", scope="me", now=_NOW,
+        header_fetcher=fetcher,
+    )
+    assert {op.item_id for op in plan.operations} == {"m1", "m2"}
+    assert calls == ["m1", "m2"]
 
 
 def test_plan_metadata():

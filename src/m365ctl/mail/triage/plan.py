@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from m365ctl.common.planfile import (
     PLAN_SCHEMA_VERSION, Operation, Plan, new_op_id,
@@ -22,10 +22,11 @@ def build_plan(
     source_cmd: str,
     scope: str,
     now: datetime,
+    header_fetcher: Callable[[str], list[dict[str, str]]] | None = None,
 ) -> Plan:
     ops: list[Operation] = []
     rows_list = list(rows)
-    context = _build_match_context(rows_list)
+    context = _build_match_context(rows_list, header_fetcher=header_fetcher)
     for rule in ruleset.rules:
         if not rule.enabled:
             continue
@@ -43,7 +44,11 @@ def build_plan(
     )
 
 
-def _build_match_context(rows: list[dict[str, Any]]) -> MatchContext:
+def _build_match_context(
+    rows: list[dict[str, Any]],
+    *,
+    header_fetcher: Callable[[str], list[dict[str, str]]] | None = None,
+) -> MatchContext:
     """A conversation is 'replied' iff it has >=2 distinct senders."""
     senders_by_conv: dict[str, set[str]] = {}
     for r in rows:
@@ -55,6 +60,7 @@ def _build_match_context(rows: list[dict[str, Any]]) -> MatchContext:
         replied_conversations=frozenset(
             cid for cid, senders in senders_by_conv.items() if len(senders) > 1
         ),
+        header_fetcher=header_fetcher,
     )
 
 
