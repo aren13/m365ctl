@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, CategorizeA, DslError, FlagA, FolderP, FromP, ImportanceP,
-    MoveA, SubjectP, UnreadP,
+    AgeP, BodyP, CategorizeA, DslError, FlagA, FolderP, FromP, ImportanceP,
+    MoveA, SubjectP, ToP, UnreadP,
     load_ruleset_from_yaml,
 )
 
@@ -200,6 +200,71 @@ rules:
 """)
     rs = load_ruleset_from_yaml(p)
     assert rs.rules[0].match.all_of == [AgeP(newer_than_days=1)]
+
+
+def test_to_predicate_domain_in(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: to-domain
+    match: { to: { domain_in: [example.com] } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [ToP(domain_in=["example.com"])]
+
+
+def test_to_predicate_string_shorthand(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: to-addr
+    match: { to: alice@example.com }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [ToP(address="alice@example.com")]
+
+
+def test_body_predicate_contains(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: body-contains
+    match: { body: { contains: invoice } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [BodyP(contains="invoice")]
+
+
+def test_body_predicate_string_shorthand(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: body-shorthand
+    match: { body: invoice }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [BodyP(contains="invoice")]
+
+
+def test_body_predicate_unknown_operator_rejected(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: bad-body
+    match: { body: { vibes: good } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    with pytest.raises(DslError, match="unknown operator.*vibes"):
+        load_ruleset_from_yaml(p)
 
 
 def test_importance_predicate(tmp_path: Path) -> None:
