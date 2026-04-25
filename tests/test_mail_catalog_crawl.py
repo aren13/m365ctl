@@ -178,6 +178,78 @@ def test_crawl_folder_no_cap_sets_truncated_false(tmp_path: Path) -> None:
         assert outcome.truncated is False
 
 
+def test_drain_delta_passes_select_on_first_call(tmp_path):
+    """First call to /messages/delta carries $select; subsequent links don't override."""
+    from m365ctl.mail.catalog.crawl import _drain_delta
+    graph = MagicMock()
+    graph.get_paginated.side_effect = [
+        iter([([_msg("m1")], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+    ]
+    with open_catalog(tmp_path / "m.duckdb") as conn:
+        _drain_delta(
+            graph, conn,
+            mailbox_upn="me", folder_id="fld-inbox", folder_path="Inbox",
+            start_path="/me/mailFolders/fld-inbox/messages/delta",
+            page_top=200,
+        )
+    # First call uses params={"$select": "<fields>"}; subsequent (deltaLink)
+    # call uses no params (the link encodes them).
+    first_kwargs = graph.get_paginated.call_args_list[0].kwargs
+    assert "params" in first_kwargs
+    assert "$select" in first_kwargs["params"]
+    select_value = first_kwargs["params"]["$select"]
+    # Sanity: must include the must-have fields normalize_message reads.
+    for field in ("id", "internetMessageId", "from", "receivedDateTime",
+                  "isRead", "bodyPreview", "ccRecipients"):
+        assert field in select_value, f"{field!r} missing from $select"
+    # Subsequent deltaLink call should NOT pass $select (the link encodes it).
+    second_kwargs = graph.get_paginated.call_args_list[1].kwargs
+    assert "params" not in second_kwargs or not second_kwargs.get("params")
+
+
+def test_drain_delta_uses_transaction_per_round(tmp_path):
+    """Each round wraps upserts in BEGIN/COMMIT for DuckDB throughput."""
+    from m365ctl.mail.catalog.crawl import _drain_delta
+    graph = MagicMock()
+    graph.get_paginated.side_effect = [
+        iter([
+            ([_msg("m1"), _msg("m2"), _msg("m3")],
+             "https://graph.microsoft.com/.../delta?token=DELTA1"),
+        ]),
+        iter([([], "https://graph.microsoft.com/.../delta?token=DELTA1")]),
+    ]
+
+    # Wrap conn.execute calls in a list so we can inspect the order.
+    with open_catalog(tmp_path / "m.duckdb") as conn:
+        executed: list[str] = []
+        original_execute = conn.execute
+
+        class _SpyConn:
+            def __init__(self, inner):
+                self._inner = inner
+            def execute(self, sql, *args, **kwargs):
+                executed.append(sql.strip().split()[0].upper())   # first SQL keyword
+                return original_execute(sql, *args, **kwargs)
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+        spy_conn = _SpyConn(conn)
+
+        _drain_delta(
+            graph, spy_conn,
+            mailbox_upn="me", folder_id="fld-inbox", folder_path="Inbox",
+            start_path="/me/mailFolders/fld-inbox/messages/delta",
+            page_top=200,
+        )
+    # Round 1: BEGIN, 3 INSERTs, COMMIT. Round 2: BEGIN, 0 INSERTs, COMMIT.
+    assert executed.count("BEGIN") == 2
+    assert executed.count("COMMIT") == 2
+    # 3 message upserts in round 1, 0 in round 2.
+    insert_count = sum(1 for s in executed if s == "INSERT")
+    assert insert_count == 3
+
+
 def _raises_sync_state_not_found():
     def _gen():
         raise GraphError("HTTP410 syncStateNotFound: token expired")
