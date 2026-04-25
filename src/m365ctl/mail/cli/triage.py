@@ -10,18 +10,10 @@ from m365ctl.common.config import load_config
 from m365ctl.common.graph import GraphClient
 from m365ctl.common.planfile import load_plan
 from m365ctl.common.safety import assert_mailbox_allowed
-from m365ctl.mail.cli._common import load_and_authorize
+from m365ctl.mail.cli._common import derive_mailbox_upn, load_and_authorize
 from m365ctl.mail.triage.runner import (
     RunnerError, run_emit, run_execute, run_validate,
 )
-
-
-def _derive_mailbox_upn(spec: str) -> str:
-    if spec == "me":
-        return "me"
-    if spec.startswith("upn:") or spec.startswith("shared:"):
-        return spec.split(":", 1)[1]
-    return spec
 
 
 def _validate_main(args: argparse.Namespace) -> int:
@@ -50,7 +42,7 @@ def _run_main(args: argparse.Namespace) -> int:
     assert_mailbox_allowed(
         mailbox_spec, cfg, auth_mode=auth_mode, unsafe_scope=args.unsafe_scope,
     )
-    mailbox_upn = _derive_mailbox_upn(mailbox_spec)
+    mailbox_upn = derive_mailbox_upn(mailbox_spec)
 
     if args.rules:
         # Plan path: emit (and optionally execute when --confirm).
