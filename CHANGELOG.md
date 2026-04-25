@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-04-26
+
+### Documentation
+- Rewrite `README.md` to an open-source standard layout (Highlights, Installation, Quickstart, Features tables, Safety model, Configuration, Documentation index). All internal phase references and version annotations removed from feature descriptions.
+- Clean `CHANGELOG.md` headings to Keep a Changelog format ([brackets] + dates), drop "Phase X.y:" prefixes, remove internal session prose, standardize sections, and add GitHub release-tag link references.
+
+### Notes
+No code changes. CLI behaviour, public APIs, schemas, and dependencies are identical to 1.11.0.
+
 ## [1.11.0] — 2026-04-26
 
 ### Added
@@ -400,7 +409,8 @@ The translator passes through `_unknown_*` for fields it does not model so a Gra
 ### Removed
 - Tenant-specific identifiers (UUIDs, cert thumbprint) from all tracked code, tests, and documentation (except the migration note and this changelog).
 
-[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/aren13/m365ctl/releases/tag/v1.11.1
 [1.11.0]: https://github.com/aren13/m365ctl/releases/tag/v1.11.0
 [1.10.0]: https://github.com/aren13/m365ctl/releases/tag/v1.10.0
 [1.9.0]: https://github.com/aren13/m365ctl/releases/tag/v1.9.0
