@@ -59,6 +59,14 @@ _USAGE = (
     "  ooo          ooo show | ooo on --message ... | ooo off (auto-reply / OOO)\n"
     "  signature    signature show | signature set --from-file|--content\n"
     "  export       export {message,folder,mailbox,attachments} (read-only)\n"
+    "\n"
+    "Convenience (Phase 14):\n"
+    "  digest       unread-mail digest [--since|--limit|--send-to|--confirm|--json]\n"
+    "  archive      bulk-move messages older than N days into Archive/<YYYY>/<MM>\n"
+    "  size-report  per-folder message-count + total-size breakdown [--top|--json]\n"
+    "  top-senders  top senders by message count [--since|--limit|--json]\n"
+    "  unsubscribe  RFC 2369/8058 List-Unsubscribe parser + dispatcher\n"
+    "  snooze       Deferred/<date> + Snooze/<date> [--until|--process|--confirm]\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -122,6 +130,18 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.signature import main as f
     elif verb == "export":
         from m365ctl.mail.cli.export import main as f
+    elif verb == "digest":
+        from m365ctl.mail.cli.digest import main as f
+    elif verb == "archive":
+        from m365ctl.mail.cli.archive import main as f
+    elif verb == "size-report":
+        from m365ctl.mail.cli.size_report import main as f
+    elif verb == "top-senders":
+        from m365ctl.mail.cli.top_senders import main as f
+    elif verb == "unsubscribe":
+        from m365ctl.mail.cli.unsubscribe import main as f
+    elif verb == "snooze":
+        from m365ctl.mail.cli.snooze import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
