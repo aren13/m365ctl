@@ -62,6 +62,7 @@ _USAGE = (
     "\n"
     "Convenience (Phase 14):\n"
     "  digest       unread-mail digest [--since|--limit|--send-to|--confirm|--json]\n"
+    "  archive      bulk-move messages older than N days into Archive/<YYYY>/<MM>\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -127,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.export import main as f
     elif verb == "digest":
         from m365ctl.mail.cli.digest import main as f
+    elif verb == "archive":
+        from m365ctl.mail.cli.archive import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
