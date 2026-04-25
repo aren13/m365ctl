@@ -3,6 +3,30 @@
 All notable changes to m365ctl are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.11.0 — Phase 4.x: soft-delete-undo fallback cleanup
+
+### Added
+- `m365ctl.mail.messages.find_message_anywhere` — searches the whole
+  mailbox by `internetMessageId` via
+  `/{ub}/messages?$filter=internetMessageId eq '...'`. Returns
+  `(message_id, parent_folder_id)` for the first hit, or None.
+
+### Fixed
+- `m365ctl undo <op-id>` for `mail.delete.soft` now handles two cases
+  the v1.0-era recovery path missed:
+  1. **Manually moved out of Deleted Items**: if the message has been
+     dragged to (e.g.) Archive between the soft-delete and the undo, the
+     undo finds it via `find_message_anywhere` and restores it from
+     wherever it is. Stderr names the discovered folder for clarity.
+  2. **Already in target folder**: if the user manually dragged it back
+     to the original folder, the undo short-circuits with a "nothing to
+     do" stderr notice and exits 0 (no duplicate move).
+
+### Behaviour change
+The undo error message shifts from "may already be hard-deleted or moved
+manually" to "may already be hard-deleted" — the manual-move case is now
+handled silently except for an informational stderr line.
+
 ## 1.10.0 — Phase 10.z: headers predicate
 
 ### Added

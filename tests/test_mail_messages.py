@@ -9,6 +9,7 @@ from m365ctl.common.graph import GraphError
 from m365ctl.mail.messages import (
     MessageListFilters,
     find_by_internet_message_id,
+    find_message_anywhere,
     get_message,
     get_thread,
     list_messages,
@@ -457,4 +458,62 @@ def test_find_by_internet_message_id_escapes_single_quote():
     )
     params = graph.get.call_args.kwargs["params"]
     assert "''" in params["$filter"]
+    assert params["$filter"] == "internetMessageId eq '<O''Brien@example.com>'"
+
+
+# ----------------------------------------------------------------------------
+# find_message_anywhere — Phase 4.x broader recovery helper.
+# Locates a message by internetMessageId across the WHOLE mailbox (not just
+# Deleted Items). Used by undo when the user has manually moved a soft-deleted
+# message out of Deleted Items between the delete and the undo.
+# ----------------------------------------------------------------------------
+
+def test_find_message_anywhere_returns_id_and_parent_on_hit():
+    graph = MagicMock()
+    graph.get.return_value = {
+        "value": [{"id": "rotated-id-9", "parentFolderId": "fld-archive"}]
+    }
+    out = find_message_anywhere(
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        internet_message_id="<abc@example.com>",
+    )
+    assert out == ("rotated-id-9", "fld-archive")
+    call_args = graph.get.call_args
+    assert call_args.args[0] == "/me/messages"
+    params = call_args.kwargs["params"]
+    assert params["$filter"] == "internetMessageId eq '<abc@example.com>'"
+    assert params["$top"] == 1
+    assert params["$select"] == "id,parentFolderId"
+
+
+def test_find_message_anywhere_returns_none_on_miss():
+    graph = MagicMock()
+    graph.get.return_value = {"value": []}
+    out = find_message_anywhere(
+        graph, mailbox_spec="me", auth_mode="delegated",
+        internet_message_id="<missing@example.com>",
+    )
+    assert out is None
+
+
+def test_find_message_anywhere_app_only_routes_via_users_upn():
+    graph = MagicMock()
+    graph.get.return_value = {"value": [{"id": "x", "parentFolderId": "f"}]}
+    find_message_anywhere(
+        graph, mailbox_spec="upn:bob@example.com", auth_mode="app-only",
+        internet_message_id="<abc@example.com>",
+    )
+    assert graph.get.call_args.args[0] == "/users/bob@example.com/messages"
+
+
+def test_find_message_anywhere_escapes_single_quote():
+    graph = MagicMock()
+    graph.get.return_value = {"value": []}
+    find_message_anywhere(
+        graph, mailbox_spec="me", auth_mode="delegated",
+        internet_message_id="<O'Brien@example.com>",
+    )
+    params = graph.get.call_args.kwargs["params"]
     assert params["$filter"] == "internetMessageId eq '<O''Brien@example.com>'"

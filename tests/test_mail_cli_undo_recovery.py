@@ -162,3 +162,106 @@ def test_undo_surfaces_clear_error_when_neither_path_works(tmp_path, mocker, cap
     err = capsys.readouterr().err.lower()
     assert "deleted items" in err or "not found" in err
     assert "manually" in err or "hard-deleted" in err or "hard deleted" in err
+
+
+def test_undo_falls_back_to_anywhere_search_when_not_in_deleted_items(
+    tmp_path, mocker, capsys,
+):
+    """When DeletedItems lookup misses, search the whole mailbox.
+
+    Reverse-of-soft-delete records ``destination_id`` as the original-folder id.
+    If the user has manually moved the message out of Deleted Items between
+    delete and undo, ``find_by_internet_message_id`` (folder-scoped) returns
+    None; ``find_message_anywhere`` then locates it. The move proceeds with
+    the rotated id.
+    """
+    cfg = _stub_cfg(tmp_path)
+    mocker.patch("m365ctl.mail.cli.undo.load_config", return_value=cfg)
+    logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
+    _seed_soft_delete_op(logger)
+
+    fake_cred = MagicMock()
+    fake_cred.get_token.return_value = "tok"
+    mocker.patch("m365ctl.mail.cli.undo._build_credential", return_value=fake_cred)
+    mocker.patch("m365ctl.mail.cli.undo.GraphClient", return_value=MagicMock())
+
+    # First get_message 404s; the broader search resolves the rotated id and
+    # reports a different parent folder (not the restore target).
+    rotated_id = "rotated-id-7"
+
+    def _get_message_side_effect(graph, *, mailbox_spec, auth_mode, message_id, **kwargs):
+        if message_id == "old-id-rotated-away":
+            raise GraphError("ErrorItemNotFound: ...")
+        msg = MagicMock()
+        msg.parent_folder_id = "fld-archive"
+        msg.parent_folder_path = "/Archive"
+        return msg
+
+    mocker.patch("m365ctl.mail.cli.undo.get_message",
+                 side_effect=_get_message_side_effect)
+    mocker.patch("m365ctl.mail.cli.undo.find_by_internet_message_id",
+                 return_value=None)
+    anywhere = mocker.patch(
+        "m365ctl.mail.cli.undo.find_message_anywhere",
+        return_value=(rotated_id, "fld-archive"),
+    )
+
+    fake_result = MagicMock(status="ok", op_id="rev-uid", error=None)
+    ex_move = mocker.patch("m365ctl.mail.mutate.move.execute_move",
+                           return_value=fake_result)
+
+    rc = run_undo_mail(config_path=tmp_path / "config.toml",
+                       op_id="D1", confirm=True)
+    assert rc == 0
+    anywhere.assert_called_once()
+    kwargs = anywhere.call_args.kwargs
+    assert kwargs["internet_message_id"] == "<abc@example.com>"
+    # execute_move was called with the rotated id.
+    ex_move.assert_called_once()
+    op_arg = ex_move.call_args.args[0]
+    assert op_arg.item_id == rotated_id
+    err = capsys.readouterr().err
+    # The stderr notice names the discovered folder.
+    assert "fld-archive" in err
+    assert "manually moved" in err.lower() or "restoring from there" in err.lower()
+
+
+def test_undo_no_op_when_message_already_in_target_folder(
+    tmp_path, mocker, capsys,
+):
+    """User manually moved the message back to the original folder.
+
+    ``find_message_anywhere`` reports the current parent folder equals the
+    reverse op's ``destination_id`` (the restore target). The undo emits a
+    "nothing to do" stderr notice, exits 0, and does NOT call execute_move.
+    """
+    cfg = _stub_cfg(tmp_path)
+    mocker.patch("m365ctl.mail.cli.undo.load_config", return_value=cfg)
+    logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
+    _seed_soft_delete_op(logger)
+
+    fake_cred = MagicMock()
+    fake_cred.get_token.return_value = "tok"
+    mocker.patch("m365ctl.mail.cli.undo._build_credential", return_value=fake_cred)
+    mocker.patch("m365ctl.mail.cli.undo.GraphClient", return_value=MagicMock())
+
+    mocker.patch(
+        "m365ctl.mail.cli.undo.get_message",
+        side_effect=GraphError("ErrorItemNotFound: ..."),
+    )
+    mocker.patch("m365ctl.mail.cli.undo.find_by_internet_message_id",
+                 return_value=None)
+    # Rotated id found, parent equals "inbox" (the seeded restore target).
+    mocker.patch(
+        "m365ctl.mail.cli.undo.find_message_anywhere",
+        return_value=("rotated-id-back-home", "inbox"),
+    )
+    ex_move = mocker.patch("m365ctl.mail.mutate.move.execute_move")
+
+    rc = run_undo_mail(config_path=tmp_path / "config.toml",
+                       op_id="D1", confirm=True)
+    assert rc == 0
+    ex_move.assert_not_called()
+    err = capsys.readouterr().err.lower()
+    assert "already in original folder" in err
+    assert "nothing to do" in err

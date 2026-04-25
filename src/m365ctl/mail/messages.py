@@ -262,6 +262,43 @@ def find_by_internet_message_id(
     return new_id if isinstance(new_id, str) and new_id else None
 
 
+def find_message_anywhere(
+    graph: GraphClient,
+    *,
+    mailbox_spec: str,
+    auth_mode: AuthMode,
+    internet_message_id: str,
+) -> tuple[str, str] | None:
+    """Locate a message by ``internetMessageId`` across the entire mailbox.
+
+    Returns ``(message_id, parent_folder_id)`` for the first hit, or None
+    when no message has that internetMessageId. Used by the undo executor
+    when the message has been manually moved out of Deleted Items between
+    the soft-delete and the undo (e.g. the user dragged it to Archive in
+    Outlook).
+    """
+    ub = user_base(mailbox_spec, auth_mode=auth_mode)
+    path = f"{ub}/messages"
+    esc = internet_message_id.replace("'", "''")
+    params = {
+        "$filter": f"internetMessageId eq '{esc}'",
+        "$top": 1,
+        "$select": "id,parentFolderId",
+    }
+    raw = graph.get(path, params=params)
+    items = raw.get("value", []) if isinstance(raw, dict) else []
+    if not items:
+        return None
+    first = items[0]
+    if not isinstance(first, dict):
+        return None
+    msg_id = first.get("id")
+    parent = first.get("parentFolderId")
+    if not msg_id or not parent:
+        return None
+    return (msg_id, parent)
+
+
 def search_messages_graph(
     graph: GraphClient,
     *,
