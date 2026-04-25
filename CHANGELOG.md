@@ -5,6 +5,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 0.9.0 — Phase 8: server-side inbox rules CRUD
+
+### Added
+- `m365ctl.mail.rules.{rule_to_yaml,rule_from_yaml}` — round-trippable
+  YAML ↔ Graph `messageRule` translator. Folder paths resolve
+  bidirectionally via Phase 2's `resolve_folder_path`.
+- `m365ctl.mail.mutate.rules` — `execute_{create,update,delete,
+  set_enabled,reorder}` with full audit + undo registration. Each rule
+  op has an inverse so `m365ctl undo <op-id>` rolls back.
+- `mail rules` CLI extended: `create`, `update`, `delete`, `enable`,
+  `disable`, `reorder`, `export`, `import`. `--replace` flag on
+  `import` first deletes existing rules then re-creates from file.
+- `GraphClient.delete()` for HTTP DELETE.
+
+### Round-trip guarantee
+`mail rules export --out a.yaml` followed by
+`mail rules import --from-file a.yaml --replace --confirm` produces a
+rule set semantically equivalent to the source mailbox (modulo
+server-assigned ids).
+
+### Deferred (Phase 8.x)
+- Graph rule-conditions surface beyond the documented set (e.g. flag
+  checks, encryption flags). The translator pass-throughs `_unknown_*`
+  for fields it doesn't model so a Graph-side update doesn't silently
+  drop data on a round trip.
+- `mail rules diff` between mailbox and YAML.
+
 ## 0.8.0 — Phase 10: triage DSL + engine
 
 ### Added
