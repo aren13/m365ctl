@@ -5,6 +5,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.3.0 — Phase 5b: scheduled send
+
+### Added
+- `m365ctl.mail.mutate.send.execute_send_scheduled` — PATCHes the draft
+  with `singleValueExtendedProperties: PR_DEFERRED_DELIVERY_TIME` then
+  POSTs `/send`. Outlook holds the message locally until the deliver-at
+  time.
+- CLI: `mail send <draft-id> --schedule-at <iso> --confirm`. Gated on
+  `[mail].schedule_send_enabled = true` in config.toml.
+- Help text documents the caveat that delivery depends on the Outlook
+  client being online at the scheduled time.
+
+### Validation
+- `--schedule-at` parses ISO-8601 (with `Z` or `+00:00`).
+- Scheduled time must be in the future.
+- Mutually exclusive with `--new` (only existing drafts can be scheduled).
+
 ## 1.2.0 — Phase 12: multi-mailbox & delegation
 
 ### Added
