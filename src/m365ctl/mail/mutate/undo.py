@@ -407,6 +407,27 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             dry_run_result=f"(undo of {op_id}) restore prior workingHours",
         )
 
+    if cmd == "mail-signature-set":
+        prior_content = before.get("content")
+        if prior_content is None:
+            raise Irreversible(
+                f"mail-signature-set op {op_id!r} has no before.content; "
+                f"cannot restore prior signature"
+            )
+        prior_path = before.get("signature_path") or start["args"].get("signature_path", "")
+        if not prior_path:
+            raise Irreversible(
+                f"mail-signature-set op {op_id!r} has no signature_path; "
+                f"cannot restore prior signature"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.settings.signature",
+            drive_id=drive_id, item_id="",
+            args={"signature_path": prior_path, "content": prior_content},
+            dry_run_result=f"(undo of {op_id}) restore prior signature "
+                           f"({len(prior_content)} bytes)",
+        )
+
     if cmd == "mail-settings-auto-reply":
         prior_ar = before.get("automaticRepliesSetting")
         if not prior_ar:
@@ -593,6 +614,11 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
         "action": "mail.settings.auto-reply",
         "args": {"auto_reply": b.get("automaticRepliesSetting", {}),
                  "force": True},
+    })
+    dispatcher.register("mail.settings.signature", lambda b, a: {
+        "action": "mail.settings.signature",
+        "args": {"signature_path": b.get("signature_path", ""),
+                 "content": b.get("content", "")},
     })
 
     # Phase 5a — irreversible compose verbs (outgoing mail cannot be recalled).

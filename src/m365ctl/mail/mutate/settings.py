@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone as _tz
+from pathlib import Path
 from typing import Any
 
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
@@ -143,3 +144,38 @@ def _ooo_duration_days(ar: dict[str, Any]) -> int | None:
     # Ceiling division so 60.5 days -> 61 (triggers safety gate).
     days = int((seconds + 86399) // 86400)
     return days
+
+
+def execute_set_signature(
+    op: Operation, *, logger: AuditLogger, before: dict,
+) -> SettingsResult:
+    """Write a local signature file; pure-local (no Graph call)."""
+    from m365ctl.mail.signature import set_signature
+
+    path = Path(op.args["signature_path"])
+    content = op.args["content"]
+    log_mutation_start(
+        logger,
+        op_id=op.op_id,
+        cmd="mail-signature-set",
+        args=op.args,
+        drive_id=op.drive_id,
+        item_id=op.item_id,
+        before=before,
+    )
+    try:
+        set_signature(path, content=content)
+    except Exception as e:
+        log_mutation_end(
+            logger, op_id=op.op_id, after={}, result="error", error=str(e),
+        )
+        return SettingsResult(op_id=op.op_id, status="error", error=str(e))
+    log_mutation_end(
+        logger,
+        op_id=op.op_id,
+        after={"signature_path": str(path), "bytes": len(content)},
+        result="ok",
+    )
+    return SettingsResult(
+        op_id=op.op_id, status="ok", after={"signature_path": str(path)},
+    )
