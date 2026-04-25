@@ -56,6 +56,7 @@ _USAGE = (
     "  reply        reply to a message (IRREVERSIBLE — inline send)\n"
     "  forward      forward a message (IRREVERSIBLE — inline send)\n"
     "  triage       triage validate <yaml> | triage run --rules <yaml> [--plan-out|--confirm]\n"
+    "  ooo          ooo show | ooo on --message ... | ooo off (auto-reply / OOO)\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -113,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.triage import main as f
     elif verb == "catalog":
         from m365ctl.mail.cli.catalog import main as f
+    elif verb == "ooo":
+        from m365ctl.mail.cli.ooo import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
