@@ -35,6 +35,10 @@ allow-lists, audit log, and undo on every mutation.
 - **Catalog (Phase 7):** `mail catalog refresh` mirrors folders + messages
   into `cache/mail.duckdb` via Graph `/delta`; `mail catalog status` and
   `mail search --local` query the cache offline.
+- **Triage DSL (Phase 10):** `mail triage validate <yaml>` and
+  `mail triage run --rules <yaml> [--plan-out|--confirm]` — YAML rules
+  match against the local catalog and emit a tagged plan that reuses
+  the existing audit/undo paths. Examples in `scripts/mail/rules/`.
 
 ## Quickstart
 
