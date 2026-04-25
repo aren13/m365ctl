@@ -55,6 +55,7 @@ _USAGE = (
     "  send         send draft or inline (IRREVERSIBLE)\n"
     "  reply        reply to a message (IRREVERSIBLE — inline send)\n"
     "  forward      forward a message (IRREVERSIBLE — inline send)\n"
+    "  triage       triage validate <yaml> | triage run --rules <yaml> [--plan-out|--confirm]\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -108,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.reply import main as f
     elif verb == "forward":
         from m365ctl.mail.cli.forward import main as f
+    elif verb == "triage":
+        from m365ctl.mail.cli.triage import main as f
     elif verb == "catalog":
         from m365ctl.mail.cli.catalog import main as f
     else:
