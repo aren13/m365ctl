@@ -58,15 +58,15 @@ _UPSERT_MESSAGE = """
 INSERT INTO mail_messages (
     mailbox_upn, message_id, internet_message_id, conversation_id,
     parent_folder_id, parent_folder_path, subject, from_address, from_name,
-    to_addresses, received_at, sent_at, is_read, is_draft, has_attachments,
-    importance, flag_status, categories, inference_class, body_preview,
-    web_link, size_estimate, is_deleted, last_seen_at
+    to_addresses, cc_addresses, received_at, sent_at, is_read, is_draft,
+    has_attachments, importance, flag_status, categories, inference_class,
+    body_preview, web_link, size_estimate, is_deleted, last_seen_at
 ) VALUES (
     $mailbox_upn, $message_id, $internet_message_id, $conversation_id,
     $parent_folder_id, $parent_folder_path, $subject, $from_address, $from_name,
-    $to_addresses, $received_at, $sent_at, $is_read, $is_draft, $has_attachments,
-    $importance, $flag_status, $categories, $inference_class, $body_preview,
-    $web_link, $size_estimate, $is_deleted, $last_seen_at
+    $to_addresses, $cc_addresses, $received_at, $sent_at, $is_read, $is_draft,
+    $has_attachments, $importance, $flag_status, $categories, $inference_class,
+    $body_preview, $web_link, $size_estimate, $is_deleted, $last_seen_at
 )
 ON CONFLICT (mailbox_upn, message_id) DO UPDATE SET
     internet_message_id = EXCLUDED.internet_message_id,
@@ -77,6 +77,7 @@ ON CONFLICT (mailbox_upn, message_id) DO UPDATE SET
     from_address = EXCLUDED.from_address,
     from_name = EXCLUDED.from_name,
     to_addresses = EXCLUDED.to_addresses,
+    cc_addresses = EXCLUDED.cc_addresses,
     received_at = EXCLUDED.received_at,
     sent_at = EXCLUDED.sent_at,
     is_read = EXCLUDED.is_read,

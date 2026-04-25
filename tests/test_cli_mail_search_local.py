@@ -41,6 +41,7 @@ def _seed_message(tmp_path: Path, **overrides) -> None:
         "from_address": "alice@example.com",
         "from_name": "Alice",
         "to_addresses": "me@example.com",
+        "cc_addresses": "",
         "received_at": datetime(2026, 4, 1, tzinfo=timezone.utc),
         "sent_at": None,
         "is_read": False,
@@ -62,7 +63,7 @@ def _seed_message(tmp_path: Path, **overrides) -> None:
             "INSERT INTO mail_messages VALUES ($mailbox_upn, $message_id, "
             "$internet_message_id, $conversation_id, $parent_folder_id, "
             "$parent_folder_path, $subject, $from_address, $from_name, "
-            "$to_addresses, $received_at, $sent_at, $is_read, $is_draft, "
+            "$to_addresses, $cc_addresses, $received_at, $sent_at, $is_read, $is_draft, "
             "$has_attachments, $importance, $flag_status, $categories, "
             "$inference_class, $body_preview, $web_link, $size_estimate, "
             "$is_deleted, $last_seen_at)",
