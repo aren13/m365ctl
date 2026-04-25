@@ -5,6 +5,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.1.0 — Phase 6: hard delete + `mail clean` / `mail empty`
+
+### Added
+- `m365ctl.mail.mutate.clean.execute_hard_delete` — single-message hard
+  delete with EML capture to `[logging].purged_dir/<YYYY-MM-DD>/<op_id>.eml`
+  BEFORE the Graph DELETE.
+- `m365ctl.mail.mutate.clean.execute_empty_folder` and
+  `execute_empty_recycle_bin` — bulk-delete with per-message EML capture
+  to `<purged_dir>/<YYYY-MM-DD>/<op_id>/<message_id>.eml`.
+- CLI: `mail clean <message-id>`, `mail clean recycle-bin`,
+  `mail empty <folder-path>` — all require `--confirm` AND a TTY-typed
+  confirmation phrase. Bin wrappers `bin/mail-clean`, `bin/mail-empty`.
+
+### Safety
+- `mail empty` warns on common folder names (Inbox, Sent Items, Drafts,
+  Archive, Outbox) and requires `--unsafe-common-folder` to proceed.
+- `mail empty` against ≥1000 items requires the operator to type
+  `"YES DELETE N"` (with the exact count) before the wire-delete starts.
+- All three actions are registered as **irreversible** in the undo
+  dispatcher; `m365ctl undo <op-id>` returns a clear error pointing at
+  the EML capture path.
+
+### Recovery
+The captured EMLs are the only recovery path outside Graph. Rotation is
+governed by `[logging].retention_days` (default 30, matching Graph's
+recycle-bin retention).
+
 ## 1.0.0 — Phase 14: convenience commands → "complete" milestone
 
 m365ctl ships its first stable release. The CLI surface, audit/undo
