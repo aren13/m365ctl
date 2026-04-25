@@ -5,6 +5,83 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.0.0 — Phase 14: convenience commands → "complete" milestone
+
+m365ctl ships its first stable release. The CLI surface, audit/undo
+plumbing, catalog schema, and release process are stable for downstream
+consumers.
+
+### Added (Phase 14)
+- `mail digest [--since|--send-to|--limit|--json]` — unread digest
+  builder with text/HTML rendering and optional self-mail through the
+  existing `mail.send` executor.
+- `mail archive --older-than-days N --folder PATH [--plan-out|--confirm]`
+  — bulk-move plan into `Archive/<YYYY>/<MM>` with the existing
+  audit/undo path (one `mail.move` op per qualifying message, tagged
+  `rule_name = mail-archive-<YYYYMM>`).
+- `mail size-report [--top N] [--json]` — catalog-driven per-folder
+  size + count breakdown.
+- `mail top-senders [--since|--limit|--json]` — catalog shortcut over
+  `top_senders` query, optional time-window filter.
+- `mail unsubscribe <id> [--method http|mailto|first] [--dry-run|--confirm]`
+  — RFC 2369 / RFC 8058 `List-Unsubscribe` parser + http/mailto
+  dispatcher (one-click POST when advertised).
+- `mail snooze <id> --until <date|relative> --confirm` and
+  `mail snooze --process --confirm` — `Deferred/<YYYY-MM-DD>` folder +
+  `Snooze/<date>` category convention; `--process` walks due folders
+  and moves messages back to Inbox.
+- `docs/mail/convenience-commands.md` — generic-example reference for
+  all six verbs.
+- Bin wrappers: `mail-digest`, `mail-archive`, `mail-size-report`,
+  `mail-top-senders`, `mail-unsubscribe`, `mail-snooze`.
+
+### What 1.0.0 covers
+A complete CLI for Microsoft 365 OneDrive + SharePoint + Mail via
+Microsoft Graph:
+- **OneDrive:** auth, catalog (DuckDB + `/delta`), inventory, search,
+  move/copy/rename/delete (incl. recycle/restore/clean), label,
+  audit-sharing, undo.
+- **Mail readers:** auth, whoami, list, get, search, folders,
+  categories, rules, settings, attach.
+- **Mail mutators:** move, copy, flag, read, focus, categorize,
+  soft-delete (with undo via rotated-id recovery), draft, send,
+  reply, forward.
+- **Mail catalog:** DuckDB mirror via `/delta` with per-folder
+  `--max-rounds` cap.
+- **Triage DSL:** YAML rules → match → tagged plan → confirm-execute,
+  reusing all mutate executors.
+- **Inbox rules CRUD:** server-side YAML round-trip with full
+  audit/undo.
+- **Mailbox settings:** OOO (60-day safety gate + `--force` bypass),
+  signature (local-file fallback), timezone, working hours.
+- **Export:** EML, streaming MBOX, attachments, full-mailbox manifest
+  with resume-on-interrupt.
+- **Convenience verbs:** digest / archive / unsubscribe / snooze /
+  top-senders / size-report.
+
+### Out of scope for 1.0
+- Phase 5a-2 (chunked attach upload ≥3 MB).
+- Phase 5b (scheduled send).
+- Phase 6 (hard delete + `mail clean`).
+- Phase 12 (multi-mailbox / delegation).
+- Phase 13 (send-as / on-behalf-of).
+- KQL pushdown for the triage DSL (catalog covers the surface area
+  we needed).
+- Body / thread / headers predicates in the triage DSL.
+
+All deferred phases sit in the backlog with their dependencies
+satisfied; they are 1.x candidates.
+
+### Compatibility
+Python 3.11+, tested against Python 3.11 / 3.12 / 3.13 on
+ubuntu-latest and macos-latest.
+
+### Quality gates
+- mypy: 0 errors across the source tree (CI-blocking since 0.7.x).
+- ruff: clean.
+- pytest: 799 passing, 1 live-Graph test gated behind
+  `M365CTL_LIVE_TESTS=1`.
+
 ## 0.11.0 — Phase 11: export (EML, MBOX, attachments)
 
 ### Added

@@ -51,6 +51,10 @@ allow-lists, audit log, and undo on every mutation.
 - **Export (Phase 11):** `mail export {message,folder,mailbox,attachments}`
   — per-message EML, streaming MBOX, attachment dump, and full-mailbox
   manifest with resume-on-interrupt. All read-only.
+- **Convenience verbs (Phase 14, 1.0):** `mail {digest, archive, snooze,
+  unsubscribe, top-senders, size-report}` — daily-driver composition over
+  the core surface. See `docs/mail/convenience-commands.md` for each one's
+  synopsis and example output.
 
 ## Quickstart
 
