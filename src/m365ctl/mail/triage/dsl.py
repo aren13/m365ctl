@@ -224,9 +224,17 @@ class ThreadP:
     has_reply: bool
 
 
+@dataclass(frozen=True)
+class HeadersP:
+    name: str                       # required, case-insensitive match against header name
+    contains: str | None = None
+    equals: str | None = None
+    regex: str | None = None
+
+
 Predicate = (
     FromP | ToP | CcP | SubjectP | BodyP | FolderP | AgeP | UnreadP | FlaggedP
-    | HasAttachmentsP | CategoriesP | FocusP | ImportanceP | ThreadP
+    | HasAttachmentsP | CategoriesP | FocusP | ImportanceP | ThreadP | HeadersP
 )
 
 
@@ -315,7 +323,7 @@ class RuleSet:
 _PREDICATE_KEYS = {
     "from", "to", "cc", "subject", "body", "folder", "age",
     "unread", "is_flagged", "has_attachments", "categories",
-    "focus", "importance", "thread",
+    "focus", "importance", "thread", "headers",
 }
 _ACTION_KEYS = {
     "move", "copy", "delete", "flag", "read", "focus", "categorize",
@@ -456,7 +464,26 @@ def _parse_predicate(key: str, val: Any, *, where: str) -> Predicate:
         return ImportanceP(equals=val)
     if key == "thread":
         return _parse_thread_predicate(val, where=f"{where}.thread")
+    if key == "headers":
+        return _parse_headers_predicate(val, where=f"{where}.headers")
     raise DslError(f"{where}: unhandled predicate {key!r}")  # pragma: no cover
+
+
+def _parse_headers_predicate(val: Any, *, where: str) -> HeadersP:
+    if not isinstance(val, dict):
+        raise DslError(f"{where}: expected mapping with 'name' and an operator")
+    known = {"name", "contains", "equals", "regex"}
+    unknown = set(val.keys()) - known
+    if unknown:
+        raise DslError(f"{where}: unknown operator(s) {sorted(unknown)}")
+    if "name" not in val:
+        raise DslError(f"{where}: missing required 'name'")
+    return HeadersP(
+        name=val["name"],
+        contains=val.get("contains"),
+        equals=val.get("equals"),
+        regex=val.get("regex"),
+    )
 
 
 def _parse_thread_predicate(val: Any, *, where: str) -> ThreadP:
