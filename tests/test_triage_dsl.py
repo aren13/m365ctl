@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, BodyP, CategorizeA, CcP, DslError, FlagA, FolderP, FromP, ImportanceP,
-    MoveA, SubjectP, ThreadP, ToP, UnreadP,
+    AgeP, BodyP, CategorizeA, CcP, DslError, FlagA, FolderP, FromP,
+    HeadersP, ImportanceP, MoveA, SubjectP, ThreadP, ToP, UnreadP,
     load_ruleset_from_yaml,
 )
 
@@ -339,6 +339,90 @@ mailbox: me
 rules:
   - name: bad-thread
     match: { thread: { vibes: cool } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    with pytest.raises(DslError, match="unknown operator.*vibes"):
+        load_ruleset_from_yaml(p)
+
+
+def test_headers_predicate_contains(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: hdr-contains
+    match: { headers: { name: List-Unsubscribe, contains: example.com } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [
+        HeadersP(name="List-Unsubscribe", contains="example.com"),
+    ]
+
+
+def test_headers_predicate_equals(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: hdr-equals
+    match: { headers: { name: X-Spam-Status, equals: "Yes" } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [
+        HeadersP(name="X-Spam-Status", equals="Yes"),
+    ]
+
+
+def test_headers_predicate_regex(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: hdr-regex
+    match: { headers: { name: Received, regex: "from .* by .*" } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [
+        HeadersP(name="Received", regex="from .* by .*"),
+    ]
+
+
+def test_headers_predicate_existence_only(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: hdr-exists
+    match: { headers: { name: Foo } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [HeadersP(name="Foo")]
+
+
+def test_headers_predicate_missing_name_rejected(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: bad-hdr
+    match: { headers: { contains: "x" } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    with pytest.raises(DslError, match="missing required 'name'"):
+        load_ruleset_from_yaml(p)
+
+
+def test_headers_predicate_unknown_operator_rejected(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: bad-hdr
+    match: { headers: { name: Foo, vibes: cool } }
     actions: [{ move: { to_folder: X } }]
 """)
     with pytest.raises(DslError, match="unknown operator.*vibes"):

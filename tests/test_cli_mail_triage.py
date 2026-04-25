@@ -75,8 +75,16 @@ rules:
     plan_out = tmp_path / "plan.json"
     fake_plan = MagicMock()
     fake_plan.operations = []
-    with patch("m365ctl.mail.cli.triage.run_emit",
-               return_value=fake_plan) as emit_mock:
+    with patch(
+        "m365ctl.mail.cli.triage.run_emit", return_value=fake_plan,
+    ) as emit_mock, patch(
+        "m365ctl.mail.cli.triage.GraphClient",
+    ), patch(
+        "m365ctl.mail.cli.triage.load_and_authorize",
+        return_value=(MagicMock(), "delegated", MagicMock(get_token=lambda: "tok")),
+    ), patch(
+        "m365ctl.mail.cli.triage.make_header_fetcher",
+    ):
         rc = cli_triage.main([
             "run", "--rules", str(rules),
             "--plan-out", str(plan_out),
@@ -84,6 +92,45 @@ rules:
         ])
     assert rc == 0
     emit_mock.assert_called_once()
+
+
+def test_run_emit_builds_header_fetcher(tmp_path: Path) -> None:
+    cfg = _config(tmp_path)
+    rules = tmp_path / "r.yaml"
+    rules.write_text("""
+version: 1
+mailbox: me
+rules:
+  - name: hdr
+    match: { headers: { name: List-Unsubscribe } }
+    actions: [{ move: { to_folder: Archive } }]
+""")
+    plan_out = tmp_path / "plan.json"
+    fake_plan = MagicMock()
+    fake_plan.operations = []
+    fake_fetcher = MagicMock(name="fetcher")
+    with patch(
+        "m365ctl.mail.cli.triage.make_header_fetcher",
+        return_value=fake_fetcher,
+    ) as mhf, patch(
+        "m365ctl.mail.cli.triage.GraphClient",
+    ), patch(
+        "m365ctl.mail.cli.triage.load_and_authorize",
+        return_value=(MagicMock(), "delegated", MagicMock(get_token=lambda: "tok")),
+    ), patch(
+        "m365ctl.mail.cli.triage.run_emit",
+        return_value=fake_plan,
+    ) as emit_mock:
+        rc = cli_triage.main([
+            "run", "--rules", str(rules),
+            "--plan-out", str(plan_out),
+            "--config", str(cfg),
+        ])
+    assert rc == 0
+    mhf.assert_called_once()
+    emit_mock.assert_called_once()
+    _, kwargs = emit_mock.call_args
+    assert kwargs.get("header_fetcher") is fake_fetcher
 
 
 def test_run_from_plan_requires_confirm(tmp_path: Path, capsys) -> None:

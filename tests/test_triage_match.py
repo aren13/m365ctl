@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from m365ctl.mail.triage.dsl import (
     AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
-    HasAttachmentsP, ImportanceP, Match, SubjectP, ThreadP, ToP, UnreadP,
+    HasAttachmentsP, HeadersP, ImportanceP, Match, SubjectP, ThreadP, ToP,
+    UnreadP,
 )
 from m365ctl.mail.triage.match import MatchContext, evaluate_match
 
@@ -292,6 +293,86 @@ def test_thread_combined_with_from_predicate():
     # Same row, no reply, but wrong domain -> fails on from predicate.
     row_other = _row(conversation_id="conv-99", from_address="x@other.com")
     assert evaluate_match(m, row_other, now=_NOW, context=ctx) is False
+
+
+def test_headers_match_contains_case_insensitive_name():
+    fetched: list[str] = []
+
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        fetched.append(msg_id)
+        return [
+            {"name": "List-Unsubscribe", "value": "<https://example.com/unsub>"},
+            {"name": "Received", "value": "from foo by bar"},
+        ]
+
+    ctx = MatchContext(header_fetcher=fetcher)
+    m = Match(all_of=[HeadersP(name="list-unsubscribe", contains="example.com")])
+    row = _row(message_id="msg-1")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+
+
+def test_headers_match_returns_false_when_header_missing():
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        return [{"name": "Received", "value": "from foo by bar"}]
+
+    ctx = MatchContext(header_fetcher=fetcher)
+    m = Match(all_of=[HeadersP(name="X-Missing", contains="anything")])
+    assert evaluate_match(m, _row(message_id="msg-2"), now=_NOW, context=ctx) is False
+
+
+def test_headers_match_returns_false_when_no_fetcher():
+    ctx = MatchContext()  # header_fetcher=None
+    m = Match(all_of=[HeadersP(name="Foo")])
+    assert evaluate_match(m, _row(message_id="msg-3"), now=_NOW, context=ctx) is False
+
+
+def test_headers_caches_per_message():
+    calls: list[str] = []
+
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        calls.append(msg_id)
+        return [{"name": "Foo", "value": "bar"}]
+
+    ctx = MatchContext(header_fetcher=fetcher)
+    m = Match(all_of=[HeadersP(name="Foo")])
+    row = _row(message_id="msg-cache")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+    assert calls == ["msg-cache"]
+
+
+def test_headers_multiple_predicates_share_cache():
+    calls: list[str] = []
+
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        calls.append(msg_id)
+        return [
+            {"name": "List-Unsubscribe", "value": "<https://example.com/u>"},
+            {"name": "X-Spam-Status", "value": "Yes"},
+        ]
+
+    ctx = MatchContext(header_fetcher=fetcher)
+    m = Match(all_of=[
+        HeadersP(name="List-Unsubscribe", contains="example.com"),
+        HeadersP(name="X-Spam-Status", equals="Yes"),
+    ])
+    row = _row(message_id="msg-multi")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+    assert calls == ["msg-multi"]
+
+
+def test_headers_existence_only_matches_when_header_present():
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        return [{"name": "List-Unsubscribe", "value": ""}]
+
+    ctx = MatchContext(header_fetcher=fetcher)
+    m = Match(all_of=[HeadersP(name="List-Unsubscribe")])
+    assert evaluate_match(m, _row(message_id="msg-x"), now=_NOW, context=ctx) is True
+    # Absent -> False.
+    def fetcher_empty(msg_id: str) -> list[dict[str, str]]:
+        return []
+    ctx2 = MatchContext(header_fetcher=fetcher_empty)
+    assert evaluate_match(m, _row(message_id="msg-y"), now=_NOW, context=ctx2) is False
 
 
 def test_combined_all_any_none():

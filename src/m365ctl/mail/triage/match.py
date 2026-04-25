@@ -8,23 +8,28 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from m365ctl.mail.triage.dsl import (
     AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
-    HasAttachmentsP, ImportanceP, Match, Predicate,
+    HasAttachmentsP, HeadersP, ImportanceP, Match, Predicate,
     SubjectP, ThreadP, ToP, UnreadP,
 )
 
 
-@dataclass(frozen=True)
+@dataclass
 class MatchContext:
-    """Pre-computed cross-row data needed by some predicates.
+    """Pre-computed cross-row data + lazy fetcher caches.
 
     Built once per ruleset run by the plan emitter. ``thread`` predicates
     consult ``replied_conversations`` to avoid per-evaluation rebuilds.
+    ``headers`` predicates use ``header_fetcher`` (one Graph GET per
+    message) plus the in-memory ``header_cache`` to avoid duplicate
+    fetches for the same message within a single triage run.
     """
     replied_conversations: frozenset[str] = field(default_factory=frozenset)
+    header_fetcher: Callable[[str], list[dict[str, str]]] | None = None
+    header_cache: dict[str, list[dict[str, str]]] = field(default_factory=dict)
 
 
 def evaluate_match(
@@ -74,6 +79,8 @@ def _eval(p: Predicate, row: dict[str, Any], *, now: datetime, context: MatchCon
         return (row.get("importance") or "") == p.equals
     if isinstance(p, ThreadP):
         return _eval_thread(p, row, context=context)
+    if isinstance(p, HeadersP):
+        return _eval_headers(p, row, context=context)
     raise TypeError(f"unhandled predicate type: {type(p).__name__}")
 
 
@@ -211,3 +218,42 @@ def _eval_thread(p: ThreadP, row: dict[str, Any], *, context: MatchContext) -> b
         return False
     is_replied = cid in context.replied_conversations
     return is_replied == p.has_reply
+
+
+def _eval_headers(
+    p: HeadersP, row: dict[str, Any], *, context: MatchContext,
+) -> bool:
+    headers = _get_headers_for(row, context)
+    if headers is None:
+        return False
+    needle_name = p.name.lower()
+    for h in headers:
+        hname = (h.get("name") or "").lower()
+        if hname != needle_name:
+            continue
+        value = h.get("value") or ""
+        if p.equals is None and p.contains is None and p.regex is None:
+            return True   # existence-only match
+        if p.equals is not None and value == p.equals:
+            return True
+        if p.contains is not None and p.contains.lower() in value.lower():
+            return True
+        if p.regex is not None and re.search(p.regex, value):
+            return True
+    return False
+
+
+def _get_headers_for(
+    row: dict[str, Any], context: MatchContext,
+) -> list[dict[str, str]] | None:
+    """Return cached headers for this message, fetching once if needed."""
+    msg_id = row.get("message_id")
+    if not msg_id:
+        return None
+    if msg_id in context.header_cache:
+        return context.header_cache[msg_id]
+    if context.header_fetcher is None:
+        return None
+    headers = context.header_fetcher(msg_id)
+    context.header_cache[msg_id] = headers
+    return headers

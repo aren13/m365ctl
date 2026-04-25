@@ -3,6 +3,49 @@
 All notable changes to m365ctl are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.10.0 — Phase 10.z: headers predicate
+
+### Added
+- `headers: { name: <s>, contains|equals|regex: <s>? }` DSL predicate.
+  Matches against `internetMessageHeaders`. The header `name` is matched
+  case-insensitively; if no operator is given, the predicate is an
+  existence check ("header is present"). Operators are evaluated against
+  the header's `value` (case-sensitive `equals` and `regex`,
+  case-insensitive `contains`).
+- Lazy per-message fetch: a Graph GET with `?$select=internetMessageHeaders`
+  is issued only when a `HeadersP` predicate gates the decision and the
+  message's headers aren't already in the per-run cache. Multiple
+  headers predicates on the same row share one fetch.
+- `MatchContext` now non-frozen — carries the fetcher closure and an
+  in-memory `header_cache` keyed by `message_id`. `header_fetcher`
+  defaults to None; rulesets without `headers` predicates pay zero
+  per-message cost.
+
+### Why lazy fetch (not catalog the headers)
+- `internetMessageHeaders` is a heavyweight per-message property.
+  Capturing it at crawl time would double `mail catalog refresh`
+  wallclock for the ~1% of users who'd ever match on headers.
+- Lazy fetch at triage time has bounded cost (≤1 GET per row that
+  appears in a header-using rule's candidate set).
+
+### Example
+```yaml
+- name: kill-newsletters-with-list-unsubscribe
+  match:
+    all:
+      - folder: Inbox
+      - headers: { name: List-Unsubscribe }   # existence check
+      - age: { older_than_days: 14 }
+  actions:
+    - delete: {}
+```
+
+### Status: spec parity 100%
+This closes the last DSL deferral from Phase 10. The remaining backlog
+items (Phase 4.x soft-delete-undo edge cases, Phase 7.x perf — already
+shipped — and PyPI publish decision) are operational rather than
+feature work.
+
 ## 1.9.0 — Phase 7.x: catalog refresh perf
 
 ### Performance

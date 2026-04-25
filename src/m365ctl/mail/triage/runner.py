@@ -7,9 +7,10 @@ from typing import Any, Callable
 
 from m365ctl.common.audit import AuditLogger
 from m365ctl.common.config import AuthMode, Config
-from m365ctl.common.graph import GraphClient
+from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation, Plan, write_plan
 from m365ctl.mail.catalog.db import open_catalog
+from m365ctl.mail.endpoints import user_base
 from m365ctl.mail.triage.dsl import DslError, load_ruleset_from_yaml
 from m365ctl.mail.triage.plan import build_plan
 
@@ -35,6 +36,7 @@ def run_emit(
     mailbox_upn: str,
     scope: str,
     plan_out: Path,
+    header_fetcher: Callable[[str], list[dict[str, str]]] | None = None,
 ) -> Plan:
     """Load DSL, query the catalog, emit a Plan, write it to plan_out."""
     try:
@@ -49,9 +51,34 @@ def run_emit(
         source_cmd=f"mail triage run --rules {rules_path}",
         scope=scope,
         now=datetime.now(timezone.utc),
+        header_fetcher=header_fetcher,
     )
     write_plan(plan, plan_out)
     return plan
+
+
+def make_header_fetcher(
+    graph: GraphClient, *, mailbox_spec: str, auth_mode: AuthMode,
+) -> Callable[[str], list[dict[str, str]]]:
+    """Build a closure that fetches a single message's internetMessageHeaders.
+
+    Uses ``?$select=internetMessageHeaders``. Returns ``[]`` on
+    :class:`GraphError` so a single missing/unreadable message doesn't
+    crash the whole triage run.
+    """
+    ub = user_base(mailbox_spec, auth_mode=auth_mode)
+
+    def _fetch(message_id: str) -> list[dict[str, str]]:
+        try:
+            raw = graph.get(
+                f"{ub}/messages/{message_id}",
+                params={"$select": "internetMessageHeaders"},
+            )
+        except GraphError:
+            return []
+        return list(raw.get("internetMessageHeaders") or [])
+
+    return _fetch
 
 
 def _candidate_rows(*, catalog_path: Path, mailbox_upn: str) -> list[dict[str, Any]]:

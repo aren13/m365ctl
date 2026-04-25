@@ -87,6 +87,9 @@ allow-lists, audit log, and undo on every mutation.
   `$select` for the ~19 fields the catalog reads (~80% payload trim),
   and DuckDB upserts batch into one transaction per round. Targets
   first-time large-mailbox onboarding.
+- **Headers predicate (Phase 10.z, 1.10):** `headers: { name: List-Unsubscribe, contains: example.com }`
+  matches against `internetMessageHeaders` with lazy per-message fetch
+  + per-run cache. Rulesets without headers predicates pay zero overhead.
 
 ## Quickstart
 

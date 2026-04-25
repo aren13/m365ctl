@@ -5,10 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from m365ctl.common.graph import GraphError
 from m365ctl.common.planfile import Plan, Operation, PLAN_SCHEMA_VERSION
 from m365ctl.mail.catalog.db import open_catalog
 from m365ctl.mail.triage.runner import (
-    RunnerError, run_emit, run_execute, run_validate,
+    RunnerError, make_header_fetcher, run_emit, run_execute, run_validate,
 )
 
 
@@ -152,6 +153,100 @@ def test_run_execute_dispatches_per_action(tmp_path: Path) -> None:
     assert all(r.status == "ok" for r in results)
     fake_read.assert_called_once()
     fake_flag.assert_called_once()
+
+
+def test_make_header_fetcher_calls_graph_with_select() -> None:
+    graph = MagicMock()
+    graph.get.return_value = {
+        "internetMessageHeaders": [
+            {"name": "List-Unsubscribe", "value": "<https://x.test/u>"},
+        ],
+    }
+    fetcher = make_header_fetcher(graph, mailbox_spec="me", auth_mode="delegated")
+    headers = fetcher("msg-1")
+    assert headers == [{"name": "List-Unsubscribe", "value": "<https://x.test/u>"}]
+    args, kwargs = graph.get.call_args
+    # Path includes /messages/<id>; params include the $select.
+    assert "/messages/msg-1" in args[0]
+    assert kwargs.get("params") == {"$select": "internetMessageHeaders"}
+
+
+def test_make_header_fetcher_returns_empty_on_grapherror() -> None:
+    graph = MagicMock()
+    graph.get.side_effect = GraphError("boom")
+    fetcher = make_header_fetcher(graph, mailbox_spec="me", auth_mode="delegated")
+    assert fetcher("missing") == []
+
+
+def test_run_emit_threads_header_fetcher_to_build_plan(tmp_path: Path) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text("""
+version: 1
+mailbox: me
+rules:
+  - name: r
+    match: { unread: true }
+    actions: [{ read: true }]
+""")
+    catalog = tmp_path / "mail.duckdb"
+    _seed_messages(catalog, [{"message_id": "m1"}])
+    plan_out = tmp_path / "plan.json"
+    sentinel = MagicMock(name="fetcher")
+    fake_plan = MagicMock(operations=[])
+    with patch(
+        "m365ctl.mail.triage.runner.build_plan",
+        return_value=fake_plan,
+    ) as mock_build, patch(
+        "m365ctl.mail.triage.runner.write_plan",
+    ):
+        run_emit(
+            rules_path=rules,
+            catalog_path=catalog,
+            mailbox_upn="me",
+            scope="me",
+            plan_out=plan_out,
+            header_fetcher=sentinel,
+        )
+    _, kwargs = mock_build.call_args
+    assert kwargs.get("header_fetcher") is sentinel
+
+
+def test_run_emit_with_headers_predicate_invokes_fetcher(tmp_path: Path) -> None:
+    rules = tmp_path / "rules.yaml"
+    rules.write_text("""
+version: 1
+mailbox: me
+rules:
+  - name: kill-newsletters
+    match:
+      all:
+        - folder: Inbox
+        - headers: { name: List-Unsubscribe }
+    actions:
+      - move: { to_folder: Archive }
+""")
+    catalog = tmp_path / "mail.duckdb"
+    _seed_messages(catalog, [
+        {"message_id": "m1", "parent_folder_path": "Inbox"},
+    ])
+    plan_out = tmp_path / "plan.json"
+    fetched: list[str] = []
+
+    def fetcher(msg_id: str) -> list[dict[str, str]]:
+        fetched.append(msg_id)
+        return [{"name": "List-Unsubscribe", "value": "<https://x.test/u>"}]
+
+    plan = run_emit(
+        rules_path=rules,
+        catalog_path=catalog,
+        mailbox_upn="me",
+        scope="me",
+        plan_out=plan_out,
+        header_fetcher=fetcher,
+    )
+    assert fetched == ["m1"]
+    assert len(plan.operations) == 1
+    assert plan.operations[0].action == "mail.move"
 
 
 def test_run_execute_continues_on_per_op_error() -> None:
