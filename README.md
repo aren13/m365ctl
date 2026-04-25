@@ -76,6 +76,9 @@ allow-lists, audit log, and undo on every mutation.
   support `to`, `body`, `cc`. Catalog schema bumped to v2 (additive
   `cc_addresses` migration; existing catalogs auto-upgrade on next
   refresh).
+- **Thread predicate (Phase 10.y, 1.7):** `thread: { has_reply: false }`
+  catches sent mail with no reply yet. Pure catalog reasoning, no per-
+  message Graph fetches.
 
 ## Quickstart
 
