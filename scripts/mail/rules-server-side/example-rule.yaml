@@ -1,0 +1,9 @@
+display_name: archive-newsletters-server-side
+sequence: 10
+enabled: true
+conditions:
+  sender_contains: ["@newsletter.example.com"]
+actions:
+  move_to_folder: "Archive/Newsletters"
+  mark_as_read: true
+  stop_processing_rules: true
