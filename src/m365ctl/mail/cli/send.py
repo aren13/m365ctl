@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
@@ -12,7 +13,11 @@ from m365ctl.mail.cli._bulk import confirm_bulk_proceed
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
 from m365ctl.mail.compose import count_external_recipients, parse_recipients
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
-from m365ctl.mail.mutate.send import execute_send_draft, execute_send_new
+from m365ctl.mail.mutate.send import (
+    execute_send_draft,
+    execute_send_new,
+    execute_send_scheduled,
+)
 
 
 _EXTERNAL_RECIP_TTY_THRESHOLD = 20
@@ -38,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--bcc", action="append", default=[])
     p.add_argument("--importance", choices=("low", "normal", "high"))
     p.add_argument("--from-plan")
+    p.add_argument(
+        "--schedule-at",
+        help="Defer delivery via PR_DEFERRED_DELIVERY_TIME. Caveat: requires "
+             "Outlook client online at the scheduled time.",
+    )
     return p
 
 
@@ -47,8 +57,80 @@ def _read_body(args) -> str:
     return args.body or ""
 
 
+def _parse_iso(s: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.schedule_at and args.new:
+        print(
+            "mail send: --schedule-at is mutually exclusive with --new "
+            "(scheduled send only works against an existing draft).",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.schedule_at:
+        if not args.draft_id:
+            print("mail send --schedule-at: pass draft_id.", file=sys.stderr)
+            return 2
+        cfg, auth_mode, cred = load_and_authorize(args)
+        if not cfg.mail.schedule_send_enabled:
+            print(
+                "scheduled-send is disabled in config "
+                "(set [mail].schedule_send_enabled = true)",
+                file=sys.stderr,
+            )
+            return 2
+        parsed = _parse_iso(args.schedule_at)
+        if parsed is None:
+            print(
+                f"mail send --schedule-at: could not parse ISO-8601: "
+                f"{args.schedule_at!r}",
+                file=sys.stderr,
+            )
+            return 2
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        if parsed <= datetime.now(timezone.utc):
+            print(
+                "mail send --schedule-at: scheduled time must be in the future.",
+                file=sys.stderr,
+            )
+            return 2
+        assert_mail_target_allowed(
+            cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
+            unsafe_scope=args.unsafe_scope,
+        )
+        if not args.confirm:
+            print(
+                f"(dry-run) would schedule-send draft {args.draft_id} "
+                f"at {args.schedule_at}",
+                file=sys.stderr,
+            )
+            return 2
+        token = cred.get_token()
+        graph = GraphClient(token_provider=lambda: token)
+        op = Operation(
+            op_id=new_op_id(), action="mail.send.scheduled",
+            drive_id=derive_mailbox_upn(args.mailbox), item_id=args.draft_id,
+            args={"auth_mode": auth_mode, "schedule_at": args.schedule_at},
+        )
+        logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
+        result = execute_send_scheduled(op, graph, logger, before={})
+        if result.status != "ok":
+            print(f"error: {result.error}", file=sys.stderr)
+            return 1
+        print(
+            f"[{op.op_id}] ok — scheduled draft {args.draft_id} "
+            f"for {args.schedule_at}"
+        )
+        return 0
 
     if args.from_plan:
         if not args.confirm:

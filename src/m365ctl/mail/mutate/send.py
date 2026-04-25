@@ -94,3 +94,48 @@ def execute_send_new(
     after: dict[str, Any] = {"sent_at": _now_utc_iso(), "internet_message_id": ""}
     log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
     return MailResult(op_id=op.op_id, status="ok", after=after)
+
+
+_DEFERRED_DELIVERY_PROP_ID = "SystemTime 0x3FEF"
+
+
+def execute_send_scheduled(
+    op: Operation,
+    graph: GraphClient,
+    logger: AuditLogger,
+    *,
+    before: dict[str, Any],
+) -> MailResult:
+    """PATCH the draft with PR_DEFERRED_DELIVERY_TIME, then POST /send.
+
+    Outlook holds the message locally until ``schedule_at``. Caveat:
+    depends on the Outlook client being online at the deliver-at time.
+    """
+    ub = _user_base(op)
+    schedule_at = op.args["schedule_at"]
+    log_mutation_start(
+        logger, op_id=op.op_id, cmd="mail-send-scheduled",
+        args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
+    )
+    patch_body = {
+        "singleValueExtendedProperties": [
+            {"id": _DEFERRED_DELIVERY_PROP_ID, "value": schedule_at},
+        ],
+    }
+    try:
+        graph.patch(f"{ub}/messages/{op.item_id}", json_body=patch_body)
+    except GraphError as e:
+        log_mutation_end(
+            logger, op_id=op.op_id, after=None, result="error", error=str(e),
+        )
+        return MailResult(op_id=op.op_id, status="error", error=str(e))
+    try:
+        graph.post_raw(f"{ub}/messages/{op.item_id}/send")
+    except GraphError as e:
+        log_mutation_end(
+            logger, op_id=op.op_id, after=None, result="error", error=str(e),
+        )
+        return MailResult(op_id=op.op_id, status="error", error=str(e))
+    after: dict[str, Any] = {"sent_at": _now_utc_iso(), "schedule_at": schedule_at}
+    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
+    return MailResult(op_id=op.op_id, status="ok", after=after)

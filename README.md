@@ -63,6 +63,9 @@ allow-lists, audit log, and undo on every mutation.
   accepts `--mailbox shared:<addr>` for shared-mailbox routing.
   `mail delegate {list,grant,revoke} --rights …` manages FullAccess /
   SendAs / SendOnBehalf via Exchange Online PowerShell with audit + undo.
+- **Scheduled send (Phase 5b, 1.3):** `mail send <draft> --schedule-at <iso>`
+  defers delivery via the MAPI `PR_DEFERRED_DELIVERY_TIME` extended
+  property. Gated behind `[mail].schedule_send_enabled`.
 
 ## Quickstart
 
