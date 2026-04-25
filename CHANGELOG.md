@@ -3,6 +3,28 @@
 All notable changes to m365ctl are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.9.0 — Phase 7.x: catalog refresh perf
+
+### Performance
+- `_drain_delta` now passes `$select` on the first `/messages/delta`
+  call, listing only the ~19 fields `normalize_message` actually reads.
+  Default Graph response is much heavier (body, attachment metadata,
+  ETags, change-keys, sender, replyTo, …); slimming cuts wire payload
+  ~80% and parser work proportionally. The 33K-item-Inbox first-time
+  refresh that took ~11 minutes in the 2026-04-25 smoke is the target
+  workload.
+- DuckDB upserts in each round are now wrapped in a single `BEGIN`/
+  `COMMIT` instead of per-statement implicit transactions. At 100s of
+  rows per round this saves measurable per-call overhead.
+
+### No behaviour change
+- Same fields persisted to `mail_messages`. Existing catalogs continue
+  to work unchanged. Schema unchanged. CLI unchanged.
+
+### Caveat
+Subsequent rounds resume from the deltaLink URL, which already encodes
+the original `$select` — we don't re-pass it.
+
 ## 1.8.0 — Phase 11.x: mid-folder export resume
 
 ### Added

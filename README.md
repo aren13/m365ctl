@@ -83,6 +83,10 @@ allow-lists, audit log, and undo on every mutation.
   now resumes interrupted folders message-by-message via
   `last_exported_id` checkpoints in the manifest. Killing mid-export
   and re-running picks up where it left off; no re-uploads.
+- **Catalog refresh perf (Phase 7.x, 1.9):** `/messages/delta` now uses
+  `$select` for the ~19 fields the catalog reads (~80% payload trim),
+  and DuckDB upserts batch into one transaction per round. Targets
+  first-time large-mailbox onboarding.
 
 ## Quickstart
 
