@@ -39,6 +39,11 @@ allow-lists, audit log, and undo on every mutation.
   `mail triage run --rules <yaml> [--plan-out|--confirm]` — YAML rules
   match against the local catalog and emit a tagged plan that reuses
   the existing audit/undo paths. Examples in `scripts/mail/rules/`.
+- **Inbox rules CRUD (Phase 8):** `mail rules {create|update|delete|
+  enable|disable|reorder|export|import}` — round-trippable YAML
+  pipeline. `mail rules export --out a.yaml` then
+  `mail rules import --from-file a.yaml --replace --confirm` rebuilds
+  the rule set. Audit + undo intact.
 
 ## Quickstart
 
