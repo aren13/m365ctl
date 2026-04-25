@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, BodyP, CategorizeA, DslError, FlagA, FolderP, FromP, ImportanceP,
+    AgeP, BodyP, CategorizeA, CcP, DslError, FlagA, FolderP, FromP, ImportanceP,
     MoveA, SubjectP, ToP, UnreadP,
     load_ruleset_from_yaml,
 )
@@ -265,6 +265,32 @@ rules:
 """)
     with pytest.raises(DslError, match="unknown operator.*vibes"):
         load_ruleset_from_yaml(p)
+
+
+def test_cc_predicate_domain_in(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: cc-domain
+    match: { cc: { domain_in: [example.com] } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [CcP(domain_in=["example.com"])]
+
+
+def test_cc_predicate_string_shorthand(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: cc-addr
+    match: { cc: alice@example.com }
+    actions: [{ move: { to_folder: X } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [CcP(address="alice@example.com")]
 
 
 def test_importance_predicate(tmp_path: Path) -> None:

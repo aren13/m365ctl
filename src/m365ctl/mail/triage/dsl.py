@@ -107,6 +107,30 @@ class ToP:
 
 
 @dataclass(frozen=True)
+class CcP:
+    address: str | None = None
+    address_in: tuple[str, ...] | None = None
+    domain_in: tuple[str, ...] | None = None
+
+    def __init__(
+        self,
+        *,
+        address: str | None = None,
+        address_in: list[str] | tuple[str, ...] | None = None,
+        domain_in: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        object.__setattr__(self, "address", address)
+        object.__setattr__(
+            self, "address_in",
+            tuple(address_in) if address_in is not None else None,
+        )
+        object.__setattr__(
+            self, "domain_in",
+            tuple(domain_in) if domain_in is not None else None,
+        )
+
+
+@dataclass(frozen=True)
 class SubjectP:
     contains: str | None = None
     starts_with: str | None = None
@@ -195,7 +219,7 @@ class ImportanceP:
 
 
 Predicate = (
-    FromP | ToP | SubjectP | BodyP | FolderP | AgeP | UnreadP | FlaggedP
+    FromP | ToP | CcP | SubjectP | BodyP | FolderP | AgeP | UnreadP | FlaggedP
     | HasAttachmentsP | CategoriesP | FocusP | ImportanceP
 )
 
@@ -391,13 +415,7 @@ def _parse_predicate(key: str, val: Any, *, where: str) -> Predicate:
     if key == "to":
         return _parse_addr_predicate(ToP, val, where=f"{where}.to")
     if key == "cc":
-        # cc is wired up in Phase 10.x (Group 2) once the catalog has the
-        # cc_addresses column; until that commit lands the runner SELECT
-        # doesn't expose cc_addresses, so reject here.
-        raise DslError(
-            f"{where}: predicate 'cc' not yet supported (Phase 10.x); "
-            f"awaiting catalog schema v2."
-        )
+        return _parse_addr_predicate(CcP, val, where=f"{where}.cc")
     if key == "subject":
         return _parse_string_predicate(SubjectP, val, where=f"{where}.subject")
     if key == "body":

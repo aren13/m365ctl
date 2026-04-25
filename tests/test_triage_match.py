@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, BodyP, CategoriesP, FlaggedP, FocusP, FolderP, FromP, HasAttachmentsP,
-    ImportanceP, Match, SubjectP, ToP, UnreadP,
+    AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
+    HasAttachmentsP, ImportanceP, Match, SubjectP, ToP, UnreadP,
 )
 from m365ctl.mail.triage.match import evaluate_match
 
@@ -183,6 +183,32 @@ def test_body_regex_starts_ends_with():
         _row(body_preview="Hello body"),
         now=_NOW,
     ) is True
+
+
+def test_cc_address_in_matches():
+    m = Match(all_of=[CcP(address_in=["dan@example.com"])])
+    assert evaluate_match(
+        m, _row(cc_addresses="dan@example.com,eve@example.com"), now=_NOW
+    ) is True
+    assert evaluate_match(
+        m, _row(cc_addresses="zoe@example.com"), now=_NOW
+    ) is False
+
+
+def test_cc_domain_in_matches():
+    m = Match(all_of=[CcP(domain_in=["example.com"])])
+    assert evaluate_match(
+        m, _row(cc_addresses="dan@other.com,eve@example.com"), now=_NOW
+    ) is True
+
+
+def test_cc_against_null_cc_addresses_returns_false():
+    m = Match(all_of=[CcP(address="anybody@anywhere.com")])
+    # Pre-migration row: cc_addresses key absent / NULL.
+    assert evaluate_match(m, _row(cc_addresses=None), now=_NOW) is False
+    row_no_cc = _row()
+    row_no_cc.pop("cc_addresses", None)
+    assert evaluate_match(m, row_no_cc, now=_NOW) is False
 
 
 def test_all_of_requires_all():
