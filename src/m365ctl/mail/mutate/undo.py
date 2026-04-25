@@ -297,6 +297,84 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             dry_run_result=f"(undo of {op_id}) remove attachment {new_att!r}",
         )
 
+    if cmd == "mail-rule-create":
+        new_id = after.get("id") or start.get("item_id", "")
+        if not new_id:
+            raise Irreversible(
+                f"mail-rule-create op {op_id!r} has no after.id; cannot undo"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.rule.delete",
+            drive_id=drive_id, item_id=new_id,
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "rule_id": new_id},
+            dry_run_result=f"(undo of {op_id}) delete created rule {new_id!r}",
+        )
+
+    if cmd == "mail-rule-delete":
+        if not before:
+            raise Irreversible(
+                f"mail-rule-delete op {op_id!r} has empty before; "
+                f"cannot reconstruct the deleted rule"
+            )
+        body = {k: v for k, v in before.items() if k != "id"}
+        return Operation(
+            op_id=new_op_id(), action="mail.rule.create",
+            drive_id=drive_id, item_id="",
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "body": body},
+            dry_run_result=f"(undo of {op_id}) recreate rule "
+                           f"{before.get('displayName', '?')!r}",
+        )
+
+    if cmd == "mail-rule-update":
+        if not before:
+            raise Irreversible(
+                f"mail-rule-update op {op_id!r} has empty before; cannot undo"
+            )
+        body = {k: v for k, v in before.items() if k != "id"}
+        return Operation(
+            op_id=new_op_id(), action="mail.rule.update",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "rule_id": start["args"].get("rule_id", start["item_id"]),
+                  "body": body},
+            dry_run_result=f"(undo of {op_id}) restore rule "
+                           f"{before.get('displayName', '?')!r}",
+        )
+
+    if cmd == "mail-rule-set-enabled":
+        prior_enabled = bool(before.get("isEnabled", True))
+        return Operation(
+            op_id=new_op_id(), action="mail.rule.set-enabled",
+            drive_id=drive_id, item_id=start["item_id"],
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "rule_id": start["args"].get("rule_id", start["item_id"]),
+                  "is_enabled": prior_enabled},
+            dry_run_result=f"(undo of {op_id}) set isEnabled back to "
+                           f"{prior_enabled}",
+        )
+
+    if cmd == "mail-rule-reorder":
+        prior = before.get("ordering")
+        if not prior:
+            raise Irreversible(
+                f"mail-rule-reorder op {op_id!r} has no before.ordering; "
+                f"cannot restore prior sequence numbers"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.rule.reorder",
+            drive_id=drive_id, item_id="",
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "ordering": prior},
+            dry_run_result=f"(undo of {op_id}) restore prior rule ordering",
+        )
+
     if cmd == "mail-attach-remove":
         if not before.get("content_bytes_b64"):
             raise Irreversible(
@@ -429,6 +507,28 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
             "content_type": b.get("content_type", "application/octet-stream"),
             "content_bytes_b64": b.get("content_bytes_b64", ""),
         },
+    })
+
+    # Phase 8 — server-side inbox rule inverses.
+    dispatcher.register("mail.rule.create", lambda b, a: {
+        "action": "mail.rule.delete",
+        "args": {"rule_id": a.get("id", "")},
+    })
+    dispatcher.register("mail.rule.delete", lambda b, a: {
+        "action": "mail.rule.create",
+        "args": {"body": {k: v for k, v in b.items() if k != "id"}},
+    })
+    dispatcher.register("mail.rule.update", lambda b, a: {
+        "action": "mail.rule.update",
+        "args": {"body": {k: v for k, v in b.items() if k != "id"}},
+    })
+    dispatcher.register("mail.rule.set-enabled", lambda b, a: {
+        "action": "mail.rule.set-enabled",
+        "args": {"is_enabled": bool(b.get("isEnabled", True))},
+    })
+    dispatcher.register("mail.rule.reorder", lambda b, a: {
+        "action": "mail.rule.reorder",
+        "args": {"ordering": b.get("ordering", [])},
     })
 
     # Phase 5a — irreversible compose verbs (outgoing mail cannot be recalled).
