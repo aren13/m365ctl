@@ -375,6 +375,76 @@ def build_reverse_mail_operation(logger: AuditLogger, op_id: str) -> Operation:
             dry_run_result=f"(undo of {op_id}) restore prior rule ordering",
         )
 
+    if cmd == "mail-settings-timezone":
+        prior_tz = before.get("timeZone")
+        if not prior_tz:
+            raise Irreversible(
+                f"mail-settings-timezone op {op_id!r} has no before.timeZone; "
+                f"cannot restore prior timezone"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.settings.timezone",
+            drive_id=drive_id, item_id="",
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "timezone": prior_tz},
+            dry_run_result=f"(undo of {op_id}) restore timezone to {prior_tz!r}",
+        )
+
+    if cmd == "mail-settings-working-hours":
+        prior_wh = before.get("workingHours")
+        if not prior_wh:
+            raise Irreversible(
+                f"mail-settings-working-hours op {op_id!r} has no "
+                f"before.workingHours; cannot restore prior workingHours"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.settings.working-hours",
+            drive_id=drive_id, item_id="",
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "working_hours": prior_wh},
+            dry_run_result=f"(undo of {op_id}) restore prior workingHours",
+        )
+
+    if cmd == "mail-signature-set":
+        prior_content = before.get("content")
+        if prior_content is None:
+            raise Irreversible(
+                f"mail-signature-set op {op_id!r} has no before.content; "
+                f"cannot restore prior signature"
+            )
+        prior_path = before.get("signature_path") or start["args"].get("signature_path", "")
+        if not prior_path:
+            raise Irreversible(
+                f"mail-signature-set op {op_id!r} has no signature_path; "
+                f"cannot restore prior signature"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.settings.signature",
+            drive_id=drive_id, item_id="",
+            args={"signature_path": prior_path, "content": prior_content},
+            dry_run_result=f"(undo of {op_id}) restore prior signature "
+                           f"({len(prior_content)} bytes)",
+        )
+
+    if cmd == "mail-settings-auto-reply":
+        prior_ar = before.get("automaticRepliesSetting")
+        if not prior_ar:
+            raise Irreversible(
+                f"mail-settings-auto-reply op {op_id!r} has no "
+                f"before.automaticRepliesSetting; cannot restore prior OOO"
+            )
+        return Operation(
+            op_id=new_op_id(), action="mail.settings.auto-reply",
+            drive_id=drive_id, item_id="",
+            args={"mailbox_spec": start["args"].get("mailbox_spec", "me"),
+                  "auth_mode": start["args"].get("auth_mode", "delegated"),
+                  "auto_reply": prior_ar,
+                  "force": True},
+            dry_run_result=f"(undo of {op_id}) restore prior automaticRepliesSetting",
+        )
+
     if cmd == "mail-attach-remove":
         if not before.get("content_bytes_b64"):
             raise Irreversible(
@@ -529,6 +599,26 @@ def register_mail_inverses(dispatcher: Dispatcher) -> None:
     dispatcher.register("mail.rule.reorder", lambda b, a: {
         "action": "mail.rule.reorder",
         "args": {"ordering": b.get("ordering", [])},
+    })
+
+    # Phase 9 — mailbox settings inverses.
+    dispatcher.register("mail.settings.timezone", lambda b, a: {
+        "action": "mail.settings.timezone",
+        "args": {"timezone": b.get("timeZone", "")},
+    })
+    dispatcher.register("mail.settings.working-hours", lambda b, a: {
+        "action": "mail.settings.working-hours",
+        "args": {"working_hours": b.get("workingHours", {})},
+    })
+    dispatcher.register("mail.settings.auto-reply", lambda b, a: {
+        "action": "mail.settings.auto-reply",
+        "args": {"auto_reply": b.get("automaticRepliesSetting", {}),
+                 "force": True},
+    })
+    dispatcher.register("mail.settings.signature", lambda b, a: {
+        "action": "mail.settings.signature",
+        "args": {"signature_path": b.get("signature_path", ""),
+                 "content": b.get("content", "")},
     })
 
     # Phase 5a — irreversible compose verbs (outgoing mail cannot be recalled).
