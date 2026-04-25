@@ -146,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.snooze import main as f
     elif verb == "clean":
         from m365ctl.mail.cli.clean import main as f
+    elif verb == "empty":
+        from m365ctl.mail.cli.empty import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2
