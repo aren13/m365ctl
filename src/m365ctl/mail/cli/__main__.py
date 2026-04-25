@@ -57,6 +57,7 @@ _USAGE = (
     "  forward      forward a message (IRREVERSIBLE — inline send)\n"
     "  triage       triage validate <yaml> | triage run --rules <yaml> [--plan-out|--confirm]\n"
     "  ooo          ooo show | ooo on --message ... | ooo off (auto-reply / OOO)\n"
+    "  signature    signature show | signature set --from-file|--content\n"
     "\nHard delete (permanent) lands in Phase 6 — `mail clean`. Use with care.\n"
 )
 
@@ -116,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         from m365ctl.mail.cli.catalog import main as f
     elif verb == "ooo":
         from m365ctl.mail.cli.ooo import main as f
+    elif verb == "signature":
+        from m365ctl.mail.cli.signature import main as f
     else:
         print(f"m365ctl mail: unknown verb {verb!r}\n\n{_USAGE}", file=sys.stderr)
         return 2

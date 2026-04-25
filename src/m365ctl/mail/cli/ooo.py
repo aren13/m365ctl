@@ -36,15 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(p)
     sub = p.add_subparsers(dest="subcommand", required=True)
 
-    show = sub.add_parser("show", help="Print current automatic-replies setting.")
-    add_common_args(show)
+    sub.add_parser("show", help="Print current automatic-replies setting.")
 
     off = sub.add_parser("off", help="Disable automatic replies.")
-    add_common_args(off)
     off.add_argument("--confirm", action="store_true")
 
     on = sub.add_parser("on", help="Enable automatic replies.")
-    add_common_args(on)
     on.add_argument("--message", required=True, help="Internal reply message.")
     on.add_argument("--audience", choices=_AUDIENCES, default="all")
     on.add_argument("--start", help="ISO start (UTC). With --end => scheduled.")

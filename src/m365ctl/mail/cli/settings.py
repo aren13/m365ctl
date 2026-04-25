@@ -28,30 +28,19 @@ from m365ctl.mail.mutate.settings import (
 from m365ctl.mail.settings import get_auto_reply, get_settings
 
 
-def _add_common(p: argparse.ArgumentParser) -> None:
-    """Common args on each subparser so they parse cleanly when placed
-    AFTER the subcommand (e.g. ``settings timezone X --config foo``)."""
-    add_common_args(p)
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="m365ctl mail settings")
     add_common_args(p)
     sub = p.add_subparsers(dest="subcommand", required=True)
 
-    show = sub.add_parser("show", help="Print all mailbox settings.")
-    _add_common(show)
-
-    ooo = sub.add_parser("ooo", help="Print the automatic-replies setting.")
-    _add_common(ooo)
+    sub.add_parser("show", help="Print all mailbox settings.")
+    sub.add_parser("ooo", help="Print the automatic-replies setting.")
 
     tz = sub.add_parser("timezone", help="Set mailbox timezone (Olson or Windows).")
-    _add_common(tz)
     tz.add_argument("timezone", help="Timezone name, e.g. 'Europe/Istanbul'.")
     tz.add_argument("--confirm", action="store_true")
 
     wh = sub.add_parser("working-hours", help="Set workingHours from a YAML file.")
-    _add_common(wh)
     wh.add_argument("--from-file", dest="from_file", required=True,
                     help="Path to a YAML file with days_of_week/start_time/end_time/time_zone.")
     wh.add_argument("--confirm", action="store_true")
