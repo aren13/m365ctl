@@ -6,7 +6,7 @@ import pytest
 
 from m365ctl.mail.triage.dsl import (
     AgeP, BodyP, CategorizeA, CcP, DslError, FlagA, FolderP, FromP, ImportanceP,
-    MoveA, SubjectP, ToP, UnreadP,
+    MoveA, SubjectP, ThreadP, ToP, UnreadP,
     load_ruleset_from_yaml,
 )
 
@@ -291,6 +291,58 @@ rules:
 """)
     rs = load_ruleset_from_yaml(p)
     assert rs.rules[0].match.all_of == [CcP(address="alice@example.com")]
+
+
+def test_thread_has_reply_false(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: follow-up
+    match: { thread: { has_reply: false } }
+    actions: [{ flag: { status: flagged } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [ThreadP(has_reply=False)]
+
+
+def test_thread_has_reply_true(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: replied
+    match: { thread: { has_reply: true } }
+    actions: [{ move: { to_folder: Archive } }]
+""")
+    rs = load_ruleset_from_yaml(p)
+    assert rs.rules[0].match.all_of == [ThreadP(has_reply=True)]
+
+
+def test_thread_has_reply_must_be_bool(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: bad-thread
+    match: { thread: { has_reply: "maybe" } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    with pytest.raises(DslError, match="has_reply.*must be true|false"):
+        load_ruleset_from_yaml(p)
+
+
+def test_thread_unknown_operator_rejected(tmp_path: Path) -> None:
+    p = _write(tmp_path, """
+version: 1
+mailbox: me
+rules:
+  - name: bad-thread
+    match: { thread: { vibes: cool } }
+    actions: [{ move: { to_folder: X } }]
+""")
+    with pytest.raises(DslError, match="unknown operator.*vibes"):
+        load_ruleset_from_yaml(p)
 
 
 def test_importance_predicate(tmp_path: Path) -> None:

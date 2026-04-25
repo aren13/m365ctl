@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 from m365ctl.mail.triage.dsl import (
     AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
-    HasAttachmentsP, ImportanceP, Match, SubjectP, ToP, UnreadP,
+    HasAttachmentsP, ImportanceP, Match, SubjectP, ThreadP, ToP, UnreadP,
 )
-from m365ctl.mail.triage.match import evaluate_match
+from m365ctl.mail.triage.match import MatchContext, evaluate_match
 
 
 _NOW = datetime(2026, 4, 25, tzinfo=timezone.utc)
@@ -237,6 +237,61 @@ def test_none_of_must_not_match():
     assert evaluate_match(
         m, _row(from_address="bot@spam.com"), now=_NOW
     ) is False
+
+
+def test_thread_has_reply_false_when_not_in_set():
+    m = Match(all_of=[ThreadP(has_reply=False)])
+    ctx = MatchContext(replied_conversations=frozenset())
+    row = _row(conversation_id="conv-1")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+
+
+def test_thread_has_reply_false_returns_false_when_in_set():
+    m = Match(all_of=[ThreadP(has_reply=False)])
+    ctx = MatchContext(replied_conversations=frozenset({"conv-1"}))
+    row = _row(conversation_id="conv-1")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is False
+
+
+def test_thread_has_reply_true_when_in_set():
+    m = Match(all_of=[ThreadP(has_reply=True)])
+    ctx = MatchContext(replied_conversations=frozenset({"conv-1"}))
+    row = _row(conversation_id="conv-1")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+
+
+def test_thread_empty_conversation_id_returns_false():
+    m = Match(all_of=[ThreadP(has_reply=False)])
+    ctx = MatchContext(replied_conversations=frozenset())
+    row = _row(conversation_id="")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is False
+    row_missing = _row()
+    row_missing.pop("conversation_id", None)
+    assert evaluate_match(m, row_missing, now=_NOW, context=ctx) is False
+
+
+def test_thread_default_context_evaluates_false():
+    """No context passed -> default empty MatchContext; thread predicates don't crash."""
+    m = Match(all_of=[ThreadP(has_reply=True)])
+    row = _row(conversation_id="conv-1")
+    # Without context kwarg, replied_conversations is empty, so has_reply=True is False.
+    assert evaluate_match(m, row, now=_NOW) is False
+
+
+def test_thread_combined_with_from_predicate():
+    m = Match(all_of=[
+        FromP(domain_in=["example.com"]),
+        ThreadP(has_reply=False),
+    ])
+    ctx = MatchContext(replied_conversations=frozenset())
+    row = _row(conversation_id="conv-99")
+    assert evaluate_match(m, row, now=_NOW, context=ctx) is True
+    # Same row but conv has reply -> fails on thread predicate.
+    ctx2 = MatchContext(replied_conversations=frozenset({"conv-99"}))
+    assert evaluate_match(m, row, now=_NOW, context=ctx2) is False
+    # Same row, no reply, but wrong domain -> fails on from predicate.
+    row_other = _row(conversation_id="conv-99", from_address="x@other.com")
+    assert evaluate_match(m, row_other, now=_NOW, context=ctx) is False
 
 
 def test_combined_all_any_none():

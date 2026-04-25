@@ -26,6 +26,7 @@ Predicates:
   - categories:      {contains: <s>, in: [<s>...], equals: <s>}
   - focus:           focused|other
   - importance:      low|normal|high
+  - thread:          {has_reply: true|false}
 
 Actions:
   - move:       {to_folder: <path>}
@@ -218,9 +219,14 @@ class ImportanceP:
     equals: Literal["low", "normal", "high"]
 
 
+@dataclass(frozen=True)
+class ThreadP:
+    has_reply: bool
+
+
 Predicate = (
     FromP | ToP | CcP | SubjectP | BodyP | FolderP | AgeP | UnreadP | FlaggedP
-    | HasAttachmentsP | CategoriesP | FocusP | ImportanceP
+    | HasAttachmentsP | CategoriesP | FocusP | ImportanceP | ThreadP
 )
 
 
@@ -309,7 +315,7 @@ class RuleSet:
 _PREDICATE_KEYS = {
     "from", "to", "cc", "subject", "body", "folder", "age",
     "unread", "is_flagged", "has_attachments", "categories",
-    "focus", "importance",
+    "focus", "importance", "thread",
 }
 _ACTION_KEYS = {
     "move", "copy", "delete", "flag", "read", "focus", "categorize",
@@ -448,7 +454,25 @@ def _parse_predicate(key: str, val: Any, *, where: str) -> Predicate:
                 f"{where}.importance: must be 'low'/'normal'/'high', got {val!r}"
             )
         return ImportanceP(equals=val)
+    if key == "thread":
+        return _parse_thread_predicate(val, where=f"{where}.thread")
     raise DslError(f"{where}: unhandled predicate {key!r}")  # pragma: no cover
+
+
+def _parse_thread_predicate(val: Any, *, where: str) -> ThreadP:
+    if not isinstance(val, dict):
+        raise DslError(f"{where}: expected mapping with 'has_reply'")
+    known = {"has_reply"}
+    unknown = set(val.keys()) - known
+    if unknown:
+        raise DslError(f"{where}: unknown operator(s) {sorted(unknown)}")
+    if "has_reply" not in val:
+        raise DslError(f"{where}: missing required 'has_reply'")
+    if not isinstance(val["has_reply"], bool):
+        raise DslError(
+            f"{where}.has_reply: must be true|false, got {val['has_reply']!r}"
+        )
+    return ThreadP(has_reply=val["has_reply"])
 
 
 def _parse_addr_predicate(cls, val: Any, *, where: str):

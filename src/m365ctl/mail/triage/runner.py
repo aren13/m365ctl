@@ -66,7 +66,8 @@ def _candidate_rows(*, catalog_path: Path, mailbox_upn: str) -> list[dict[str, A
                    to_addresses, cc_addresses, body_preview,
                    parent_folder_path, received_at, is_read,
                    flag_status, has_attachments, importance,
-                   categories, inference_class
+                   categories, inference_class,
+                   conversation_id
             FROM mail_messages
             WHERE mailbox_upn = ? AND is_deleted = false
             """,
