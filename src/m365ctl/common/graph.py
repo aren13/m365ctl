@@ -212,6 +212,45 @@ class GraphClient:
 
         return self._retry(_do)
 
+    def put_chunk(
+        self,
+        url: str,
+        data: bytes,
+        *,
+        content_range: str,
+        content_length: int,
+    ) -> tuple[dict, int]:
+        """Upload one chunk to a Graph upload-session URL.
+
+        The upload session URL embeds auth via signed query params, so we
+        DO NOT add the Authorization header. Returns ``(parsed_body, status_code)``.
+        Body may be empty for 202 Accepted (more chunks expected); on 201
+        Created (final chunk), it's the resulting entity (e.g. attachment).
+
+        Raises GraphError on 4xx/5xx (mirrors the rest of GraphClient).
+        """
+
+        def _do() -> tuple[dict, int]:
+            resp = self._client.put(
+                url,
+                content=data,
+                headers={
+                    "Content-Range": content_range,
+                    "Content-Length": str(content_length),
+                    "Content-Type": "application/octet-stream",
+                },
+            )
+            self._maybe_raise(resp)
+            body: dict = {}
+            if resp.content:
+                try:
+                    body = resp.json()
+                except Exception:  # noqa: BLE001
+                    body = {}
+            return body, resp.status_code
+
+        return self._retry(_do)
+
     def delete(self, path: str) -> None:
         """DELETE; returns None on 204; parses body on non-204; raises on 4xx/5xx."""
 

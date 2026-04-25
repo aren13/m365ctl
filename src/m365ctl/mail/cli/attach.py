@@ -11,6 +11,12 @@ from m365ctl.common.planfile import Operation, new_op_id
 from m365ctl.mail.attachments import get_attachment_content, list_attachments
 from m365ctl.mail.cli._common import add_common_args, emit_json_lines, load_and_authorize
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
+from m365ctl.mail.mutate.attach import (
+    execute_add_attachment_large,
+    execute_add_attachment_small,
+    execute_remove_attachment,
+    pick_upload_strategy,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,7 +95,6 @@ def _run_add_attachment(args) -> int:
     import base64
     import mimetypes
     from pathlib import Path as _Path
-    from m365ctl.mail.mutate.attach import execute_add_attachment_small, pick_upload_strategy
 
     cfg, auth_mode, cred = load_and_authorize(args)
     assert_mail_target_allowed(
@@ -101,17 +106,8 @@ def _run_add_attachment(args) -> int:
     if not file_path.exists():
         print(f"mail attach add: file not found: {args.file}", file=sys.stderr)
         return 2
-    raw = file_path.read_bytes()
-    size = len(raw)
+    size = file_path.stat().st_size
     strategy = pick_upload_strategy(size=size)
-    if strategy == "large":
-        print(
-            f"mail attach add: file is {size} bytes (>= 3 MB). "
-            f"Large-attachment upload session arrives in Phase 5a-2. "
-            f"For now, split or compress the file.",
-            file=sys.stderr,
-        )
-        return 2
 
     if not args.confirm:
         print(f"(dry-run) would attach {args.file} ({size} bytes) to {args.message_id}",
@@ -121,18 +117,35 @@ def _run_add_attachment(args) -> int:
     content_type = args.content_type or mimetypes.guess_type(args.file)[0] or "application/octet-stream"
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)
-    op = Operation(
-        op_id=new_op_id(), action="mail.attach.add",
-        drive_id=derive_mailbox_upn(args.mailbox), item_id=args.message_id,
-        args={
-            "name": file_path.name,
-            "content_type": content_type,
-            "content_bytes_b64": base64.b64encode(raw).decode("ascii"),
-            "auth_mode": auth_mode,
-        },
-    )
     logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
-    result = execute_add_attachment_small(op, graph, logger, before={})
+
+    if strategy == "large":
+        op = Operation(
+            op_id=new_op_id(), action="mail.attach.add.large",
+            drive_id=derive_mailbox_upn(args.mailbox), item_id=args.message_id,
+            args={
+                "name": file_path.name,
+                "content_type": content_type,
+                "size": size,
+                "file_path": str(file_path.resolve()),
+                "auth_mode": auth_mode,
+            },
+        )
+        result = execute_add_attachment_large(op, graph, logger, before={})
+    else:
+        raw = file_path.read_bytes()
+        op = Operation(
+            op_id=new_op_id(), action="mail.attach.add",
+            drive_id=derive_mailbox_upn(args.mailbox), item_id=args.message_id,
+            args={
+                "name": file_path.name,
+                "content_type": content_type,
+                "content_bytes_b64": base64.b64encode(raw).decode("ascii"),
+                "auth_mode": auth_mode,
+            },
+        )
+        result = execute_add_attachment_small(op, graph, logger, before={})
+
     if result.status != "ok":
         print(f"error: {result.error}", file=sys.stderr)
         return 1
@@ -143,7 +156,6 @@ def _run_add_attachment(args) -> int:
 
 def _run_remove_attachment(args) -> int:
     import base64
-    from m365ctl.mail.mutate.attach import execute_remove_attachment
 
     cfg, auth_mode, cred = load_and_authorize(args)
     assert_mail_target_allowed(
