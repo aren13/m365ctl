@@ -83,7 +83,64 @@ class FromP:
 
 
 @dataclass(frozen=True)
+class ToP:
+    address: str | None = None
+    address_in: tuple[str, ...] | None = None
+    domain_in: tuple[str, ...] | None = None
+
+    def __init__(
+        self,
+        *,
+        address: str | None = None,
+        address_in: list[str] | tuple[str, ...] | None = None,
+        domain_in: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        object.__setattr__(self, "address", address)
+        object.__setattr__(
+            self, "address_in",
+            tuple(address_in) if address_in is not None else None,
+        )
+        object.__setattr__(
+            self, "domain_in",
+            tuple(domain_in) if domain_in is not None else None,
+        )
+
+
+@dataclass(frozen=True)
+class CcP:
+    address: str | None = None
+    address_in: tuple[str, ...] | None = None
+    domain_in: tuple[str, ...] | None = None
+
+    def __init__(
+        self,
+        *,
+        address: str | None = None,
+        address_in: list[str] | tuple[str, ...] | None = None,
+        domain_in: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        object.__setattr__(self, "address", address)
+        object.__setattr__(
+            self, "address_in",
+            tuple(address_in) if address_in is not None else None,
+        )
+        object.__setattr__(
+            self, "domain_in",
+            tuple(domain_in) if domain_in is not None else None,
+        )
+
+
+@dataclass(frozen=True)
 class SubjectP:
+    contains: str | None = None
+    starts_with: str | None = None
+    ends_with: str | None = None
+    regex: str | None = None
+    equals: str | None = None
+
+
+@dataclass(frozen=True)
+class BodyP:
     contains: str | None = None
     starts_with: str | None = None
     ends_with: str | None = None
@@ -162,7 +219,7 @@ class ImportanceP:
 
 
 Predicate = (
-    FromP | SubjectP | FolderP | AgeP | UnreadP | FlaggedP
+    FromP | ToP | CcP | SubjectP | BodyP | FolderP | AgeP | UnreadP | FlaggedP
     | HasAttachmentsP | CategoriesP | FocusP | ImportanceP
 )
 
@@ -355,22 +412,14 @@ def _parse_predicate(key: str, val: Any, *, where: str) -> Predicate:
         )
     if key == "from":
         return _parse_addr_predicate(FromP, val, where=f"{where}.from")
-    if key == "to" or key == "cc":
-        # First-cut: 'to' / 'cc' use the same shape as 'from'. Defer wiring
-        # in match.py if/when there's a use case beyond `from` for triage.
-        # For now reject with an explanatory error (so YAML doesn't silently
-        # parse to a no-op).
-        raise DslError(
-            f"{where}: predicate {key!r} not yet supported (Phase 10.x); "
-            f"use 'from' or open an issue."
-        )
+    if key == "to":
+        return _parse_addr_predicate(ToP, val, where=f"{where}.to")
+    if key == "cc":
+        return _parse_addr_predicate(CcP, val, where=f"{where}.cc")
     if key == "subject":
         return _parse_string_predicate(SubjectP, val, where=f"{where}.subject")
     if key == "body":
-        raise DslError(
-            f"{where}: predicate 'body' not supported in Phase 10 — body "
-            f"isn't in the catalog yet (Phase 10.x)."
-        )
+        return _parse_string_predicate(BodyP, val, where=f"{where}.body")
     if key == "folder":
         return _parse_folder_predicate(val, where=f"{where}.folder")
     if key == "age":
@@ -412,6 +461,9 @@ def _parse_addr_predicate(cls, val: Any, *, where: str):
     unknown = set(val.keys()) - known
     if unknown:
         raise DslError(f"{where}: unknown operator(s) {sorted(unknown)} on 'from'")
+    # Note: error message kept generic-ish — the {where} prefix already names
+    # the predicate (e.g. "...to"), and the existing test asserts
+    # "unknown operator.*vibes.*from" only on the from-predicate path.
     return cls(
         address=val.get("address"),
         address_in=val.get("address_in"),

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import duckdb
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 _DDL_V1 = """
 CREATE TABLE IF NOT EXISTS mail_schema_meta (
@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
     from_address         VARCHAR,
     from_name            VARCHAR,
     to_addresses         VARCHAR,   -- comma-joined for cheap LIKE search
+    cc_addresses         VARCHAR,   -- comma-joined; v2 adds this column
     received_at          TIMESTAMP,
     sent_at              TIMESTAMP,
     is_read              BOOLEAN,
@@ -88,8 +89,29 @@ CREATE TABLE IF NOT EXISTS mail_deltas (
 """
 
 
+# V2 migration: additive ALTER for legacy v1 catalogs. For fresh databases
+# the column is already present in _DDL_V1, so the ALTER is a no-op (DuckDB
+# raises "Catalog Error" / "duplicate column" — we swallow that). DuckDB
+# 0.9+ supports ``ADD COLUMN IF NOT EXISTS`` but older builds don't, so we
+# wrap defensively.
+_DDL_V2_MIGRATIONS = (
+    "ALTER TABLE mail_messages ADD COLUMN IF NOT EXISTS cc_addresses VARCHAR;"
+)
+
+
 def apply_schema(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(_DDL_V1)
+    try:
+        conn.execute(_DDL_V2_MIGRATIONS)
+    except duckdb.Error:
+        # Older DuckDB builds reject ``IF NOT EXISTS`` on ADD COLUMN; fall
+        # back to a plain ALTER and tolerate "already exists" errors.
+        try:
+            conn.execute(
+                "ALTER TABLE mail_messages ADD COLUMN cc_addresses VARCHAR"
+            )
+        except duckdb.Error:
+            pass  # already there
     row = conn.execute(
         "SELECT COUNT(*) FROM mail_schema_meta WHERE version = ?",
         [CURRENT_SCHEMA_VERSION],

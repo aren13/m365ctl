@@ -35,6 +35,7 @@ def test_normalize_message_full_payload() -> None:
     assert row["from_address"] == "alice@example.com"
     assert row["from_name"] == "Alice"
     assert row["to_addresses"] == "bob@example.com,carol@example.com"
+    assert row["cc_addresses"] == ""
     assert row["categories"] == "Work,Urgent"
     assert row["is_read"] is False
     assert row["has_attachments"] is True
@@ -52,6 +53,22 @@ def test_normalize_message_deleted_tombstone() -> None:
     # Tombstones have minimal data; everything else is None / defaults.
     assert row["subject"] is None
     assert row["received_at"] is None
+    # cc_addresses tombstone shape mirrors to_addresses (empty string).
+    assert row["cc_addresses"] == row["to_addresses"] == ""
+
+
+def test_normalize_message_with_cc_recipients() -> None:
+    raw = {
+        "id": "msg-cc",
+        "parentFolderId": "fld-inbox",
+        "subject": "cc-test",
+        "ccRecipients": [
+            {"emailAddress": {"name": "Dan", "address": "dan@example.com"}},
+            {"emailAddress": {"name": "Eve", "address": "eve@example.com"}},
+        ],
+    }
+    row = normalize_message("me", raw, parent_folder_path="Inbox")
+    assert row["cc_addresses"] == "dan@example.com,eve@example.com"
 
 
 def test_normalize_message_handles_missing_from() -> None:
@@ -65,6 +82,7 @@ def test_normalize_message_handles_missing_from() -> None:
     assert row["from_address"] is None
     assert row["from_name"] is None
     assert row["to_addresses"] == ""
+    assert row["cc_addresses"] == ""
 
 
 def test_normalize_folder() -> None:

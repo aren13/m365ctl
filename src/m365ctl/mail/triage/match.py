@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, CategoriesP, FlaggedP, FocusP, FolderP, FromP,
+    AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
     HasAttachmentsP, ImportanceP, Match, Predicate,
-    SubjectP, UnreadP,
+    SubjectP, ToP, UnreadP,
 )
 
 
@@ -29,8 +29,14 @@ def evaluate_match(match: Match, row: dict[str, Any], *, now: datetime) -> bool:
 def _eval(p: Predicate, row: dict[str, Any], *, now: datetime) -> bool:
     if isinstance(p, FromP):
         return _eval_from(p, row)
+    if isinstance(p, ToP):
+        return _eval_to(p, row)
+    if isinstance(p, CcP):
+        return _eval_cc(p, row)
     if isinstance(p, SubjectP):
         return _eval_subject(p, row)
+    if isinstance(p, BodyP):
+        return _eval_body(p, row)
     if isinstance(p, FolderP):
         return _eval_folder(p, row)
     if isinstance(p, AgeP):
@@ -65,6 +71,65 @@ def _eval_from(p: FromP, row: dict[str, Any]) -> bool:
         domain = addr.rsplit("@", 1)[-1] if "@" in addr else ""
         if domain not in {d.lower() for d in p.domain_in}:
             return False
+    return True
+
+
+def _eval_to(p: ToP, row: dict[str, Any]) -> bool:
+    raw = (row.get("to_addresses") or "").lower()
+    if not raw:
+        return False
+    addrs = [a.strip() for a in raw.split(",") if a.strip()]
+    if p.address is not None and p.address.lower() not in addrs:
+        return False
+    if p.address_in is not None:
+        wanted = {a.lower() for a in p.address_in}
+        if not wanted.intersection(addrs):
+            return False
+    if p.domain_in is not None:
+        domains = {a.split("@", 1)[-1] for a in addrs if "@" in a}
+        wanted_d = {d.lower() for d in p.domain_in}
+        if not wanted_d.intersection(domains):
+            return False
+    return True
+
+
+def _eval_cc(p: CcP, row: dict[str, Any]) -> bool:
+    raw = (row.get("cc_addresses") or "").lower()
+    if not raw:
+        return False
+    addrs = [a.strip() for a in raw.split(",") if a.strip()]
+    if p.address is not None and p.address.lower() not in addrs:
+        return False
+    if p.address_in is not None:
+        wanted = {a.lower() for a in p.address_in}
+        if not wanted.intersection(addrs):
+            return False
+    if p.domain_in is not None:
+        domains = {a.split("@", 1)[-1] for a in addrs if "@" in a}
+        wanted_d = {d.lower() for d in p.domain_in}
+        if not wanted_d.intersection(domains):
+            return False
+    return True
+
+
+def _eval_body(p: BodyP, row: dict[str, Any]) -> bool:
+    s = row.get("body_preview") or ""
+    if not s and any(
+        v is not None for v in (
+            p.equals, p.contains, p.starts_with, p.ends_with, p.regex,
+        )
+    ):
+        return False
+    if p.equals is not None and s != p.equals:
+        return False
+    if p.contains is not None and p.contains.lower() not in s.lower():
+        return False
+    if p.starts_with is not None and not s.startswith(p.starts_with):
+        return False
+    if p.ends_with is not None and not s.endswith(p.ends_with):
+        return False
+    if p.regex is not None and not re.search(p.regex, s):
+        return False
     return True
 
 

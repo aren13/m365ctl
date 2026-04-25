@@ -26,6 +26,7 @@ def _seed_messages(catalog_path: Path, rows: list[dict]) -> None:
                 "from_address": r.get("from_address", "x@example.com"),
                 "from_name": "X",
                 "to_addresses": "",
+                "cc_addresses": "",
                 "received_at": r.get("received_at"),
                 "sent_at": None,
                 "is_read": r.get("is_read", False),
@@ -45,7 +46,7 @@ def _seed_messages(catalog_path: Path, rows: list[dict]) -> None:
                 "INSERT INTO mail_messages VALUES ($mailbox_upn, $message_id, "
                 "$internet_message_id, $conversation_id, $parent_folder_id, "
                 "$parent_folder_path, $subject, $from_address, $from_name, "
-                "$to_addresses, $received_at, $sent_at, $is_read, $is_draft, "
+                "$to_addresses, $cc_addresses, $received_at, $sent_at, $is_read, $is_draft, "
                 "$has_attachments, $importance, $flag_status, $categories, "
                 "$inference_class, $body_preview, $web_link, $size_estimate, "
                 "$is_deleted, $last_seen_at)",

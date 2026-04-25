@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from m365ctl.mail.triage.dsl import (
-    AgeP, CategoriesP, FlaggedP, FocusP, FolderP, FromP, HasAttachmentsP,
-    ImportanceP, Match, SubjectP, UnreadP,
+    AgeP, BodyP, CategoriesP, CcP, FlaggedP, FocusP, FolderP, FromP,
+    HasAttachmentsP, ImportanceP, Match, SubjectP, ToP, UnreadP,
 )
 from m365ctl.mail.triage.match import evaluate_match
 
@@ -132,6 +132,83 @@ def test_categories_in():
     m = Match(all_of=[CategoriesP(in_=["A", "B"])])
     assert evaluate_match(m, _row(categories="C,A"), now=_NOW) is True
     assert evaluate_match(m, _row(categories="X"), now=_NOW) is False
+
+
+def test_to_address_in_to_addresses():
+    m = Match(all_of=[ToP(address="bob@example.com")])
+    assert evaluate_match(
+        m, _row(to_addresses="alice@example.com,bob@example.com"), now=_NOW
+    ) is True
+    assert evaluate_match(
+        m, _row(to_addresses="alice@example.com"), now=_NOW
+    ) is False
+
+
+def test_to_domain_in_matches_any_address():
+    m = Match(all_of=[ToP(domain_in=["example.com"])])
+    assert evaluate_match(
+        m, _row(to_addresses="bob@other.com,carol@example.com"), now=_NOW
+    ) is True
+    assert evaluate_match(
+        m, _row(to_addresses="bob@other.com"), now=_NOW
+    ) is False
+
+
+def test_body_contains_case_insensitive():
+    m = Match(all_of=[BodyP(contains="INVOICE")])
+    assert evaluate_match(
+        m, _row(body_preview="Please find the invoice attached"), now=_NOW
+    ) is True
+
+
+def test_body_does_not_match_when_preview_empty_or_null():
+    m = Match(all_of=[BodyP(contains="anything")])
+    assert evaluate_match(m, _row(body_preview=""), now=_NOW) is False
+    assert evaluate_match(m, _row(body_preview=None), now=_NOW) is False
+
+
+def test_body_regex_starts_ends_with():
+    assert evaluate_match(
+        Match(all_of=[BodyP(regex=r"^[A-Z]")]),
+        _row(body_preview="Hello body"),
+        now=_NOW,
+    ) is True
+    assert evaluate_match(
+        Match(all_of=[BodyP(starts_with="Hello")]),
+        _row(body_preview="Hello body"),
+        now=_NOW,
+    ) is True
+    assert evaluate_match(
+        Match(all_of=[BodyP(ends_with="body")]),
+        _row(body_preview="Hello body"),
+        now=_NOW,
+    ) is True
+
+
+def test_cc_address_in_matches():
+    m = Match(all_of=[CcP(address_in=["dan@example.com"])])
+    assert evaluate_match(
+        m, _row(cc_addresses="dan@example.com,eve@example.com"), now=_NOW
+    ) is True
+    assert evaluate_match(
+        m, _row(cc_addresses="zoe@example.com"), now=_NOW
+    ) is False
+
+
+def test_cc_domain_in_matches():
+    m = Match(all_of=[CcP(domain_in=["example.com"])])
+    assert evaluate_match(
+        m, _row(cc_addresses="dan@other.com,eve@example.com"), now=_NOW
+    ) is True
+
+
+def test_cc_against_null_cc_addresses_returns_false():
+    m = Match(all_of=[CcP(address="anybody@anywhere.com")])
+    # Pre-migration row: cc_addresses key absent / NULL.
+    assert evaluate_match(m, _row(cc_addresses=None), now=_NOW) is False
+    row_no_cc = _row()
+    row_no_cc.pop("cc_addresses", None)
+    assert evaluate_match(m, row_no_cc, now=_NOW) is False
 
 
 def test_all_of_requires_all():
