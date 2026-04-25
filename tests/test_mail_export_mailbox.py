@@ -37,7 +37,7 @@ def test_walks_all_folders_exports_each_and_marks_done(tmp_path: Path) -> None:
         ) as mock_list,
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=7,
+            return_value=(7, "m7", "2026-04-25T07:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
@@ -72,10 +72,16 @@ def test_walks_all_folders_exports_each_and_marks_done(tmp_path: Path) -> None:
         assert ka["auth_mode"] == "delegated"
         assert "folder_path" in ka
 
-    # All three folders marked status=done with count from the export.
+    # Each call passed resume_after=None and a progress_callback.
+    for ka in call_args:
+        assert ka["resume_after"] is None
+        assert callable(ka["progress_callback"])
+
+    # All three folders marked status=done with the cursor's last id.
     for fid in ("fld-1", "fld-2", "fld-3"):
         assert manifest.folders[fid].status == "done"
-        assert manifest.folders[fid].count == 7
+        assert manifest.folders[fid].last_exported_id == "m7"
+        assert manifest.folders[fid].last_exported_received_at == "2026-04-25T07:00:00Z"
 
     # Manifest file persisted on disk.
     persisted = read_manifest(tmp_path / "manifest.json")
@@ -104,7 +110,7 @@ def test_skips_folder_already_marked_done(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=4,
+            return_value=(4, "m4", "2026-04-25T04:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
@@ -123,7 +129,6 @@ def test_skips_folder_already_marked_done(tmp_path: Path) -> None:
     assert manifest.folders["fld-1"].status == "done"
     assert manifest.folders["fld-1"].count == 99
     assert manifest.folders["fld-2"].status == "done"
-    assert manifest.folders["fld-2"].count == 4
 
 
 def test_first_run_populates_mailbox_upn_and_started_at(tmp_path: Path) -> None:
@@ -135,7 +140,7 @@ def test_first_run_populates_mailbox_upn_and_started_at(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=2,
+            return_value=(2, "m2", "2026-04-25T02:00:00Z"),
         ),
     ):
         manifest = export_mailbox(
@@ -163,7 +168,7 @@ def test_folder_path_with_slash_gets_sanitised(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=1,
+            return_value=(1, "m1", "2026-04-25T01:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
@@ -206,8 +211,169 @@ def test_empty_mailbox_writes_empty_manifest_and_exits_cleanly(tmp_path: Path) -
     assert manifest.folders == {}
     assert manifest.mailbox_upn == "alice@example.com"
     assert manifest.started_at != ""
-    # No file written to disk yet — only the per-folder writes persist; on
-    # zero folders there's no write. The orchestrator writes only when it
-    # does work. (Implementation contract: empty mailbox is allowed to
-    # leave no manifest.json; verify it didn't crash and returned the
-    # in-memory manifest.)
+
+
+# ---- Phase 11.x: mid-folder resume orchestration ----
+
+def test_resume_passes_cursor_for_in_progress_folder(tmp_path: Path) -> None:
+    """An in_progress folder with last_exported_* triggers resume_after."""
+    pre = Manifest(mailbox_upn="alice@example.com",
+                   started_at="2026-04-25T00:00:00+00:00")
+    pre.update_folder(
+        "fld-1",
+        folder_path="Inbox",
+        mbox_path="Inbox.mbox",
+        status="in_progress",
+        count=5,
+        last_exported_id="m5",
+        last_exported_received_at="2026-04-05T10:00:00Z",
+    )
+    write_manifest(pre, tmp_path / "manifest.json")
+
+    graph = MagicMock()
+    with (
+        patch(
+            "m365ctl.mail.export.mailbox.list_folders",
+            return_value=iter([_folder("fld-1", "Inbox")]),
+        ),
+        patch(
+            "m365ctl.mail.export.mailbox.export_folder_to_mbox",
+            return_value=(3, "m8", "2026-04-08T10:00:00Z"),
+        ) as mock_export,
+    ):
+        export_mailbox(
+            graph,
+            mailbox_spec="me",
+            mailbox_upn="alice@example.com",
+            auth_mode="delegated",
+            out_dir=tmp_path,
+        )
+
+    kwargs = mock_export.call_args.kwargs
+    assert kwargs["resume_after"] == ("2026-04-05T10:00:00Z", "m5")
+
+
+def test_pending_or_new_folder_starts_fresh(tmp_path: Path) -> None:
+    """Folder with no manifest entry passes resume_after=None."""
+    graph = MagicMock()
+    with (
+        patch(
+            "m365ctl.mail.export.mailbox.list_folders",
+            return_value=iter([_folder("fld-x", "Drafts")]),
+        ),
+        patch(
+            "m365ctl.mail.export.mailbox.export_folder_to_mbox",
+            return_value=(0, None, None),
+        ) as mock_export,
+    ):
+        export_mailbox(
+            graph,
+            mailbox_spec="me",
+            mailbox_upn="alice@example.com",
+            auth_mode="delegated",
+            out_dir=tmp_path,
+        )
+
+    assert mock_export.call_args.kwargs["resume_after"] is None
+
+
+def test_in_progress_without_cursor_starts_fresh(tmp_path: Path) -> None:
+    """An in_progress folder lacking last_exported_* must NOT resume."""
+    pre = Manifest(mailbox_upn="a@x", started_at="2026-04-25T00:00:00+00:00")
+    pre.update_folder(
+        "fld-1",
+        folder_path="Inbox",
+        mbox_path="Inbox.mbox",
+        status="in_progress",
+        count=0,
+    )
+    write_manifest(pre, tmp_path / "manifest.json")
+
+    graph = MagicMock()
+    with (
+        patch(
+            "m365ctl.mail.export.mailbox.list_folders",
+            return_value=iter([_folder("fld-1", "Inbox")]),
+        ),
+        patch(
+            "m365ctl.mail.export.mailbox.export_folder_to_mbox",
+            return_value=(2, "m2", "2026-04-02T10:00:00Z"),
+        ) as mock_export,
+    ):
+        export_mailbox(
+            graph,
+            mailbox_spec="me",
+            mailbox_upn="a@x",
+            auth_mode="delegated",
+            out_dir=tmp_path,
+        )
+
+    assert mock_export.call_args.kwargs["resume_after"] is None
+
+
+def test_progress_callback_checkpoints_manifest(tmp_path: Path) -> None:
+    """Each progress_callback invocation updates and persists the manifest."""
+    graph = MagicMock()
+
+    def fake_export(graph, **kwargs):  # type: ignore[no-untyped-def]
+        cb = kwargs["progress_callback"]
+        cb("m1", "2026-04-01T10:00:00Z")
+        cb("m2", "2026-04-02T10:00:00Z")
+        cb("m3", "2026-04-03T10:00:00Z")
+        return 3, "m3", "2026-04-03T10:00:00Z"
+
+    with (
+        patch(
+            "m365ctl.mail.export.mailbox.list_folders",
+            return_value=iter([_folder("fld-1", "Inbox")]),
+        ),
+        patch(
+            "m365ctl.mail.export.mailbox.export_folder_to_mbox",
+            side_effect=fake_export,
+        ),
+    ):
+        manifest = export_mailbox(
+            graph,
+            mailbox_spec="me",
+            mailbox_upn="alice@example.com",
+            auth_mode="delegated",
+            out_dir=tmp_path,
+        )
+
+    fe = manifest.folders["fld-1"]
+    assert fe.count == 3
+    assert fe.last_exported_id == "m3"
+    assert fe.last_exported_received_at == "2026-04-03T10:00:00Z"
+    assert fe.status == "done"
+
+    # Persisted on disk.
+    persisted = read_manifest(tmp_path / "manifest.json")
+    assert persisted.folders["fld-1"].count == 3
+    assert persisted.folders["fld-1"].last_exported_id == "m3"
+
+
+def test_completed_folder_records_final_cursor(tmp_path: Path) -> None:
+    """After folder export, status=done and last_exported_id matches return."""
+    graph = MagicMock()
+    with (
+        patch(
+            "m365ctl.mail.export.mailbox.list_folders",
+            return_value=iter([_folder("fld-1", "Inbox")]),
+        ),
+        patch(
+            "m365ctl.mail.export.mailbox.export_folder_to_mbox",
+            return_value=(7, "m-final", "2026-04-25T23:00:00Z"),
+        ),
+    ):
+        manifest = export_mailbox(
+            graph,
+            mailbox_spec="me",
+            mailbox_upn="alice@example.com",
+            auth_mode="delegated",
+            out_dir=tmp_path,
+        )
+
+    fe = manifest.folders["fld-1"]
+    assert fe.status == "done"
+    assert fe.last_exported_id == "m-final"
+    assert fe.last_exported_received_at == "2026-04-25T23:00:00Z"

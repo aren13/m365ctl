@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable, Literal
 
 from m365ctl.common.graph import GraphClient
 from m365ctl.mail.endpoints import AuthMode, user_base
@@ -25,13 +25,17 @@ _MBOX_DATE_FMT = "%a %b %d %H:%M:%S %Y"
 class MboxWriter:
     """Stream-write mbox records to a file. Use as a context manager."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, mode: Literal["w", "a"] = "w"):
         self.path = path
+        self._mode = mode
         self._fh: BinaryIO | None = None
 
     def __enter__(self) -> "MboxWriter":
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = open(self.path, "wb")
+        if self._mode == "a":
+            self._fh = open(self.path, "ab")
+        else:
+            self._fh = open(self.path, "wb")
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -62,8 +66,20 @@ def export_folder_to_mbox(
     folder_path: str,
     out_path: Path,
     page_size: int = 100,
-) -> int:
-    """Stream every message in ``folder_id`` into ``out_path``. Returns count."""
+    resume_after: tuple[str, str] | None = None,
+    progress_callback: Callable[[str, str], None] | None = None,
+) -> tuple[int, str | None, str | None]:
+    """Stream every message in ``folder_id`` into ``out_path``.
+
+    Returns ``(count, last_exported_id, last_exported_received_at)``.
+
+    When ``resume_after`` is set to ``(received_at_iso, message_id)``, the
+    mbox is opened in append mode and messages at or before the cursor are
+    skipped (cursor message itself is treated as already-exported).
+
+    ``progress_callback(message_id, received_at_iso)`` is invoked after each
+    successful write so callers can checkpoint persistent state.
+    """
     ub = user_base(mailbox_spec, auth_mode=auth_mode)
     list_path = f"{ub}/mailFolders/{folder_id}/messages"
     params = {
@@ -71,16 +87,39 @@ def export_folder_to_mbox(
         "$orderby": "receivedDateTime asc",
         "$top": page_size,
     }
-    count = 0
+
+    cursor_ts, cursor_id = (resume_after if resume_after else (None, None))
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Touch the file so empty folders still produce an mbox file.
-    out_path.touch()
-    with MboxWriter(out_path) as writer:
+    if not resume_after:
+        # Fresh export — touch so empty folders still produce a file.
+        out_path.touch()
+
+    mode: Literal["w", "a"] = "a" if resume_after else "w"
+    count = 0
+    last_id: str | None = None
+    last_ts: str | None = None
+    with MboxWriter(out_path, mode=mode) as writer:
         for items, _ in graph.get_paginated(list_path, params=params):
             for raw in items:
                 mid = raw["id"]
-                sender = (raw.get("from") or {}).get("emailAddress", {}).get("address") or "unknown"
                 received_str = raw.get("receivedDateTime") or ""
+                if cursor_ts is not None:
+                    # Skip messages strictly before the cursor.
+                    if received_str <= cursor_ts and mid != cursor_id:
+                        continue
+                    if mid == cursor_id:
+                        # Cursor message itself was already exported in the
+                        # prior run; skip and clear the cursor so subsequent
+                        # messages (received_at >= cursor_ts) export.
+                        cursor_ts = None
+                        continue
+                    # Past the cursor — clear it.
+                    cursor_ts = None
+
+                sender = (
+                    (raw.get("from") or {}).get("emailAddress", {}).get("address")
+                    or "unknown"
+                )
                 received = _parse_iso(received_str)
                 eml = fetch_eml_bytes(
                     graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
@@ -88,7 +127,11 @@ def export_folder_to_mbox(
                 )
                 writer.append(eml, sender_addr=sender, received_at=received)
                 count += 1
-    return count
+                last_id = mid
+                last_ts = received_str
+                if progress_callback is not None:
+                    progress_callback(mid, received_str)
+    return count, last_id, last_ts
 
 
 def _parse_iso(s: str) -> datetime:

@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-CURRENT_MANIFEST_VERSION = 1
+CURRENT_MANIFEST_VERSION = 2
 
 
 class ManifestError(ValueError):
@@ -34,6 +34,8 @@ class FolderEntry:
     count: int = 0
     started_at: str | None = None
     completed_at: str | None = None
+    last_exported_id: str | None = None
+    last_exported_received_at: str | None = None
 
 
 @dataclass
@@ -47,6 +49,8 @@ class Manifest:
         self, folder_id: str, *,
         folder_path: str, mbox_path: str,
         status: str, count: int,
+        last_exported_id: str | None = None,
+        last_exported_received_at: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         existing = self.folders.get(folder_id)
@@ -62,6 +66,10 @@ class Manifest:
             existing.started_at = now
         if status == "done":
             existing.completed_at = now
+        if last_exported_id is not None:
+            existing.last_exported_id = last_exported_id
+        if last_exported_received_at is not None:
+            existing.last_exported_received_at = last_exported_received_at
 
 
     def should_skip(self, folder_id: str) -> bool:
@@ -89,15 +97,17 @@ def read_manifest(path: Path) -> Manifest:
         raise ManifestError(f"invalid JSON in {path}: {e}") from e
     if not isinstance(raw, dict):
         raise ManifestError(f"manifest must be an object: {path}")
-    if raw.get("version") != CURRENT_MANIFEST_VERSION:
+    if raw.get("version") not in (1, 2):
         raise ManifestError(
             f"unsupported manifest version {raw.get('version')!r} in {path}"
         )
+    # v1 entries don't have last_exported_*; FolderEntry defaults to None.
     folders = {
         fid: FolderEntry(**fe) for fid, fe in (raw.get("folders") or {}).items()
     }
     return Manifest(
-        version=raw["version"],
+        # Always represent in-memory as the current schema; next save writes v2.
+        version=CURRENT_MANIFEST_VERSION,
         mailbox_upn=raw.get("mailbox_upn", ""),
         started_at=raw.get("started_at", ""),
         folders=folders,
