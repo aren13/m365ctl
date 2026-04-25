@@ -72,6 +72,10 @@ allow-lists, audit log, and undo on every mutation.
 - **Chunked attachments (Phase 5a-2, 1.5):** `mail attach add <msg>
   --file <≥3MB-file> --confirm` streams via Graph's upload-session
   protocol. 4 MB chunks, no in-memory buffering.
+- **DSL predicates extended (Phase 10.x, 1.6):** triage rules now
+  support `to`, `body`, `cc`. Catalog schema bumped to v2 (additive
+  `cc_addresses` migration; existing catalogs auto-upgrade on next
+  refresh).
 
 ## Quickstart
 

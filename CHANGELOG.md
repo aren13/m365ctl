@@ -5,6 +5,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.6.0 — Phase 10.x: DSL predicate deferrals (to / body / cc)
+
+### Added DSL predicates
+- `to: { address | address_in | domain_in }` — uses existing
+  `mail_messages.to_addresses` column. Composable in all/any/none.
+- `body: { contains | starts_with | ends_with | regex | equals }` —
+  matches against `mail_messages.body_preview`. **Limitation:** only
+  the preview (first ~256 chars) is matched, not the full body. Full-body
+  matching would require per-message Graph fetches at match time or a
+  larger catalog footprint; deferred.
+- `cc: { address | address_in | domain_in }` — uses the new
+  `cc_addresses` column.
+
+### Schema migration
+- `mail_messages` schema bumped from v1 to v2: adds `cc_addresses
+  VARCHAR` column. Migration is non-destructive (`ALTER TABLE … ADD
+  COLUMN IF NOT EXISTS`); existing rows get NULL until the next
+  `mail catalog refresh` repopulates them.
+
+### Still deferred
+- `thread.has_reply: false` — needs per-conversation walk; not in
+  catalog.
+- `headers: { contains | equals }` — needs `internetMessageHeaders`
+  per-message fetch.
+- KQL pushdown — local catalog covers the surface; pushdown is purely
+  an optimization for cases the catalog can't handle.
+
 ## 1.5.0 — Phase 5a-2: chunked attachment upload (≥3 MB)
 
 ### Added
