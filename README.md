@@ -1,138 +1,155 @@
 # m365ctl
 
-**m365ctl** is an admin CLI for Microsoft 365 OneDrive + SharePoint + Mail,
-built on Microsoft Graph. Safe by default: dry-run, plan-file workflow, scope
-allow-lists, audit log, and undo on every mutation.
+[![CI](https://github.com/aren13/m365ctl/actions/workflows/ci.yml/badge.svg)](https://github.com/aren13/m365ctl/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-![CI](https://github.com/aren13/m365ctl/actions/workflows/ci.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![License](https://img.shields.io/badge/license-Apache--2.0-green)
+An admin CLI for Microsoft 365 — OneDrive, SharePoint, and Exchange Mail — built on Microsoft Graph.
 
-## Features
+Safe by default: dry-run, plan-file workflow, scope allow-lists, audit log, and undo on every mutation.
 
-**OneDrive + SharePoint**
+## Table of contents
 
-- Catalog mirror in DuckDB (fast local queries).
-- Server + local search.
-- Inventory (top-by-size, top-by-age, duplicates).
-- Move / rename / copy with pre-flight checks.
-- Sensitivity labels (read, set, audit).
-- Sharing audit (permissions snapshot + drift reports).
-- Recycle-bin purge with restore support.
-- Download (bulk + resumable).
+- [Highlights](#highlights)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Features](#features)
+- [Safety model](#safety-model)
+- [Configuration](#configuration)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
 
-**Mail (Phase 1+, scaffolded in Phase 0)**
+## Highlights
 
-- List, get, search messages.
-- Folders + categories management.
-- Inbox rules CRUD.
-- Move / copy / delete / flag / categorize.
-- Focused-Inbox override.
-- Compose, reply, forward, scheduled send.
-- Out-of-office + signature management.
-- Triage DSL for bulk rules.
-- Export to EML / MBOX.
-- **Catalog (Phase 7):** `mail catalog refresh` mirrors folders + messages
-  into `cache/mail.duckdb` via Graph `/delta`; `mail catalog status` and
-  `mail search --local` query the cache offline.
-- **Triage DSL (Phase 10):** `mail triage validate <yaml>` and
-  `mail triage run --rules <yaml> [--plan-out|--confirm]` — YAML rules
-  match against the local catalog and emit a tagged plan that reuses
-  the existing audit/undo paths. Examples in `scripts/mail/rules/`.
-- **Inbox rules CRUD (Phase 8):** `mail rules {create|update|delete|
-  enable|disable|reorder|export|import}` — round-trippable YAML
-  pipeline. `mail rules export --out a.yaml` then
-  `mail rules import --from-file a.yaml --replace --confirm` rebuilds
-  the rule set. Audit + undo intact.
-- **Mailbox settings (Phase 9):** `mail settings {timezone, working-hours}`,
-  `mail ooo {show, on, off}` with scheduled-OOO + 60-day safety gate, and
-  `mail signature {show, set}` over a local-file fallback. All mutations
-  audit-logged and undoable.
-- **Export (Phase 11):** `mail export {message,folder,mailbox,attachments}`
-  — per-message EML, streaming MBOX, attachment dump, and full-mailbox
-  manifest with resume-on-interrupt. All read-only.
-- **Convenience verbs (Phase 14, 1.0):** `mail {digest, archive, snooze,
-  unsubscribe, top-senders, size-report}` — daily-driver composition over
-  the core surface. See `docs/mail/convenience-commands.md` for each one's
-  synopsis and example output.
-- **Hard delete (Phase 6, 1.1):** `mail clean <id>`, `mail clean recycle-bin`,
-  `mail empty <folder>` — irreversible deletes with full EML capture to
-  `[logging].purged_dir` BEFORE the wire-delete. Triple-gated: `--confirm`,
-  TTY-typed phrase, and a common-folder/≥1000-item escalation.
-- **Multi-mailbox + delegation (Phase 12, 1.2):** every shipped verb
-  accepts `--mailbox shared:<addr>` for shared-mailbox routing.
-  `mail delegate {list,grant,revoke} --rights …` manages FullAccess /
-  SendAs / SendOnBehalf via Exchange Online PowerShell with audit + undo.
-- **Scheduled send (Phase 5b, 1.3):** `mail send <draft> --schedule-at <iso>`
-  defers delivery via the MAPI `PR_DEFERRED_DELIVERY_TIME` extended
-  property. Gated behind `[mail].schedule_send_enabled`.
-- **Send-as (Phase 13, 1.4):** `mail sendas <from-upn> --to <addr> ... --confirm`
-  sends as another mailbox via app-only `/users/{upn}/sendMail`. Both the
-  effective sender and the authenticated principal are audit-logged.
-- **Chunked attachments (Phase 5a-2, 1.5):** `mail attach add <msg>
-  --file <≥3MB-file> --confirm` streams via Graph's upload-session
-  protocol. 4 MB chunks, no in-memory buffering.
-- **DSL predicates extended (Phase 10.x, 1.6):** triage rules now
-  support `to`, `body`, `cc`. Catalog schema bumped to v2 (additive
-  `cc_addresses` migration; existing catalogs auto-upgrade on next
-  refresh).
-- **Thread predicate (Phase 10.y, 1.7):** `thread: { has_reply: false }`
-  catches sent mail with no reply yet. Pure catalog reasoning, no per-
-  message Graph fetches.
-- **Mid-folder export resume (Phase 11.x, 1.8):** `mail export mailbox`
-  now resumes interrupted folders message-by-message via
-  `last_exported_id` checkpoints in the manifest. Killing mid-export
-  and re-running picks up where it left off; no re-uploads.
-- **Catalog refresh perf (Phase 7.x, 1.9):** `/messages/delta` now uses
-  `$select` for the ~19 fields the catalog reads (~80% payload trim),
-  and DuckDB upserts batch into one transaction per round. Targets
-  first-time large-mailbox onboarding.
-- **Headers predicate (Phase 10.z, 1.10):** `headers: { name: List-Unsubscribe, contains: example.com }`
-  matches against `internetMessageHeaders` with lazy per-message fetch
-  + per-run cache. Rulesets without headers predicates pay zero overhead.
-- **Soft-delete-undo cleanup (Phase 4.x, 1.11):** `m365ctl undo` for
-  `mail.delete.soft` now handles manually-moved-out-of-Deleted-Items
-  and already-restored cases without falling back to "restore manually".
+- **Read-only by default.** Mutating verbs require `--confirm` and are logged.
+- **Local catalog.** DuckDB mirrors of files and mail enable offline queries.
+- **Plan / replay.** Bulk operations produce reviewable plan files before execution.
+- **Undoable.** Every mutation records before/after state for `m365ctl undo`.
+- **Scope guards.** `allow_drives` / `allow_mailboxes` / `deny_paths` enforced on every call.
+- **App-only auth.** Certificate-based auth against your Entra app registration.
+
+## Installation
+
+Requires Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/aren13/m365ctl
+cd m365ctl
+uv sync --all-extras
+```
 
 ## Quickstart
 
-```bash
-git clone https://github.com/<you>/m365ctl
-cd m365ctl
-uv sync --all-extras
-cp config.toml.example config.toml
-# Follow docs/setup/first-run.md to fill in config + cert.
-./bin/od-auth login
-./bin/od-auth whoami
-```
+1. **Register an Entra app** and grant Graph permissions — see [docs/setup/azure-app-registration.md](docs/setup/azure-app-registration.md).
+2. **Generate a client certificate** — see [docs/setup/certificate-auth.md](docs/setup/certificate-auth.md).
+3. **Configure** the CLI:
 
-`uv` not installed yet? See https://docs.astral.sh/uv/.
+   ```bash
+   cp config.toml.example config.toml
+   # Edit config.toml: tenant id, app id, cert path, allow-lists.
+   ```
 
-## Setup
+4. **Authenticate and verify**:
 
-- [docs/setup/azure-app-registration.md](docs/setup/azure-app-registration.md) — create the Entra app and grant permissions.
-- [docs/setup/certificate-auth.md](docs/setup/certificate-auth.md) — generate + upload the client cert for app-only flows.
-- [docs/setup/first-run.md](docs/setup/first-run.md) — end-to-end, ≤ 20 minutes from `git clone` to `od-auth whoami`.
+   ```bash
+   ./bin/od-auth login
+   ./bin/od-auth whoami
+   ./bin/mail-whoami
+   ```
+
+Full walkthrough: [docs/setup/first-run.md](docs/setup/first-run.md) (≤ 20 minutes from clone to whoami).
+
+## Features
+
+### OneDrive and SharePoint
+
+| Capability        | Commands                                       |
+| ----------------- | ---------------------------------------------- |
+| Catalog mirror    | `od-catalog-refresh`, `od-catalog-status`      |
+| Search            | `od-search` (server and local)                 |
+| Inventory         | `od-inventory` (top-by-size, top-by-age, dups) |
+| File operations   | `od-move`, `od-rename`, `od-copy`              |
+| Sensitivity       | `od-label`                                     |
+| Sharing audit     | `od-audit-sharing`                             |
+| Recycle bin       | `od-clean`, `od-delete`                        |
+| Download          | `od-download` (bulk + resumable)               |
+
+### Mail
+
+| Capability         | Commands                                                       |
+| ------------------ | -------------------------------------------------------------- |
+| Read               | `mail-list`, `mail-get`, `mail-read`, `mail-search`            |
+| Folders / labels   | `mail-folders`, `mail-categories`, `mail-categorize`           |
+| Compose            | `mail-draft`, `mail-send`, `mail-reply`, `mail-forward`        |
+| Move / flag        | `mail-move`, `mail-copy`, `mail-flag`, `mail-focus`            |
+| Inbox rules        | `mail-rules` (create, update, delete, import, export)          |
+| Mailbox settings   | `mail-settings`, `mail-ooo`, `mail-signature`                  |
+| Triage DSL         | `mail-triage` (YAML rules over local catalog)                  |
+| Catalog            | `mail-catalog-refresh`, `mail-catalog-status`                  |
+| Export             | `mail-export` (EML, MBOX, attachments, full mailbox)           |
+| Hard delete        | `mail-clean`, `mail-empty` (triple-gated)                      |
+| Delegation         | `mail-delegate`, `--mailbox shared:<addr>` routing             |
+| Send-as            | `mail-sendas` (app-only, fully audited)                        |
+| Scheduled send     | `mail-send --schedule-at <iso>`                                |
+| Convenience verbs  | `mail-digest`, `mail-archive`, `mail-snooze`, `mail-top-senders`, `mail-size-report`, `mail-unsubscribe` |
+
+Each verb supports `--help`. See [docs/mail/convenience-commands.md](docs/mail/convenience-commands.md) for the convenience-verb reference.
 
 ## Safety model
 
-- **Dry-run default.** Every mutating verb requires `--confirm` to act.
-- **Plan-file workflow.** Bulk ops are reviewed as a plan file before replay.
-- **Scope allow-lists.** `allow_drives` / `allow_mailboxes` gate every call; `deny_paths` / `deny_folders` are absolute.
-- **Undo via audit log.** Each mutation records a before/after block; `m365ctl undo <op-id>` replays the inverse.
+| Layer            | Behavior                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Dry-run default  | Mutating verbs print a plan and exit unless `--confirm` is passed.                                    |
+| Plan files       | Bulk operations write a plan file that can be reviewed before `--replay`.                             |
+| Scope allow-lists| `allow_drives` / `allow_mailboxes` gate every API call; `deny_paths` / `deny_folders` are absolute.   |
+| Audit log        | Each mutation records a before/after block to a tamper-resistant log.                                 |
+| Undo             | `m365ctl undo <op-id>` (or `od-undo` / `mail-undo`) replays the inverse using the audit record.       |
+| Hard-delete gate | Irreversible deletes require `--confirm`, a TTY-typed phrase, and an extra escalation for large ops.  |
 
-## Commands
+## Configuration
 
-Per-command docs land in `docs/` as verbs stabilize. For the sharing-audit
-PowerShell prerequisites see
-[docs/ops/pnp-powershell-setup.md](docs/ops/pnp-powershell-setup.md).
+`config.toml` controls auth, scopes, paths, and feature flags. Start from `config.toml.example`:
 
-Top-level entry points live in `bin/` (e.g. `od-auth`, `od-search`,
-`od-inventory`, `od-move`, `od-undo`). Each accepts `--help`.
+```toml
+[auth]
+tenant_id   = "..."
+client_id   = "..."
+cert_path   = "~/.m365ctl/cert.pem"
+
+[scope]
+allow_drives    = ["..."]
+allow_mailboxes = ["user@example.com"]
+deny_paths      = ["/Confidential"]
+
+[mail]
+schedule_send_enabled = false
+```
+
+Catalog files, plan files, and the audit log default to `cache/`, `plans/`, and `logs/` under the project root — override per `config.toml`.
+
+## Documentation
+
+| Topic                          | Link                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| Azure app registration         | [docs/setup/azure-app-registration.md](docs/setup/azure-app-registration.md)        |
+| Certificate-based auth         | [docs/setup/certificate-auth.md](docs/setup/certificate-auth.md)                    |
+| First-run walkthrough          | [docs/setup/first-run.md](docs/setup/first-run.md)                                  |
+| PnP PowerShell prerequisites   | [docs/ops/pnp-powershell-setup.md](docs/ops/pnp-powershell-setup.md)                |
+| Mail convenience verbs         | [docs/mail/convenience-commands.md](docs/mail/convenience-commands.md)              |
+| Changelog                      | [CHANGELOG.md](CHANGELOG.md)                                                        |
+| Contributing                   | [CONTRIBUTING.md](CONTRIBUTING.md)                                                  |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests welcome. Before opening a PR, please read [CONTRIBUTING.md](CONTRIBUTING.md) and run the test suite:
+
+```bash
+uv run pytest
+uv run ruff check .
+uv run mypy src
+```
 
 ## License
 
@@ -140,4 +157,4 @@ Apache-2.0. See [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This is an independent open-source project. Not affiliated with Microsoft.
+This is an independent open-source project. Not affiliated with, endorsed by, or supported by Microsoft. "Microsoft 365", "OneDrive", "SharePoint", and "Exchange" are trademarks of Microsoft Corporation.
