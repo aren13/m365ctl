@@ -5,6 +5,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 1.5.0 — Phase 5a-2: chunked attachment upload (≥3 MB)
+
+### Added
+- `GraphClient.put_chunk(url, data, *, content_range, content_length)` —
+  unauthenticated PUT to a Graph upload-session URL.
+- `m365ctl.mail.mutate.attach.execute_add_attachment_large` — three-step
+  upload-session flow: createUploadSession → streamed PUT chunks →
+  final attachment metadata. Default chunk size 4 MB (multiple of 320 KB
+  per Graph requirements).
+- `mail attach add <msg> --file <≥3MB-file> --confirm` now works
+  end-to-end. Replaces the Phase 5a deferred-stub error.
+
+### Streaming
+The executor reads the file chunk-by-chunk with `Path.open("rb")` so a
+1 GB attachment doesn't load into memory or bloat the audit log.
+`args["file_path"]` is recorded; `content_bytes_b64` is omitted for the
+large path.
+
+### Spec parity
+This closes the last open item from spec §19. m365ctl 1.5.0 covers the
+full spec surface (Phases 0-14, with the documented "out of scope"
+items deferred or noted in CHANGELOG).
+
 ## 1.4.0 — Phase 13: send-as / on-behalf-of
 
 ### Added

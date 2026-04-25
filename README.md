@@ -69,6 +69,9 @@ allow-lists, audit log, and undo on every mutation.
 - **Send-as (Phase 13, 1.4):** `mail sendas <from-upn> --to <addr> ... --confirm`
   sends as another mailbox via app-only `/users/{upn}/sendMail`. Both the
   effective sender and the authenticated principal are audit-logged.
+- **Chunked attachments (Phase 5a-2, 1.5):** `mail attach add <msg>
+  --file <≥3MB-file> --confirm` streams via Graph's upload-session
+  protocol. 4 MB chunks, no in-memory buffering.
 
 ## Quickstart
 
