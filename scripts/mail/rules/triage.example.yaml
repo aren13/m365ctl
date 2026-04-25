@@ -1,0 +1,53 @@
+# m365ctl mail triage — reference rules file.
+# Shows every predicate and action shipped in Phase 10.
+# Run dry: m365ctl mail triage run --rules triage.example.yaml --plan-out /tmp/p.json
+version: 1
+mailbox: me
+
+rules:
+  - name: archive-newsletters
+    enabled: true
+    match:
+      all:
+        - from: { domain_in: [newsletter.example.com, news.example.com] }
+        - age: { older_than_days: 7 }
+        - folder: Inbox
+    actions:
+      - categorize: { add: [Archived/Newsletter] }
+      - move: { to_folder: Archive/Newsletters }
+
+  - name: urgent-from-leadership
+    match:
+      all:
+        - unread: true
+        - folder: Inbox
+        - from: { address_in: [alice@example.com, bob@example.com] }
+    actions:
+      - categorize: { add: [Triage/Followup] }
+      - flag: { status: flagged, due_days: 2 }
+      - focus: focused
+
+  - name: receipts-and-invoices
+    match:
+      any:
+        - subject: { contains: invoice }
+        - subject: { regex: "(?i)receipt|order #" }
+      none:
+        - folder: Spam
+    actions:
+      - categorize: { add: [Finance] }
+      - read: false   # keep unread until reviewed
+
+  - name: high-importance-flag
+    match: { importance: high }
+    actions:
+      - flag: { status: flagged }
+
+  - name: stale-attachments
+    match:
+      all:
+        - has_attachments: true
+        - age: { older_than_days: 60 }
+        - folder: Inbox
+    actions:
+      - move: { to_folder: Archive/Attachments }
