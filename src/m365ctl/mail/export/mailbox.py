@@ -46,7 +46,7 @@ def export_mailbox(
         )
         write_manifest(manifest, manifest_path)
         try:
-            count = export_folder_to_mbox(
+            count, _, _ = export_folder_to_mbox(
                 graph,
                 mailbox_spec=mailbox_spec,
                 auth_mode=auth_mode,

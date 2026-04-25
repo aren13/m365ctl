@@ -85,7 +85,7 @@ def test_folder_resolves_path_and_calls_export_folder_to_mbox(tmp_path: Path) ->
          patch("m365ctl.mail.cli.export.resolve_folder_path",
                return_value="fld-resolved") as resolve_mock, \
          patch("m365ctl.mail.cli.export.export_folder_to_mbox",
-               return_value=3) as m:
+               return_value=(3, None, None)) as m:
         rc = cli_export.main([
             "--config", str(cfg),
             "folder", "Inbox", "--out", str(out),

@@ -82,7 +82,7 @@ def _run_folder(args: argparse.Namespace) -> int:
         mailbox_spec=args.mailbox, auth_mode=auth_mode,
     )
     out_path = Path(args.out)
-    count = export_folder_to_mbox(
+    count, _, _ = export_folder_to_mbox(
         graph,
         mailbox_spec=args.mailbox,
         auth_mode=auth_mode,

@@ -37,7 +37,7 @@ def test_walks_all_folders_exports_each_and_marks_done(tmp_path: Path) -> None:
         ) as mock_list,
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=7,
+            return_value=(7, "m7", "2026-04-25T07:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
@@ -104,7 +104,7 @@ def test_skips_folder_already_marked_done(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=4,
+            return_value=(4, "m4", "2026-04-25T04:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
@@ -135,7 +135,7 @@ def test_first_run_populates_mailbox_upn_and_started_at(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=2,
+            return_value=(2, "m2", "2026-04-25T02:00:00Z"),
         ),
     ):
         manifest = export_mailbox(
@@ -163,7 +163,7 @@ def test_folder_path_with_slash_gets_sanitised(tmp_path: Path) -> None:
         ),
         patch(
             "m365ctl.mail.export.mailbox.export_folder_to_mbox",
-            return_value=1,
+            return_value=(1, "m1", "2026-04-25T01:00:00Z"),
         ) as mock_export,
     ):
         manifest = export_mailbox(
