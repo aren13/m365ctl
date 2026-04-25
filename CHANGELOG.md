@@ -5,6 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 0.11.0 — Phase 11: export (EML, MBOX, attachments)
+
+### Added
+- `m365ctl.mail.export.eml` — per-message EML via Graph
+  `/messages/{id}/$value` (returns native RFC 5322 / MIME bytes).
+- `m365ctl.mail.export.mbox` — streaming MBOX writer + per-folder
+  export, `From `-line escaping in bodies.
+- `m365ctl.mail.export.attachments` — file-attachment dump with
+  collision suffixes and basename sanitising.
+- `m365ctl.mail.export.manifest` + `m365ctl.mail.export.mailbox` —
+  resume-on-interrupt full-mailbox export. `manifest.json` records
+  per-folder status (`pending`/`in_progress`/`done`); re-running picks
+  up where it left off.
+- CLI: `mail export {message, folder, mailbox, attachments}` and
+  bin wrapper `bin/mail-export`.
+
+### Read-only
+No mutations, no audit/undo, no Graph writes — pure read path.
+
+### Deferred
+- Per-folder mid-stream resume (currently, an interrupted folder
+  restarts from scratch on next run).
+- Item attachments (`#microsoft.graph.itemAttachment`) and reference
+  attachments (OneDrive item links) — Phase 11.x.
+
 ## 0.10.0 — Phase 9: mailbox settings (OOO, signature, timezone, working hours)
 
 ### Added

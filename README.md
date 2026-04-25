@@ -48,6 +48,9 @@ allow-lists, audit log, and undo on every mutation.
   `mail ooo {show, on, off}` with scheduled-OOO + 60-day safety gate, and
   `mail signature {show, set}` over a local-file fallback. All mutations
   audit-logged and undoable.
+- **Export (Phase 11):** `mail export {message,folder,mailbox,attachments}`
+  — per-message EML, streaming MBOX, attachment dump, and full-mailbox
+  manifest with resume-on-interrupt. All read-only.
 
 ## Quickstart
 
