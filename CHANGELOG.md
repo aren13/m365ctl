@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## 0.10.0 — Phase 9: mailbox settings (OOO, signature, timezone, working hours)
+
+### Added
+- `m365ctl.mail.settings.update_mailbox_settings` — generic /mailboxSettings PATCH wrapper.
+- `m365ctl.mail.mutate.settings` — executors for timezone, workingHours, automaticRepliesSetting (OOO), and local signature. All audit-logged + undoable via `m365ctl undo <op-id>`.
+- `m365ctl.mail.signature` — local-file signature module. Content type derived from extension (`.html`/`.htm` → HTML, else text).
+- CLI verbs:
+  - `mail settings timezone <tz> --confirm`
+  - `mail settings working-hours --from-file <yaml> --confirm`
+  - `mail ooo {show, on, off}` — full automatic-replies management with `--start`/`--end` scheduled-OOO support.
+  - `mail signature {show, set}` — read/write the configured signature file.
+- Bin wrappers `bin/mail-ooo`, `bin/mail-signature`.
+
+### Safety
+- Scheduled-OOO durations longer than 60 days raise `OOOTooLong`; CLI exits 1 with a clear instruction to re-run with `--force`. Manual mass-OOO accidents (e.g. `--end` typo'd as `2030`) caught before they hit the wire.
+
+### Deferred
+- Graph roaming-signatures (`/me/userConfiguration` beta) sync — endpoint is unstable; current implementation is local-only with a documented caveat.
+- TTY-confirm flow for OOO long-duration override (we ship `--force` instead; cleaner for scripted use).
+
 ## 0.9.0 — Phase 8: server-side inbox rules CRUD
 
 ### Added

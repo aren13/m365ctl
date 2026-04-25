@@ -44,6 +44,10 @@ allow-lists, audit log, and undo on every mutation.
   pipeline. `mail rules export --out a.yaml` then
   `mail rules import --from-file a.yaml --replace --confirm` rebuilds
   the rule set. Audit + undo intact.
+- **Mailbox settings (Phase 9):** `mail settings {timezone, working-hours}`,
+  `mail ooo {show, on, off}` with scheduled-OOO + 60-day safety gate, and
+  `mail signature {show, set}` over a local-file fallback. All mutations
+  audit-logged and undoable.
 
 ## Quickstart
 
