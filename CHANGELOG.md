@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-04-27
+
 ### Added
 - `[scope].internal_domain_pattern` (optional regex) in `config.toml`. When set, `od-audit-sharing` passes it through to `scripts/ps/audit-sharing.ps1` as `-InternalDomainPattern` and the PS script uses it to decide whether each share principal is internal. Default (unset) treats every `@`-bearing principal as external — strictly more conservative than the previous hard-coded behaviour.
 
@@ -424,7 +426,8 @@ The translator passes through `_unknown_*` for fields it does not model so a Gra
 ### Removed
 - Tenant-specific identifiers (UUIDs, cert thumbprint) from all tracked code, tests, and documentation (except the migration note and this changelog).
 
-[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/aren13/m365ctl/releases/tag/v1.12.0
 [1.11.1]: https://github.com/aren13/m365ctl/releases/tag/v1.11.1
 [1.11.0]: https://github.com/aren13/m365ctl/releases/tag/v1.11.0
 [1.10.0]: https://github.com/aren13/m365ctl/releases/tag/v1.10.0
