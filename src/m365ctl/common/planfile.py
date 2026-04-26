@@ -1,10 +1,9 @@
 """Shared plan-file schema for mutating commands.
 
-Every mutating CLI ( od-move, od-rename, od-copy, od-delete, od-clean,
-od-label) can emit a plan file with ``--plan-out <path>`` and consume one
-with ``--from-plan <path> --confirm``. The schema is fixed at this
-version for the life of Plan 4; later plans bump ``PLAN_SCHEMA_VERSION``
-and add a migration branch in ``load_plan``.
+Every mutating CLI (od-move, od-rename, od-copy, od-delete, od-clean,
+od-label) can emit a plan file with ``--plan-out <path>`` and consume
+one with ``--from-plan <path> --confirm``. Schema-breaking changes bump
+``PLAN_SCHEMA_VERSION`` and add a migration branch in ``load_plan``.
 
 Key design choice: ``--from-plan`` operates on the exact ``item_id`` list
 in the file. There is no glob re-expansion at execute time. See

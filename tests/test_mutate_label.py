@@ -8,6 +8,13 @@ from m365ctl.onedrive.mutate.label import execute_label_apply, execute_label_rem
 from m365ctl.common.planfile import Operation
 
 
+def _cfg() -> MagicMock:
+    cfg = MagicMock()
+    cfg.tenant_id = "tenant-x"
+    cfg.client_id = "client-x"
+    return cfg
+
+
 def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
     completed = MagicMock()
     completed.returncode = 0
@@ -23,13 +30,19 @@ def test_apply_label_invokes_pwsh_and_logs(tmp_path, mocker):
                    dry_run_result="")
     result = execute_label_apply(op, logger,
                                  before={"parent_path": "/", "name": "x",
-                                         "server_relative_url": "/Documents/x"})
+                                         "server_relative_url": "/Documents/x"},
+                                 cfg=_cfg())
     assert result.status == "ok"
     run.assert_called_once()
     cmd = run.call_args[0][0]
     assert cmd[0] == "pwsh"
     assert any("Set-M365ctlLabel.ps1" in a for a in cmd)
     assert "Confidential" in cmd
+    # Tenant + client must be passed through so PnP can Connect-PnPOnline.
+    tenant_idx = cmd.index("-Tenant")
+    client_idx = cmd.index("-ClientId")
+    assert cmd[tenant_idx + 1] == "tenant-x"
+    assert cmd[client_idx + 1] == "client-x"
     entries = [e for e in iter_audit_entries(logger) if e["op_id"] == "op-1"]
     assert entries[-1]["result"] == "ok"
 
@@ -47,7 +60,8 @@ def test_label_apply_handles_pwsh_missing(tmp_path, mocker):
                    dry_run_result="")
     result = execute_label_apply(op, logger,
                                  before={"parent_path": "/", "name": "x",
-                                         "server_relative_url": "/Documents/x"})
+                                         "server_relative_url": "/Documents/x"},
+                                 cfg=_cfg())
     assert result.status == "error"
     assert result.error is not None
     assert "pwsh" in result.error.lower()
@@ -71,6 +85,7 @@ def test_remove_label_invokes_pwsh_and_logs_error_on_nonzero(tmp_path, mocker):
     result = execute_label_remove(op, logger,
                                   before={"parent_path": "/", "name": "x",
                                           "server_relative_url":
-                                              "/Documents/x"})
+                                              "/Documents/x"},
+                                  cfg=_cfg())
     assert result.status == "error"
     assert "access denied" in result.error.lower()

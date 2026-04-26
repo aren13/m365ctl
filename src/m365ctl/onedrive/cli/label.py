@@ -87,7 +87,8 @@ def run_label(
                              before={"parent_path": meta["parent_path"],
                                      "name": meta["name"],
                                      "server_relative_url":
-                                         meta["server_relative_url"]})
+                                         meta["server_relative_url"]},
+                             cfg=cfg)
             if result.status != "ok":
                 any_error = True
                 print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
@@ -137,7 +138,8 @@ def run_label(
         result = exec_fn(op, logger,
                         before={"parent_path": meta["parent_path"],
                                 "name": meta["name"],
-                                "server_relative_url": meta["server_relative_url"]})
+                                "server_relative_url": meta["server_relative_url"]},
+                        cfg=cfg)
         if result.status != "ok":
             print(f"error: {result.error}", file=sys.stderr)
             return 1

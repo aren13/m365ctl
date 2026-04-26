@@ -265,7 +265,7 @@ def test_purge_falls_through_to_manual_wrap_when_library_suffix_unknown(tmp_path
             return httpx.Response(
                 200,
                 json={"id": "d1",
-                      "webUrl": "https://tenant.sharepoint.com/sites/Foo/SomeCustomLibraryName"},
+                      "webUrl": "https://contoso.sharepoint.com/sites/Foo/SomeCustomLibraryName"},
             )
         raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
 

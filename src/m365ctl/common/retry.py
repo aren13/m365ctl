@@ -1,9 +1,9 @@
 """Simple retry wrapper for transient HTTP errors.
 
-Kept deliberately minimal in Plan 2: a single ``with_retry`` callable that
-takes a zero-arg function and back-off parameters. Graph throttles 429/503
-are the common case; the helper honours a ``Retry-After`` hint if the
-caller supplies one, else exponential back-off.
+Deliberately minimal: a single ``with_retry`` callable that takes a
+zero-arg function and back-off parameters. Graph throttles 429/503 are
+the common case; the helper honours a ``Retry-After`` hint if the caller
+supplies one, else exponential back-off.
 """
 from __future__ import annotations
 

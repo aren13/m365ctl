@@ -1,8 +1,7 @@
 """`od-audit-sharing` subcommand: shell out to PnP.PowerShell.
 
-Plan 3 delivers only the Python wrapper. The heavy lifting lives in
-``scripts/ps/audit-sharing.ps1``; see ``docs/ops/pnp-powershell-setup.md``
-for one-time setup.
+The heavy lifting lives in ``scripts/ps/audit-sharing.ps1``; see
+``docs/ops/pnp-powershell-setup.md`` for one-time setup.
 """
 from __future__ import annotations
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.config import Config
 from m365ctl.onedrive.mutate._pwsh import PS_SCRIPTS_DIR, invoke_pwsh
 from m365ctl.common.planfile import Operation
 
@@ -29,7 +30,7 @@ class LabelResult:
 
 
 def execute_label_apply(
-    op: Operation, logger: AuditLogger, *, before: dict[str, Any],
+    op: Operation, logger: AuditLogger, *, before: dict[str, Any], cfg: Config,
 ) -> LabelResult:
     log_mutation_start(logger, op_id=op.op_id, cmd="od-label(apply)",
                        args=op.args, drive_id=op.drive_id,
@@ -40,6 +41,8 @@ def execute_label_apply(
             "-SiteUrl", op.args["site_url"],
             "-ServerRelativeUrl", before["server_relative_url"],
             "-Label", op.args["label"],
+            "-Tenant", cfg.tenant_id,
+            "-ClientId", cfg.client_id,
         ])
     except FileNotFoundError:
         log_mutation_end(logger, op_id=op.op_id, after=None,
@@ -59,7 +62,7 @@ def execute_label_apply(
 
 
 def execute_label_remove(
-    op: Operation, logger: AuditLogger, *, before: dict[str, Any],
+    op: Operation, logger: AuditLogger, *, before: dict[str, Any], cfg: Config,
 ) -> LabelResult:
     log_mutation_start(logger, op_id=op.op_id, cmd="od-label(remove)",
                        args=op.args, drive_id=op.drive_id,
@@ -69,6 +72,8 @@ def execute_label_remove(
             "-Action", "remove",
             "-SiteUrl", op.args["site_url"],
             "-ServerRelativeUrl", before["server_relative_url"],
+            "-Tenant", cfg.tenant_id,
+            "-ClientId", cfg.client_id,
         ])
     except FileNotFoundError:
         log_mutation_end(logger, op_id=op.op_id, after=None,

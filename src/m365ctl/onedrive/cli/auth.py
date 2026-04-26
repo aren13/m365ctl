@@ -63,7 +63,15 @@ def run_whoami(config_path: Path) -> int:
             f"  WARN: cert expires in {info.days_until_expiry} days - rotate soon."
         )
 
-    print("Catalog:               not yet built (Plan 2)")
+    catalog_path = cfg.catalog.path
+    if catalog_path.exists():
+        size_mb = catalog_path.stat().st_size / (1024 * 1024)
+        print(f"Catalog:               {catalog_path} ({size_mb:.1f} MB)")
+    else:
+        print(
+            f"Catalog:               not built yet — run "
+            f"`./bin/od-catalog-refresh` (target: {catalog_path})"
+        )
     return 0
 
 

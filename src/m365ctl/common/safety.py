@@ -66,10 +66,9 @@ def _confirm_via_tty(prompt: str) -> bool:
 
 
 def _drive_allowed(item: _HasScopeFields, cfg: Config) -> bool:
-    # Plan 4 keeps allow_drives a plain string set. Plan 3 introduces the
-    # "me" and "site:<slug>" synonyms into the config; here we treat the
-    # raw string value equality only. Scope resolution before us already
-    # collapsed friendly names to drive ids where applicable.
+    # ``allow_drives`` is a plain string set; the friendly synonyms ("me",
+    # "site:<slug>") are collapsed to drive ids upstream of this check, so
+    # equality on the raw string is sufficient here.
     return item.drive_id in cfg.scope.allow_drives
 
 

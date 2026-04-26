@@ -1,11 +1,10 @@
 """Thin httpx-backed Microsoft Graph client.
 
-Plan 3 changes:
 - ``GraphError`` carries a ``retry_after_seconds`` attribute (``None`` when
   absent / unparseable).
 - ``GraphClient`` accepts ``sleep`` and ``max_attempts`` and wraps each
-  ``get`` / ``get_absolute`` call in ``m365ctl.common.retry.with_retry``, treating
-  429/503 (and 500/502/504) as transient.
+  ``get`` / ``get_absolute`` call in ``m365ctl.common.retry.with_retry``,
+  treating 429/503 (and 500/502/504) as transient.
 """
 from __future__ import annotations
 

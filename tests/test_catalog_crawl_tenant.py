@@ -133,7 +133,7 @@ def test_resolve_scope_tenant_enumerates_users_and_sites() -> None:
 def test_resolve_scope_tenant_skips_notallowed_access_blocked() -> None:
     """Regression: Graph returns 'notAllowed: Access to this site has been
     blocked.' for tenant-admin-blocked users (retention/legal hold). Must
-    skip, not abort. Discovered during Plan 3 Task 12 live smoke test."""
+    skip, not abort. Discovered during a tenant-scope live smoke test."""
     graph = MagicMock()
 
     def fake_get(path, *, params=None):
@@ -163,7 +163,7 @@ def test_resolve_scope_tenant_skips_notallowed_access_blocked() -> None:
 def test_resolve_scope_tenant_skips_resourcenotfound_mysite() -> None:
     """Regression: Graph returns 'ResourceNotFound: User's mysite not found.'
     (not 'itemNotFound') for unlicensed/guest/never-signed-in accounts.
-    Discovered during Plan 3 Task 12 live smoke test."""
+    Discovered during a tenant-scope live smoke test."""
     graph = MagicMock()
 
     def fake_get(path, *, params=None):

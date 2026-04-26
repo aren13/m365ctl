@@ -121,7 +121,7 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
 
 # ---------------------------------------------------------------- §7 invariants
 # Each test below cross-references the rule it covers; see the invariant
-# table at the top of the Plan 4 document.
+# table at the top of docs/superpowers/specs/2026-04-24-m365ctl-design.md §7.
 
 
 def test_dry_run_is_default_no_mutation(tmp_path, mocker):

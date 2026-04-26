@@ -1,18 +1,17 @@
 """Specialised cleanup ops: recycle-bin purge, old-versions, stale-shares.
 
-**Recycle-bin purge caveat (discovered during Plan 4 live smoke test):**
-Microsoft Graph v1.0's ``POST /drives/{d}/items/{i}/permanentDelete`` is
-designed for *live* items (bypass-recycle-bin hard delete). Items
-already in the recycle bin return HTTP 404 at that endpoint — there is
-no public Graph v1.0 API to empty the OneDrive-for-Business recycle bin
-by item id. Supported paths: SharePoint REST
-(``/Web/RecycleBin('<rb_id>')/DeleteObject()``) or PnP.PowerShell
-(``Clear-PnPRecycleBinItem``).
+**Recycle-bin purge caveat:** Microsoft Graph v1.0's
+``POST /drives/{d}/items/{i}/permanentDelete`` is designed for *live*
+items (bypass-recycle-bin hard delete). Items already in the recycle bin
+return HTTP 404 at that endpoint — there is no public Graph v1.0 API to
+empty the OneDrive-for-Business recycle bin by item id. Supported paths:
+SharePoint REST (``/Web/RecycleBin('<rb_id>')/DeleteObject()``) or
+PnP.PowerShell (``Clear-PnPRecycleBinItem``).
 
 ``purge_recycle_bin_item`` calls the Graph endpoint first (it works for
 live items and for some tenants). On ``itemNotFound`` / ``HTTP404`` /
-``accessDenied`` it falls back to ``scripts/ps/recycle-purge.ps1`` (see
-Plan 5 Task 3) which uses PnP.PowerShell. If ``Config`` is not supplied
+``accessDenied`` it falls back to ``scripts/ps/recycle-purge.ps1`` which
+uses PnP.PowerShell. If ``Config`` is not supplied
 (e.g. tests or legacy callers) or ``pwsh`` is not on PATH, the function
 falls through to the legacy "manual instructions" error wrap so operators
 still know what to do by hand.
@@ -60,8 +59,8 @@ _ODFB_PURGE_MANUAL = (
 )
 
 # Graph error codes that signal "the item is in the recycle bin, not live".
-# (accessDenied shows up in some tenants; itemNotFound/HTTP404 is the common
-# case observed during the Plan 4 live smoke.)
+# (accessDenied shows up in some tenants; itemNotFound/HTTP404 is the
+# common case observed in live smoke runs.)
 _ODFB_PURGE_TOKENS = ("itemNotFound", "HTTP404", "accessDenied")
 
 

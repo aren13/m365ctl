@@ -104,9 +104,9 @@ def run_undo(*, config_path: Path, op_id: str, confirm: bool,
         }
         r = execute_restore(rev, graph, logger, before=restore_before, cfg=cfg)
     elif suffix == "label-apply":
-        r = execute_label_apply(rev, logger, before=before)
+        r = execute_label_apply(rev, logger, before=before, cfg=cfg)
     elif suffix == "label-remove":
-        r = execute_label_remove(rev, logger, before=before)
+        r = execute_label_remove(rev, logger, before=before, cfg=cfg)
     else:
         print(f"no executor wired for reverse action {rev.action!r}",
               file=sys.stderr)

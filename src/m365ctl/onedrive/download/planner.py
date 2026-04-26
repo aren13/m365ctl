@@ -1,6 +1,6 @@
 """Download-plan schema + loaders.
 
-Plan 3 owns the READ subset of the repo's plan-file format:
+The READ subset of the repo's plan-file format:
 
     [
       {"action": "download",
@@ -9,9 +9,9 @@ Plan 3 owns the READ subset of the repo's plan-file format:
        "args": {"full_path": "/path/in/drive"}}
     ]
 
-Plan 4 extends the ``action`` enum with move/rename/copy/delete/label and
-their own ``args`` shapes; Plan 3 rejects anything other than ``download``
-so we don't accidentally execute a mutation plan with a read-only tool.
+Mutating plans (move/rename/copy/delete/label) extend the ``action`` enum
+with their own ``args`` shapes; this loader rejects anything other than
+``download`` so a mutation plan can't be executed by a read-only tool.
 """
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def load_plan_file(path: Path) -> list[DownloadItem]:
         if action != "download":
             raise PlanFileError(
                 f"{path}[{i}]: unsupported action {action!r} for od-download "
-                f"(expected 'download' — mutations are Plan 4)"
+                f"(expected 'download' — mutations belong in a mutate plan)"
             )
         for key in ("drive_id", "item_id"):
             if key not in row:

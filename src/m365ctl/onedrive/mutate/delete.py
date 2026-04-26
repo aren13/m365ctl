@@ -5,18 +5,18 @@ Spec §7 rule 6: no hard deletes here. The Graph ``DELETE
 goes to the recycle bin. Hard-delete lives in ``mutate/clean.py``
 (``od-clean recycle-bin``).
 
-**Restore caveat (discovered during Plan 4 live smoke test):** Microsoft
-Graph v1.0's ``POST /drives/{d}/items/{i}/restore`` is documented as
-**OneDrive Personal only**. OneDrive-for-Business recycle-bin items have
-no public Graph v1.0 restore endpoint — the supported paths are the
-SharePoint REST API (``/Web/RecycleBin('<id>')/Restore()``) or
-PnP.PowerShell (``Restore-PnPRecycleBinItem``).
+**Restore caveat:** Microsoft Graph v1.0's
+``POST /drives/{d}/items/{i}/restore`` is documented as **OneDrive
+Personal only**. OneDrive-for-Business recycle-bin items have no public
+Graph v1.0 restore endpoint — the supported paths are the SharePoint
+REST API (``/Web/RecycleBin('<id>')/Restore()``) or PnP.PowerShell
+(``Restore-PnPRecycleBinItem``).
 
 ``execute_restore`` attempts the Graph call first (still the right path
 for OneDrive-Personal). On ``notSupported`` / ``BadRequest`` /
-``invalidRequest`` it falls back to
-``scripts/ps/recycle-restore.ps1`` (see Plan 5 Task 2) which uses
-PnP.PowerShell. If ``Config`` is not supplied (e.g. tests or legacy
+``invalidRequest`` it falls back to ``scripts/ps/recycle-restore.ps1``
+which uses PnP.PowerShell. If ``Config`` is not supplied (e.g. tests or
+legacy
 callers) or ``pwsh`` is not on PATH, the function falls through to the
 legacy "manual instructions" error wrap so operators still know what to
 do by hand.
