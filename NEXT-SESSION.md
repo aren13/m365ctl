@@ -1,17 +1,17 @@
 # Resumption notes — m365ctl
 
-*Refreshed 2026-04-26 against HEAD `e84d756` (release 1.11.1). Phase 0.5 deferrals closed in [Unreleased] — see `CHANGELOG.md`.*
+*Refreshed 2026-04-27 against HEAD `77c5218` (release 1.12.0). Phase 0.5 deferrals shipped in 1.12.0 — see `CHANGELOG.md`.*
 
 ## State
 
-`main` at `e84d756` — release **1.11.1**. Both domain tracks are shipped end-to-end:
+`main` at `77c5218` — release **1.12.0**. Both domain tracks are shipped end-to-end:
 
 - **OneDrive / SharePoint** — auth, catalog, search, download, mutations (move/rename/copy/delete/label/clean), audit-sharing, undo, recycle-bin via PnP.PowerShell.
 - **Mail** — readers, folder + category CRUD, soft + hard delete, compose / scheduled send / send-as, mailbox settings (OOO, signature, timezone, working hours), server-side rules CRUD, multi-mailbox + delegation, export (EML/MBOX/attachments) with mid-folder resume, triage DSL (folder / age / from / subject / body / to / cc / thread / headers predicates), convenience wrappers (digest, top-senders, size-report, focus, snooze, archive, unsubscribe, flag, etc.), and undo with id-rotation + manual-move recovery.
 
 `bin/` exposes 52 verbs — 13 `od-*`, 38 `mail-*`, plus the unified `m365ctl-undo` dispatcher.
 
-Tests: **957 passed + 1 skipped** on the [Unreleased] working tree (953 + 1 at the 1.11.1 tag — the four new tests come from the Phase 0.5 closeout). The skip is `tests/test_auth.py::test_live_whoami`, the live-tenant smoke guarded by `M365CTL_LIVE_TESTS=1`.
+Tests: **958 passed + 1 skipped** at the v1.12.0 tag (953 at v1.11.1; the +5 are the four Phase 0.5 closeout tests plus one whoami catalog-status test). The skip is `tests/test_auth.py::test_live_whoami`, the live-tenant smoke guarded by `M365CTL_LIVE_TESTS=1`.
 
 `AGENTS.md` is the authoritative operator reference and is kept current alongside the code.
 
@@ -19,13 +19,12 @@ Tests: **957 passed + 1 skipped** on the [Unreleased] working tree (953 + 1 at t
 
 `m365ctl <domain> <verb>` is the entry point; the `bin/` shims are convenience aliases. All mutating commands dry-run by default and require `--confirm`; bulk patterns require the plan-file workflow (actions namespaced `od.move`, `mail.delete`, etc.).
 
-## Phase 0.5 deferrals — closed on the [Unreleased] tree
+## Notable changes since v1.11.1 (all in v1.12.0)
 
-Both items from the original Phase 0 hand-off are now resolved on `main`'s working tree (cut a release to ship them):
-
-1. **PowerShell defaults renamed `fazla-od` → `m365ctl`.** New defaults: `~/.config/m365ctl/m365ctl.pfx` + Keychain account `m365ctl`. Legacy `fazla-od` paths/account continue to work as silent fallbacks across `audit-sharing.ps1`, `recycle-{purge,restore}.ps1`, and the shared `_M365ctlRecycleHelpers.ps1` (one-line stderr deprecation notice when the legacy entry is used). `convert-cert.sh` writes to the new defaults. Migration guide §5 documents the cleanup steps. *Untouched (correctly):* `src/m365ctl/common/auth.py` `_LEGACY_CACHE_DIR` / `_LEGACY_CACHE_FILE` — these are the MSAL token-cache migration path and must keep referencing `fazla-od`.
-
-2. **Tenant-identifying `@fazla\.` regex removed.** `scripts/ps/audit-sharing.ps1` now accepts `-InternalDomainPattern <regex>`; `od-audit-sharing` reads `[scope].internal_domain_pattern` from `config.toml` and passes it through when set. Default behaviour is strictly more conservative — every `@`-bearing principal is treated external — so installs that were silently relying on the old hard-coded regex must add their own pattern to `config.toml` to restore the previous classification.
+- **PowerShell defaults renamed `fazla-od` → `m365ctl`.** New defaults: `~/.config/m365ctl/m365ctl.pfx` + Keychain account `m365ctl`. Legacy `fazla-od` paths/account continue to work as silent fallbacks across all PnP scripts (`audit-sharing.ps1`, `recycle-{purge,restore}.ps1`, `Set-M365ctlLabel.ps1`, and the shared `_M365ctlRecycleHelpers.ps1`) with a one-line stderr deprecation notice. `convert-cert.sh` writes to the new defaults. Migration guide §5 documents the cleanup. *Untouched (correctly):* `src/m365ctl/common/auth.py` `_LEGACY_CACHE_DIR` / `_LEGACY_CACHE_FILE` are the MSAL token-cache migration path and must keep referencing `fazla-od`.
+- **`od-audit-sharing` default got more conservative — operators upgrading from 1.11.x must verify config.** The previously hard-coded `@fazla\.` regex is gone. `scripts/ps/audit-sharing.ps1` now accepts `-InternalDomainPattern`; `od-audit-sharing` reads `[scope].internal_domain_pattern` from `config.toml`. With it unset (the default), every `@`-bearing principal is treated external. Anyone who silently relied on the old classification must add their tenant's pattern to `config.toml`.
+- **`od-label` apply/remove now actually works.** `Set-M365ctlLabel.ps1` was wired to undocumented env vars no caller ever set, so the live path failed at `Connect-PnPOnline`. Converted to the parameter-driven pattern; `execute_label_apply`/`execute_label_remove` now require keyword-only `cfg: Config`. Both in-tree call sites updated; external Python callers must add `cfg=`.
+- **`od-auth whoami` reports real catalog status** (path + size, or a build hint) instead of the stale `"not yet built (Plan 2)"` placeholder that fired regardless of state.
 
 ## Deferred / out of scope
 
@@ -65,7 +64,7 @@ These are codebase invariants, not phase-bound:
 Open a fresh session in this repo. If picking up where things left off:
 
 - `uv pip install -e .` if `uv run pytest` fails with `ModuleNotFoundError: m365ctl` (the editable install can drift if the venv is shared across worktrees).
-- `uv run pytest` should report **957 passed + 1 skipped** on the [Unreleased] tree (953 + 1 at the 1.11.1 tag).
+- `uv run pytest` should report **958 passed + 1 skipped** at the v1.12.0 tag.
 - `./bin/od-auth whoami` (or `./bin/mail-auth whoami`) to confirm both flows still work and the cert isn't expiring soon (expiry 2028-04-22).
 - If the catalog is stale, `./bin/od-catalog-refresh --scope me` or `./bin/mail-catalog-refresh` before running inventory / search / triage commands against fresh data.
 
