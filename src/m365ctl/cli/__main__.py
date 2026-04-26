@@ -8,9 +8,11 @@ _USAGE = (
     "       m365ctl undo <op-id> [--confirm]\n"
     "\n"
     "Domains:\n"
-    "  od     OneDrive + SharePoint (catalog, search, move, copy, delete, ...)\n"
-    "  mail   Microsoft 365 Mail - reserved for Phase 1+; no verbs yet\n"
+    "  od     OneDrive + SharePoint (catalog, search, move, copy, delete, label, ...)\n"
+    "  mail   Microsoft 365 Mail (list, get, search, send, rules, settings, triage, ...)\n"
     "  undo   Cross-domain audit-log replay (od.* and mail.*)\n"
+    "\n"
+    "Run `m365ctl <domain> --help` for the per-domain verb list.\n"
 )
 
 

@@ -1,0 +1,60 @@
+name: Release to PyPI
+
+# Triggered by pushing a `v<semver>` tag (e.g. `v1.12.0`). The job builds
+# the sdist + wheel with `uv build`, then uploads to PyPI using Trusted
+# Publishing (OIDC). No API tokens or secrets needed — the trust is bound
+# to this workflow file + the `pypi` environment in the repo settings.
+#
+# Setup (one-time):
+#   1. Reserve the project name on PyPI (https://pypi.org/manage/account/publishing/)
+#      → "Add a new pending publisher" with:
+#         PyPI Project Name: m365ctl
+#         Owner:             aren13
+#         Repository name:   m365ctl
+#         Workflow filename: release.yml
+#         Environment name:  pypi
+#   2. In GitHub repo settings → Environments → create "pypi" (no protection
+#      rules required, but reviewers / branch restrictions are recommended).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v2
+        with:
+          python-version: "3.12"
+      - name: Verify tag matches pyproject version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME (=$tag) does not match pyproject version $pkg"
+            exit 1
+          fi
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # required for Trusted Publishing OIDC exchange
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

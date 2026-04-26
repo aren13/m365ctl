@@ -2,7 +2,37 @@
 name = "m365ctl"
 version = "1.12.0"
 description = "Admin CLI for Microsoft 365 OneDrive + SharePoint + Mail via Microsoft Graph."
+readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Arda Eren", email = "ardaeren13@gmail.com" }]
+keywords = [
+    "microsoft-365",
+    "microsoft-graph",
+    "onedrive",
+    "sharepoint",
+    "outlook",
+    "exchange-online",
+    "cli",
+    "sysadmin",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Email",
+    "Topic :: System :: Archiving",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
 dependencies = [
     "cryptography>=42",
     "duckdb>=1.1",
@@ -11,6 +41,12 @@ dependencies = [
     "msal-extensions>=1.2",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aren13/m365ctl"
+Repository = "https://github.com/aren13/m365ctl"
+Issues = "https://github.com/aren13/m365ctl/issues"
+Changelog = "https://github.com/aren13/m365ctl/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

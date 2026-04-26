@@ -32,12 +32,29 @@ Safe by default: dry-run, plan-file workflow, scope allow-lists, audit log, and 
 
 ## Installation
 
-Requires Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
+Requires Python 3.11+. Install with [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+# Standalone CLI (recommended for end users):
+uv tool install m365ctl
+
+# Or as a project dependency:
+uv add m365ctl
+
+# Or with pipx / pip:
+pipx install m365ctl
+```
+
+This installs the `m365ctl` console script. Verify with `m365ctl --help`.
+
+For local development from source:
 
 ```bash
 git clone https://github.com/aren13/m365ctl
 cd m365ctl
 uv sync --all-extras
+# The repo's bin/*.sh shims (./bin/od-auth, ./bin/mail-list, ...) are
+# convenience aliases for `uv run m365ctl <domain> <verb>`.
 ```
 
 ## Quickstart
@@ -47,19 +64,21 @@ uv sync --all-extras
 3. **Configure** the CLI:
 
    ```bash
-   cp config.toml.example config.toml
+   # Grab the template from the repo or copy from `m365ctl --help` output.
+   curl -O https://raw.githubusercontent.com/aren13/m365ctl/main/config.toml.example
+   mv config.toml.example config.toml
    # Edit config.toml: tenant id, app id, cert path, allow-lists.
    ```
 
 4. **Authenticate and verify**:
 
    ```bash
-   ./bin/od-auth login
-   ./bin/od-auth whoami
-   ./bin/mail-whoami
+   m365ctl od auth login
+   m365ctl od auth whoami
+   m365ctl mail whoami
    ```
 
-Full walkthrough: [docs/setup/first-run.md](docs/setup/first-run.md) (≤ 20 minutes from clone to whoami).
+Full walkthrough: [docs/setup/first-run.md](docs/setup/first-run.md) (≤ 20 minutes from install to whoami).
 
 ## Features
 

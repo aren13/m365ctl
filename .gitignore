@@ -7,6 +7,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Build artifacts (produced by `uv build`)
+dist/
+build/
+
 # uv
 # (uv.lock IS tracked)
 
