@@ -2,18 +2,25 @@
 # convert-cert.sh — one-shot: PEM key+cert -> PFX, store password in Keychain.
 #
 # Usage:   scripts/ps/convert-cert.sh
-# Result:  ~/.config/fazla-od/fazla-od.pfx (mode 600)
-#          Keychain entry m365ctl:PfxPassword holds the export password.
+# Result:  ~/.config/m365ctl/m365ctl.pfx (mode 600)
+#          Keychain entry m365ctl:PfxPassword (account m365ctl) holds the
+#          export password.
+#
+# Existing fazla-od installs:
+#   The PnP.PowerShell scripts continue to honour ~/.config/fazla-od/fazla-od.pfx
+#   and Keychain account "fazla-od" as a legacy fallback (with a deprecation
+#   warning on stderr). To cut over cleanly, see
+#   docs/setup/migrating-from-fazla-od.md.
 #
 # Requires: openssl (system), security (macOS), /dev/urandom.
 set -euo pipefail
 
-CERT_DIR="${HOME}/.config/fazla-od"
-KEY="${CERT_DIR}/fazla-od.key"
-CER="${CERT_DIR}/fazla-od.cer"
-PFX="${CERT_DIR}/fazla-od.pfx"
+CERT_DIR="${HOME}/.config/m365ctl"
+KEY="${CERT_DIR}/m365ctl.key"
+CER="${CERT_DIR}/m365ctl.cer"
+PFX="${CERT_DIR}/m365ctl.pfx"
 KEYCHAIN_SERVICE="m365ctl:PfxPassword"
-KEYCHAIN_ACCOUNT="fazla-od"
+KEYCHAIN_ACCOUNT="m365ctl"
 
 for f in "$KEY" "$CER"; do
     if [[ ! -r "$f" ]]; then

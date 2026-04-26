@@ -105,8 +105,9 @@ def _restore_via_pnp(
     leaf = before.get("name", "")
     dir_name = normalize_recycle_dir_name(before.get("parent_path", ""))
     # Don't pass -PfxPath: cfg.cert_path is the PEM key, not the PFX that
-    # PnP needs. The PS script defaults to ~/.config/fazla-od/fazla-od.pfx
-    # (set up per docs/ops/pnp-powershell-setup.md); let that default win.
+    # PnP needs. The PS script defaults to ~/.config/m365ctl/m365ctl.pfx
+    # (set up per docs/ops/pnp-powershell-setup.md, with a legacy fallback
+    # to ~/.config/fazla-od/fazla-od.pfx); let that default win.
     code, out, err = invoke_pwsh(_RESTORE_PS1, [
         "-Tenant", cfg.tenant_id,
         "-ClientId", cfg.client_id,

@@ -50,7 +50,41 @@ bare action names (`move`, `rename`, `copy`); Phase 0 namespaces them
 (`od.move`, etc.) and normalizes bare actions on read. You do not need to
 rewrite old plan or log files.
 
-## 5. Live-test env var
+## 5. PnP.PowerShell PFX + Keychain (recycle-bin / audit-sharing / label paths)
+
+The PnP.PowerShell helpers were updated to default to:
+
+- **PFX:** `~/.config/m365ctl/m365ctl.pfx` (was `~/.config/fazla-od/fazla-od.pfx`)
+- **Keychain account:** `m365ctl` (was `fazla-od`); service is unchanged at
+  `m365ctl:PfxPassword`.
+
+Existing installs keep working: every PS entrypoint
+(`audit-sharing.ps1`, `recycle-purge.ps1`, `recycle-restore.ps1`, plus the
+shared `_M365ctlRecycleHelpers.ps1`) silently falls back to the legacy PFX
+path and Keychain account when the new ones are missing, with a one-line
+deprecation notice on stderr. To clean the warning up:
+
+```bash
+# 5a. Move the PFX (or delete it and re-run convert-cert.sh).
+mkdir -p ~/.config/m365ctl
+mv ~/.config/fazla-od/fazla-od.pfx ~/.config/m365ctl/m365ctl.pfx
+chmod 600 ~/.config/m365ctl/m365ctl.pfx
+
+# 5b. Rotate the Keychain account from "fazla-od" to "m365ctl".
+PWD_OLD="$(security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w)"
+security add-generic-password -a m365ctl -s m365ctl:PfxPassword -w "$PWD_OLD" -T /usr/bin/security
+security delete-generic-password -a fazla-od -s m365ctl:PfxPassword
+unset PWD_OLD
+
+# 5c. Verify the new locations resolve.
+ls -la ~/.config/m365ctl/m365ctl.pfx
+security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w | wc -c   # ~40
+```
+
+Or, if you'd rather start fresh: `rm ~/.config/fazla-od/fazla-od.pfx` and
+re-run `./scripts/ps/convert-cert.sh` (it now writes to the new defaults).
+
+## 6. Live-test env var
 
 The live-test opt-in renamed:
 

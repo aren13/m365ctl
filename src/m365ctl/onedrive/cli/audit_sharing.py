@@ -31,6 +31,8 @@ def run_audit(
         "-Tenant", cfg.tenant_id,
         "-ClientId", cfg.client_id,
     ]
+    if cfg.scope.internal_domain_pattern:
+        cmd += ["-InternalDomainPattern", cfg.scope.internal_domain_pattern]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         print(proc.stderr, file=sys.stderr, end="")

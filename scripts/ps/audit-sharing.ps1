@@ -15,11 +15,24 @@
   Azure AD app client ID. Required.
 
 .PARAMETER PfxPath
-  Path to the PFX cert (default ~/.config/fazla-od/fazla-od.pfx).
+  Path to the PFX cert (default ~/.config/m365ctl/m365ctl.pfx; falls back
+  to ~/.config/fazla-od/fazla-od.pfx with a deprecation warning if the new
+  path is missing but the legacy one exists).
 
 .PARAMETER KeychainService
   Keychain service name holding the PFX password
   (default m365ctl:PfxPassword).
+
+.PARAMETER KeychainAccount
+  Keychain account holding the PFX password (default m365ctl; falls back to
+  the legacy "fazla-od" account with a deprecation warning if the new account
+  is absent but the legacy one resolves).
+
+.PARAMETER InternalDomainPattern
+  Regex applied to a permission's principal name to decide whether the
+  share is *internal*. Empty (default) means treat every "@"-bearing
+  principal as external. Pass e.g. "@(contoso|contoso\.onmicrosoft)\."
+  to mark same-tenant principals as internal.
 
 .EXAMPLE
   pwsh scripts/ps/audit-sharing.ps1 -Scope "site:contoso.sharepoint.com,abc,def" \
@@ -30,15 +43,34 @@ param(
     [ValidateSet("json","tsv")] [string] $OutputFormat = "json",
     [Parameter(Mandatory=$true)] [string] $Tenant,
     [Parameter(Mandatory=$true)] [string] $ClientId,
-    [string] $PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx",
+    [string] $PfxPath = "$HOME/.config/m365ctl/m365ctl.pfx",
     [string] $KeychainService = "m365ctl:PfxPassword",
-    [string] $KeychainAccount = "fazla-od"
+    [string] $KeychainAccount = "m365ctl",
+    [string] $InternalDomainPattern = ""
 )
 
 $ErrorActionPreference = "Stop"
 
+# Legacy fallbacks: prefer the new m365ctl-named PFX/Keychain account, but
+# silently honour the historical fazla-od locations with a one-line stderr
+# deprecation notice so existing installs keep working.
+if (-not (Test-Path -LiteralPath $PfxPath)) {
+    $legacyPfx = "$HOME/.config/fazla-od/fazla-od.pfx"
+    if (Test-Path -LiteralPath $legacyPfx) {
+        [Console]::Error.WriteLine("warning: PFX not found at $PfxPath; falling back to legacy $legacyPfx (rename to ~/.config/m365ctl/m365ctl.pfx — see docs/setup/migrating-from-fazla-od.md)")
+        $PfxPath = $legacyPfx
+    }
+}
+
 function Get-PfxPassword {
-    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w
+    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w 2>$null
+    if (-not $raw -and $KeychainAccount -ne "fazla-od") {
+        $legacy = /usr/bin/security find-generic-password -a "fazla-od" -s $KeychainService -w 2>$null
+        if ($legacy) {
+            [Console]::Error.WriteLine("warning: Keychain account '$KeychainAccount' empty; falling back to legacy 'fazla-od' (rotate via docs/setup/migrating-from-fazla-od.md)")
+            $raw = $legacy
+        }
+    }
     if (-not $raw) { throw "Could not read PFX password from Keychain." }
     return (ConvertTo-SecureString -String $raw -AsPlainText -Force)
 }
@@ -108,7 +140,11 @@ foreach ($lst in $lists) {
             $shared = $p.PrincipalName
             $isExternal = $false
             if ($shared -match "#ext#" -or $shared -match "@") {
-                $isExternal = ($shared -notmatch "@fazla\.")
+                if ($InternalDomainPattern) {
+                    $isExternal = ($shared -notmatch $InternalDomainPattern)
+                } else {
+                    $isExternal = $true
+                }
             }
             $rows.Add([ordered]@{
                 drive_id          = $lst.Id.ToString()

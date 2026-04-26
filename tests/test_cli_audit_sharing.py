@@ -9,13 +9,14 @@ from unittest.mock import MagicMock
 from m365ctl.onedrive.cli.audit_sharing import run_audit
 
 
-def _cfg(tmp_path: Path):
+def _cfg(tmp_path: Path, *, internal_domain_pattern: str | None = None):
     cfg = MagicMock()
     cfg.tenant_id = "tenant-x"
     cfg.client_id = "client-x"
     cfg.cert_path = tmp_path / "k"
     cfg.cert_public = tmp_path / "c"
     cfg.catalog.path = tmp_path / "c.duckdb"
+    cfg.scope.internal_domain_pattern = internal_domain_pattern
     return cfg
 
 
@@ -61,6 +62,43 @@ def test_audit_propagates_nonzero_exit(tmp_path, mocker, capsys) -> None:
     err = capsys.readouterr().err
     assert rc == 1
     assert "cert load failed" in err
+
+
+def test_audit_omits_internal_domain_when_unset(tmp_path, mocker) -> None:
+    cfg = _cfg(tmp_path, internal_domain_pattern=None)
+    mocker.patch("m365ctl.onedrive.cli.audit_sharing.load_config", return_value=cfg)
+    run_mock = mocker.patch(
+        "m365ctl.onedrive.cli.audit_sharing.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="[]", stderr=""
+        ),
+    )
+    run_audit(
+        config_path=tmp_path / "config.toml",
+        scope="site:https://contoso.sharepoint.com",
+        output_format="json",
+    )
+    cmd = run_mock.call_args.args[0]
+    assert "-InternalDomainPattern" not in cmd
+
+
+def test_audit_passes_internal_domain_pattern_when_set(tmp_path, mocker) -> None:
+    cfg = _cfg(tmp_path, internal_domain_pattern="@(contoso|contoso\\.onmicrosoft)\\.")
+    mocker.patch("m365ctl.onedrive.cli.audit_sharing.load_config", return_value=cfg)
+    run_mock = mocker.patch(
+        "m365ctl.onedrive.cli.audit_sharing.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="[]", stderr=""
+        ),
+    )
+    run_audit(
+        config_path=tmp_path / "config.toml",
+        scope="site:https://contoso.sharepoint.com",
+        output_format="json",
+    )
+    cmd = run_mock.call_args.args[0]
+    idx = cmd.index("-InternalDomainPattern")
+    assert cmd[idx + 1] == "@(contoso|contoso\\.onmicrosoft)\\."
 
 
 def test_audit_tsv_is_emitted_verbatim(tmp_path, mocker, capsys) -> None:

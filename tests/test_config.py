@@ -11,8 +11,8 @@ def _valid_toml(tmp_path: Path) -> Path:
         """
 tenant_id    = "00000000-0000-0000-0000-000000000000"
 client_id    = "11111111-1111-1111-1111-111111111111"
-cert_path    = "~/.config/fazla-od/fazla-od.key"
-cert_public  = "~/.config/fazla-od/fazla-od.cer"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
 default_auth = "delegated"
 
 [scope]
@@ -120,6 +120,36 @@ retention_days = 30
     assert cfg.mail.schedule_send_enabled is False
     assert cfg.logging.purged_dir.name == "purged"
     assert cfg.logging.retention_days == 30
+
+
+def test_scope_internal_domain_pattern_defaults_to_none(tmp_path):
+    from m365ctl.common.config import load_config
+    cfg = load_config(_valid_toml(tmp_path))
+    assert cfg.scope.internal_domain_pattern is None
+
+
+def test_scope_internal_domain_pattern_loads_from_toml(tmp_path):
+    from m365ctl.common.config import load_config
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("""
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
+default_auth = "delegated"
+
+[scope]
+allow_drives            = ["me"]
+internal_domain_pattern = "@(contoso|contoso\\\\.onmicrosoft)\\\\."
+
+[catalog]
+path = "cache/catalog.duckdb"
+
+[logging]
+ops_dir = "logs/ops"
+""".lstrip())
+    cfg = load_config(cfg_path)
+    assert cfg.scope.internal_domain_pattern == "@(contoso|contoso\\.onmicrosoft)\\."
 
 
 def test_config_mail_section_defaults_when_omitted(tmp_path):

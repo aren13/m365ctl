@@ -40,17 +40,22 @@ PEM key + PEM cert we use for the Python flow. Run the one-shot helper:
 ./scripts/ps/convert-cert.sh
 ```
 
-This produces `~/.config/fazla-od/fazla-od.pfx` (mode 600, gitignored —
-`~/.config/fazla-od/` is outside the repo) and stores a ~40-char random
+This produces `~/.config/m365ctl/m365ctl.pfx` (mode 600, gitignored —
+`~/.config/m365ctl/` is outside the repo) and stores a ~40-char random
 password in macOS Keychain under service `m365ctl:PfxPassword`,
-account `fazla-od`.
+account `m365ctl`.
 
 Verify:
 ```bash
-ls -la ~/.config/fazla-od/fazla-od.pfx
-security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w | wc -c
+ls -la ~/.config/m365ctl/m365ctl.pfx
+security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w | wc -c
 ```
 Expected: the PFX exists; the password is ~40 characters.
+
+> **Migrating from a `fazla-od` install?** The PnP scripts continue to
+> honour `~/.config/fazla-od/fazla-od.pfx` and Keychain account `fazla-od`
+> as a legacy fallback (with a one-line deprecation warning). To clean up,
+> follow [docs/setup/migrating-from-fazla-od.md](../setup/migrating-from-fazla-od.md).
 
 ## 3. Confirm the Entra app has the same cert thumbprint
 
@@ -88,12 +93,12 @@ The ODfB recycle-bin fallbacks (`scripts/ps/recycle-restore.ps1` and `scripts/ps
 ```bash
 pwsh -NoLogo -Command '
     $pwd = ConvertTo-SecureString -String (
-        security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w
+        security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w
     ) -AsPlainText -Force
     Connect-PnPOnline `
         -Tenant <your-tenant-id> `
         -ClientId <your-client-id> `
-        -CertificatePath "$HOME/.config/fazla-od/fazla-od.pfx" `
+        -CertificatePath "$HOME/.config/m365ctl/m365ctl.pfx" `
         -CertificatePassword $pwd `
         -Url https://<your-tenant>.sharepoint.com
     Get-PnPTenantSite | Select-Object -First 3 Url, Title
@@ -105,7 +110,7 @@ Expected: three site URL + title rows printed, no error.
 
 When the PEM cert rotates (every 2 years; see spec §3):
 
-1. `rm ~/.config/fazla-od/fazla-od.pfx`
+1. `rm ~/.config/m365ctl/m365ctl.pfx`
 2. Re-run `./scripts/ps/convert-cert.sh`
 
 The Keychain entry is overwritten in place; no additional steps required.

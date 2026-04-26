@@ -24,7 +24,7 @@ param(
     [Parameter(Mandatory=$true)][string]$SiteUrl,
     [Parameter(Mandatory=$true)][string]$LeafName,
     [Parameter(Mandatory=$true)][string]$DirName,
-    [string]$PfxPath = "$HOME/.config/fazla-od/fazla-od.pfx"
+    [string]$PfxPath = "$HOME/.config/m365ctl/m365ctl.pfx"
 )
 
 $ErrorActionPreference = "Stop"

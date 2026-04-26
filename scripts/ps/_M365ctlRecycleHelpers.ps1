@@ -17,7 +17,7 @@
 
   Keychain defaults mirror scripts/ps/audit-sharing.ps1:
     service = m365ctl:PfxPassword
-    account = fazla-od
+    account = m365ctl   (legacy "fazla-od" account is honoured as fallback)
 #>
 
 $ErrorActionPreference = "Stop"
@@ -26,12 +26,25 @@ function Get-M365ctlPfxPassword {
     <#
     .SYNOPSIS
       Read the PFX password from the macOS Keychain. Throws if missing.
+
+    .DESCRIPTION
+      Tries the supplied KeychainAccount first. If empty and the account is
+      not already "fazla-od", retries against the legacy "fazla-od" account
+      and emits a one-line deprecation notice to stderr so existing installs
+      keep working without manual intervention.
     #>
     param(
         [string] $KeychainService = "m365ctl:PfxPassword",
-        [string] $KeychainAccount = "fazla-od"
+        [string] $KeychainAccount = "m365ctl"
     )
-    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w
+    $raw = /usr/bin/security find-generic-password -a $KeychainAccount -s $KeychainService -w 2>$null
+    if (-not $raw -and $KeychainAccount -ne "fazla-od") {
+        $legacy = /usr/bin/security find-generic-password -a "fazla-od" -s $KeychainService -w 2>$null
+        if ($legacy) {
+            [Console]::Error.WriteLine("warning: Keychain account '$KeychainAccount' empty; falling back to legacy 'fazla-od' (rotate via docs/setup/migrating-from-fazla-od.md)")
+            $raw = $legacy
+        }
+    }
     if (-not $raw) {
         throw "KeychainMissing: no entry for service=$KeychainService account=$KeychainAccount. Run ./scripts/ps/convert-cert.sh."
     }
@@ -58,7 +71,7 @@ function Connect-M365ctlSite {
 
     .EXAMPLE
       Connect-M365ctlSite -Tenant $t -ClientId $c `
-                       -PfxPath "$HOME/.config/fazla-od/fazla-od.pfx" `
+                       -PfxPath "$HOME/.config/m365ctl/m365ctl.pfx" `
                        -SiteUrl "https://contoso.sharepoint.com/sites/Finance"
     #>
     param(
@@ -68,7 +81,13 @@ function Connect-M365ctlSite {
         [Parameter(Mandatory=$true)] [string] $SiteUrl
     )
     if (-not (Test-Path -LiteralPath $PfxPath)) {
-        throw "PfxMissing: $PfxPath not found. Run ./scripts/ps/convert-cert.sh."
+        $legacyPfx = "$HOME/.config/fazla-od/fazla-od.pfx"
+        if (Test-Path -LiteralPath $legacyPfx) {
+            [Console]::Error.WriteLine("warning: PFX not found at $PfxPath; falling back to legacy $legacyPfx (rename to ~/.config/m365ctl/m365ctl.pfx — see docs/setup/migrating-from-fazla-od.md)")
+            $PfxPath = $legacyPfx
+        } else {
+            throw "PfxMissing: $PfxPath not found. Run ./scripts/ps/convert-cert.sh."
+        }
     }
     $pfxSecret = Get-M365ctlPfxPassword
     Connect-PnPOnline `
@@ -163,7 +182,7 @@ function Resolve-SiteUrlFromDriveId {
 
     .EXAMPLE
       Resolve-SiteUrlFromDriveId -DriveId 'b!abc...' -TenantHost 'contoso.sharepoint.com' `
-          -Tenant $t -ClientId $c -PfxPath "$HOME/.config/fazla-od/fazla-od.pfx"
+          -Tenant $t -ClientId $c -PfxPath "$HOME/.config/m365ctl/m365ctl.pfx"
     #>
     param(
         [Parameter(Mandatory=$true)] [string] $DriveId,

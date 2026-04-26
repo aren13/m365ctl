@@ -21,6 +21,10 @@ deny_paths           = []
 # Mail folder globs that are always denied (no override possible).
 deny_folders         = []
 unsafe_requires_flag = true
+# Regex matched against permission principals by `od-audit-sharing` to decide
+# whether a share is internal. Empty / unset = treat every "@"-bearing
+# principal as external. Example: "@(contoso|contoso\\.onmicrosoft)\\."
+# internal_domain_pattern = ""
 
 [catalog]
 path             = "cache/catalog.duckdb"

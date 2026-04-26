@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `[scope].internal_domain_pattern` (optional regex) in `config.toml`. When set, `od-audit-sharing` passes it through to `scripts/ps/audit-sharing.ps1` as `-InternalDomainPattern` and the PS script uses it to decide whether each share principal is internal. Default (unset) treats every `@`-bearing principal as external — strictly more conservative than the previous hard-coded behaviour.
+
+### Changed
+- **PnP.PowerShell defaults renamed `fazla-od` → `m365ctl`.** The PFX lives at `~/.config/m365ctl/m365ctl.pfx`, the Keychain account is `m365ctl`, and `scripts/ps/convert-cert.sh` writes both. Existing `~/.config/fazla-od/fazla-od.pfx` + Keychain account `fazla-od` continue to work as legacy fallbacks (with a one-line stderr deprecation notice) across `audit-sharing.ps1`, `recycle-purge.ps1`, `recycle-restore.ps1`, and the shared `_M365ctlRecycleHelpers.ps1`. To clean up, see `docs/setup/migrating-from-fazla-od.md` §5.
+- `scripts/ps/audit-sharing.ps1` no longer hard-codes the previous tenant-identifying `@fazla\.` regex; the internal-domain decision is configurable via `[scope].internal_domain_pattern`.
+
+### Documentation
+- `docs/ops/pnp-powershell-setup.md` updated to the `m365ctl` defaults with a note pointing to the migration guide for legacy installs.
+- `docs/setup/migrating-from-fazla-od.md` gains §5 covering the PFX move + Keychain account rotation.
+- `config.toml.example` documents the new `[scope].internal_domain_pattern` field.
+
 ## [1.11.1] — 2026-04-26
 
 ### Documentation

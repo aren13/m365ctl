@@ -27,6 +27,7 @@ class ScopeConfig:
     deny_paths: list[str] = field(default_factory=list)
     deny_folders: list[str] = field(default_factory=list)
     unsafe_requires_flag: bool = True
+    internal_domain_pattern: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,8 @@ def load_config(path: Path | str) -> Config:
     if not isinstance(allow_drives, list) or not allow_drives:
         raise ConfigError(f"{path}:[scope].allow_drives must be a non-empty list")
 
+    idp_raw = scope_raw.get("internal_domain_pattern")
+    internal_domain_pattern = str(idp_raw) if idp_raw else None
     scope = ScopeConfig(
         allow_drives=list(allow_drives),
         allow_mailboxes=list(scope_raw.get("allow_mailboxes", ["me"])),
@@ -112,6 +115,7 @@ def load_config(path: Path | str) -> Config:
         deny_paths=list(scope_raw.get("deny_paths", [])),
         deny_folders=list(scope_raw.get("deny_folders", [])),
         unsafe_requires_flag=bool(scope_raw.get("unsafe_requires_flag", True)),
+        internal_domain_pattern=internal_domain_pattern,
     )
 
     catalog_raw = data.get("catalog", {})
