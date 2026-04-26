@@ -28,14 +28,9 @@ Tests: **958 passed + 1 skipped** at the v1.12.0 tag (953 at v1.11.1; the +5 are
 
 ## Deferred / out of scope
 
-Punted at design time and safe to defer further:
-
-- **MCP server front-end** — once contemplated as a follow-on; the CLI is the supported interface today.
-- **Version-history restore** — `od-clean old-versions` is irreversible; no paired restore command.
-- **Stale-share re-issue** — `od-clean stale-shares` revokes but does not re-create equivalent links.
-- **Batched recycle-bin ops** — PS helpers drive one item per invocation; bulk recycle-bin workflows would page differently.
-- **Cross-tenant restore** — `m365ctl-undo` assumes same tenant; no import from external audit logs.
-- **True paging for `Find-RecycleBinItem`** — capped at 100000 per call with a warning when hit. PnP.PowerShell has no native page cursor here; future enhancement would split by FirstStage / SecondStage.
+See `docs/roadmap.md` for the full forward-looking list (sibling modules,
+MCP front-end, mail features, OneDrive feature gaps, open questions).
+That doc is the single source of truth — don't duplicate items here.
 
 ## Gotchas worth remembering
 
@@ -70,5 +65,5 @@ Open a fresh session in this repo. If picking up where things left off:
 
 For new work:
 
-- Read the relevant spec under `docs/superpowers/specs/` and skim the closest prior plan in `docs/superpowers/plans/` for the established structure (28 plan files exist; phases 0 → 14 + x/y/z follow-ups).
-- Author a plan via `superpowers:writing-plans` before executing anything non-trivial.
+- Read `AGENTS.md` for architecture + conventions, `docs/roadmap.md` for forward-looking direction (sibling modules, MCP front-end, mail features), and the latest few `CHANGELOG.md` entries for recent decisions.
+- Author a plan via `superpowers:writing-plans` before executing anything non-trivial. Prior phase plans (the 28 files at `docs/superpowers/plans/`) were deleted in the public-release prep — see git history pre-`v1.12.1` for examples of the structure.

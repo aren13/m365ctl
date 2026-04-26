@@ -157,6 +157,7 @@ Catalog files, plan files, and the audit log default to `cache/`, `plans/`, and 
 | First-run walkthrough          | [docs/setup/first-run.md](docs/setup/first-run.md)                                  |
 | PnP PowerShell prerequisites   | [docs/ops/pnp-powershell-setup.md](docs/ops/pnp-powershell-setup.md)                |
 | Mail convenience verbs         | [docs/mail/convenience-commands.md](docs/mail/convenience-commands.md)              |
+| Roadmap                        | [docs/roadmap.md](docs/roadmap.md)                                                  |
 | Changelog                      | [CHANGELOG.md](CHANGELOG.md)                                                        |
 | Contributing                   | [CONTRIBUTING.md](CONTRIBUTING.md)                                                  |
 

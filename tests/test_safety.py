@@ -119,9 +119,12 @@ def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
         m.assert_not_called()  # never prompted — flag required upfront
 
 
-# ---------------------------------------------------------------- §7 invariants
-# Each test below cross-references the rule it covers; see the invariant
-# table at the top of docs/superpowers/specs/2026-04-24-m365ctl-design.md §7.
+# ----------------------------------------------------------------- safety invariants
+# Each test below cross-references one safety rule (dry-run-by-default,
+# scope allow-listing, plan-file workflow, audit-log capture, undo
+# round-trip). The rules themselves are summarised in AGENTS.md
+# "Safety envelope" — the original design-spec table they were lifted
+# from no longer ships in the repo.
 
 
 def test_dry_run_is_default_no_mutation(tmp_path, mocker):

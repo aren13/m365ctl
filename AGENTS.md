@@ -15,10 +15,11 @@ sibling sub-package.
 
 ## Where to start
 
-1. `docs/superpowers/specs/2026-04-24-m365ctl-design.md` — the parent design spec (OneDrive track, architecture, safety model).
-2. `docs/superpowers/specs/2026-04-24-m365ctl-mail-module.md` — the Mail module spec (Phase 1 target).
+1. `README.md` — user-facing capability map and install/quickstart.
+2. `CHANGELOG.md` — every shipped change, in reverse-chronological order. Reading the latest 3-4 entries is the fastest way to understand what the project does and what's recently moved.
 3. `CONTRIBUTING.md` — dev setup, test commands, commit conventions.
 4. `docs/setup/first-run.md` — tenant setup prerequisites.
+5. `docs/roadmap.md` — forward-looking work (sibling modules, MCP front-end, mail features). Nothing here is committed; it's directional context.
 
 ## Package layout
 
