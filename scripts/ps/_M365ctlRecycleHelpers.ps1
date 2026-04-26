@@ -41,7 +41,7 @@ function Get-M365ctlPfxPassword {
     if (-not $raw -and $KeychainAccount -ne "fazla-od") {
         $legacy = /usr/bin/security find-generic-password -a "fazla-od" -s $KeychainService -w 2>$null
         if ($legacy) {
-            [Console]::Error.WriteLine("warning: Keychain account '$KeychainAccount' empty; falling back to legacy 'fazla-od' (rotate via docs/setup/migrating-from-fazla-od.md)")
+            [Console]::Error.WriteLine("warning: Keychain account '$KeychainAccount' empty; falling back to legacy 'fazla-od' (rotate via docs/ops/pnp-powershell-setup.md)")
             $raw = $legacy
         }
     }
@@ -83,7 +83,7 @@ function Connect-M365ctlSite {
     if (-not (Test-Path -LiteralPath $PfxPath)) {
         $legacyPfx = "$HOME/.config/fazla-od/fazla-od.pfx"
         if (Test-Path -LiteralPath $legacyPfx) {
-            [Console]::Error.WriteLine("warning: PFX not found at $PfxPath; falling back to legacy $legacyPfx (rename to ~/.config/m365ctl/m365ctl.pfx — see docs/setup/migrating-from-fazla-od.md)")
+            [Console]::Error.WriteLine("warning: PFX not found at $PfxPath; falling back to legacy $legacyPfx (rename to ~/.config/m365ctl/m365ctl.pfx — see docs/ops/pnp-powershell-setup.md)")
             $PfxPath = $legacyPfx
         } else {
             throw "PfxMissing: $PfxPath not found. Run ./scripts/ps/convert-cert.sh."

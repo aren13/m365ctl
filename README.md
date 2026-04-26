@@ -1,5 +1,6 @@
 # m365ctl
 
+[![PyPI](https://img.shields.io/pypi/v/m365ctl.svg)](https://pypi.org/project/m365ctl/)
 [![CI](https://github.com/aren13/m365ctl/actions/workflows/ci.yml/badge.svg)](https://github.com/aren13/m365ctl/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)

@@ -10,7 +10,7 @@
 #   The PnP.PowerShell scripts continue to honour ~/.config/fazla-od/fazla-od.pfx
 #   and Keychain account "fazla-od" as a legacy fallback (with a deprecation
 #   warning on stderr). To cut over cleanly, see
-#   docs/setup/migrating-from-fazla-od.md.
+#   docs/ops/pnp-powershell-setup.md ("Migrating from a legacy install").
 #
 # Requires: openssl (system), security (macOS), /dev/urandom.
 set -euo pipefail

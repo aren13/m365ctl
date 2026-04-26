@@ -52,10 +52,34 @@ security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w | wc -c
 ```
 Expected: the PFX exists; the password is ~40 characters.
 
-> **Migrating from a `fazla-od` install?** The PnP scripts continue to
-> honour `~/.config/fazla-od/fazla-od.pfx` and Keychain account `fazla-od`
-> as a legacy fallback (with a one-line deprecation warning). To clean up,
-> follow [docs/setup/migrating-from-fazla-od.md](../setup/migrating-from-fazla-od.md).
+### Migrating from a legacy install
+
+If `~/.config/fazla-od/fazla-od.pfx` exists from an older install of
+this toolkit, every PnP script continues to honour it as a silent
+fallback (with a one-line stderr deprecation warning) so nothing
+breaks. To clean up:
+
+```bash
+# 1. Move the PFX to the new default location.
+mkdir -p ~/.config/m365ctl
+mv ~/.config/fazla-od/fazla-od.pfx ~/.config/m365ctl/m365ctl.pfx
+chmod 600 ~/.config/m365ctl/m365ctl.pfx
+
+# 2. Rotate the Keychain account from "fazla-od" to "m365ctl".
+PWD_OLD="$(security find-generic-password -a fazla-od -s m365ctl:PfxPassword -w)"
+security add-generic-password -a m365ctl -s m365ctl:PfxPassword \
+    -w "$PWD_OLD" -T /usr/bin/security
+security delete-generic-password -a fazla-od -s m365ctl:PfxPassword
+unset PWD_OLD
+
+# 3. Verify the new locations resolve.
+ls -la ~/.config/m365ctl/m365ctl.pfx
+security find-generic-password -a m365ctl -s m365ctl:PfxPassword -w | wc -c   # ~40
+```
+
+Or, if you'd rather start fresh: `rm ~/.config/fazla-od/fazla-od.pfx`
+and re-run `./scripts/ps/convert-cert.sh` (which writes to the new
+defaults).
 
 ## 3. Confirm the Entra app has the same cert thumbprint
 

@@ -75,5 +75,7 @@ No concrete tenant values in tracked code, tests, or docs:
 - Tenant / client IDs → placeholders in `config.toml.example`.
 - Site URLs → `https://contoso.sharepoint.com/...`.
 
-The only allowed exception is `docs/setup/migrating-from-fazla-od.md`, which
-documents the old `fazla-od` names for the one-time migration.
+The string `fazla-od` is allowed only in legacy-fallback code paths
+(MSAL token-cache migration in `common/auth.py`, PnP script PFX/Keychain
+fallbacks) and the corresponding tests. It is the toolkit's prior name;
+it is not a tenant identifier.
