@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.12.1] — 2026-04-27
+
+First PyPI release. No code behaviour changes — packaging metadata and
+publish-pipeline only.
+
+### Added
+- PyPI publishing via Trusted Publishing (OIDC). New
+  `.github/workflows/release.yml` builds sdist + wheel with `uv build`
+  on every `v*` tag push and uploads via `pypa/gh-action-pypi-publish`.
+  The job's tag-vs-pyproject version check refuses mismatched releases.
+- `pyproject.toml` metadata for PyPI rendering: `authors`, `license =
+  "Apache-2.0"`, `license-files`, `readme`, `keywords`, `classifiers`,
+  and `[project.urls]` (Homepage, Repository, Issues, Changelog).
+
+### Changed
+- `README.md` install section now leads with `uv tool install m365ctl`
+  (and `pipx install m365ctl` / `uv add m365ctl` alternatives) rather
+  than git clone. Quickstart switched from `./bin/od-auth login`
+  (source-only) to `m365ctl od auth login` (the installed console
+  script). The `bin/*` shims remain documented as a from-source
+  developer convenience.
+- `m365ctl --help` top-level banner replaced the stale
+  "Mail = Phase 1+; no verbs yet" line with the real verb-category
+  sample for both domains plus a pointer to `m365ctl <domain> --help`.
+
+### Build
+- `.gitignore`: exclude `dist/` and `build/` so local `uv build` runs
+  don't pollute git status.
+
 ## [1.12.0] — 2026-04-27
 
 ### Added
@@ -426,7 +455,8 @@ The translator passes through `_unknown_*` for fields it does not model so a Gra
 ### Removed
 - Tenant-specific identifiers (UUIDs, cert thumbprint) from all tracked code, tests, and documentation (except the migration note and this changelog).
 
-[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.12.1...HEAD
+[1.12.1]: https://github.com/aren13/m365ctl/releases/tag/v1.12.1
 [1.12.0]: https://github.com/aren13/m365ctl/releases/tag/v1.12.0
 [1.11.1]: https://github.com/aren13/m365ctl/releases/tag/v1.11.1
 [1.11.0]: https://github.com/aren13/m365ctl/releases/tag/v1.11.0
