@@ -63,7 +63,7 @@ def _seed_catalog(catalog_path: Path, *, now: datetime) -> None:
 
 def test_digest_default_prints_text(tmp_path: Path, capsys) -> None:
     cfg = _write_config(tmp_path)
-    now = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     _seed_catalog(tmp_path / "mail.duckdb", now=now)
 
     from m365ctl.mail.cli import digest as cli_digest
@@ -81,7 +81,7 @@ def test_digest_default_prints_text(tmp_path: Path, capsys) -> None:
 
 def test_digest_json_emits_ndjson(tmp_path: Path, capsys) -> None:
     cfg = _write_config(tmp_path)
-    now = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     _seed_catalog(tmp_path / "mail.duckdb", now=now)
 
     from m365ctl.mail.cli import digest as cli_digest
@@ -100,7 +100,7 @@ def test_digest_send_to_with_confirm_invokes_send_new(
     tmp_path: Path, capsys
 ) -> None:
     cfg = _write_config(tmp_path)
-    now = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     _seed_catalog(tmp_path / "mail.duckdb", now=now)
 
     from m365ctl.mail.cli import digest as cli_digest
@@ -133,7 +133,7 @@ def test_digest_send_to_without_confirm_is_dry_run(
     tmp_path: Path, capsys
 ) -> None:
     cfg = _write_config(tmp_path)
-    now = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     _seed_catalog(tmp_path / "mail.duckdb", now=now)
 
     from m365ctl.mail.cli import digest as cli_digest
