@@ -83,7 +83,10 @@ def test_whoami_reports_not_logged_in(tmp_path: Path, mocker, capsys) -> None:
     # When the catalog file is missing, whoami should suggest building it
     # rather than print stale internal-planning text.
     assert "not built yet" in out
-    assert "od-catalog-refresh" in out
+    # Use the installed CLI invocation, not the source-repo bin/ shim that
+    # only exists in a git checkout.
+    assert "m365ctl od catalog refresh" in out
+    assert "./bin/" not in out
 
 
 def test_whoami_reports_existing_catalog_size(tmp_path: Path, mocker, capsys) -> None:

@@ -70,7 +70,7 @@ def run_whoami(config_path: Path) -> int:
     else:
         print(
             f"Catalog:               not built yet — run "
-            f"`./bin/od-catalog-refresh` (target: {catalog_path})"
+            f"`m365ctl od catalog refresh` (target: {catalog_path})"
         )
     return 0
 

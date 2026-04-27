@@ -1,11 +1,13 @@
 """m365ctl <domain> <verb> — cross-domain CLI entry point."""
 from __future__ import annotations
 
+import importlib.metadata as _metadata
 import sys
 
 _USAGE = (
     "usage: m365ctl <domain> <verb> [args...]\n"
     "       m365ctl undo <op-id> [--confirm]\n"
+    "       m365ctl --version\n"
     "\n"
     "Domains:\n"
     "  od     OneDrive + SharePoint (catalog, search, move, copy, delete, label, ...)\n"
@@ -21,6 +23,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args or args[0] in ("-h", "--help"):
         print(_USAGE)
         return 0 if args else 1
+    if args[0] in ("-V", "--version"):
+        print(_metadata.version("m365ctl"))
+        return 0
     domain = args[0]
     rest = args[1:]
     if domain == "od":

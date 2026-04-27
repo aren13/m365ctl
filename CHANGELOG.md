@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.12.2] — 2026-04-27
+
+First-impression polish for `uv tool install m365ctl` users.
+
+### Added
+- `m365ctl --version` (and `-V`) prints the installed package version
+  via `importlib.metadata`. Previously returned `unknown domain
+  '--version'` because the dispatcher routed it as a domain argument.
+
+### Fixed
+- `m365ctl od auth whoami` no longer points at `./bin/od-catalog-refresh`
+  when the catalog is missing. That path only exists in a source
+  checkout; the message now suggests the installed-CLI invocation
+  `m365ctl od catalog refresh`.
+
 ## [1.12.1] — 2026-04-27
 
 First PyPI release. No code behaviour changes — packaging metadata and
@@ -455,7 +470,8 @@ The translator passes through `_unknown_*` for fields it does not model so a Gra
 ### Removed
 - Tenant-specific identifiers (UUIDs, cert thumbprint) from all tracked code, tests, and documentation (except the migration note and this changelog).
 
-[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/aren13/m365ctl/compare/v1.12.2...HEAD
+[1.12.2]: https://github.com/aren13/m365ctl/releases/tag/v1.12.2
 [1.12.1]: https://github.com/aren13/m365ctl/releases/tag/v1.12.1
 [1.12.0]: https://github.com/aren13/m365ctl/releases/tag/v1.12.0
 [1.11.1]: https://github.com/aren13/m365ctl/releases/tag/v1.11.1
