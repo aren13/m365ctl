@@ -119,6 +119,7 @@ def _run_create(args: argparse.Namespace) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=new_path,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would create folder {new_path!r}", file=sys.stderr)
@@ -154,6 +155,7 @@ def _run_rename(args: argparse.Namespace) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=args.path,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would rename {args.path!r} -> {args.new_name!r}", file=sys.stderr)
@@ -192,10 +194,12 @@ def _run_move(args: argparse.Namespace) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=args.path,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=args.new_parent_path,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(
@@ -256,6 +260,7 @@ def _run_delete(args: argparse.Namespace) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=args.path,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would delete folder {args.path!r}", file=sys.stderr)

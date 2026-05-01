@@ -86,6 +86,7 @@ def _run_add(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would add category {args.name!r} color={args.color!r}", file=sys.stderr)
@@ -113,6 +114,7 @@ def _run_update(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         patch = {}
@@ -189,6 +191,7 @@ def _run_remove(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         if args.strip_from_messages:
@@ -291,6 +294,7 @@ def _run_sync(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)

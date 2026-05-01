@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **`--assume-yes` for mail verbs.** Advanced operators can now bypass the
+  non-irreversible TTY confirmation prompts (bulk-threshold prompts, the
+  external-recipient prompt, and unsafe-scope drive/mailbox prompts) by
+  passing `--assume-yes` on any `m365ctl mail <verb>` command that uses
+  the shared common args. The flag is gated by a new
+  `[safety].allow_no_tty_confirm` config field (default `false`), so
+  appending `--assume-yes` from an agent context fails closed unless the
+  operator has explicitly opted in. The literal-YES gates in
+  `mail clean` / `mail empty` are NEVER bypassed — those remain TTY-only
+  by design (irreversibility). Each bypass is logged to stderr.
+- `SafetyConfig` dataclass on `Config` (loaded from `[safety]` table).
+
 ## [1.13.0] — 2026-05-01
 
 ### Added

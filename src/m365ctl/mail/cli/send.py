@@ -106,6 +106,7 @@ def main(argv: list[str]) -> int:
         assert_mail_target_allowed(
             cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
             unsafe_scope=args.unsafe_scope,
+            assume_yes=getattr(args, "assume_yes", False),
         )
         if not args.confirm:
             print(
@@ -139,7 +140,7 @@ def main(argv: list[str]) -> int:
         cfg, auth_mode, cred = load_and_authorize(args)
         plan = load_plan(Path(args.from_plan))
         ops = [op for op in plan.operations if op.action == "mail.send"]
-        if not confirm_bulk_proceed(len(ops), verb="send"):
+        if not confirm_bulk_proceed(len(ops), verb="send", assume_yes=getattr(args, "assume_yes", False)):
             return 2
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)
@@ -171,15 +172,23 @@ def main(argv: list[str]) -> int:
         assert_mail_target_allowed(
             cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
             unsafe_scope=args.unsafe_scope,
+            assume_yes=getattr(args, "assume_yes", False),
         )
         recips = parse_recipients(args.to + args.cc + args.bcc)
         external = count_external_recipients(recips, internal_domain=None)
         if external > _EXTERNAL_RECIP_TTY_THRESHOLD:
-            from m365ctl.common.safety import _confirm_via_tty
-            prompt = f"mail send: {external} external recipients. Proceed? [y/N]: "
-            if not _confirm_via_tty(prompt):
-                print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
-                return 2
+            if getattr(args, "assume_yes", False):
+                print(
+                    f"[--yes] skipping TTY confirm for {external} "
+                    f"external recipients",
+                    file=sys.stderr,
+                )
+            else:
+                from m365ctl.common.safety import _confirm_via_tty
+                prompt = f"mail send: {external} external recipients. Proceed? [y/N]: "
+                if not _confirm_via_tty(prompt):
+                    print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
+                    return 2
         if not args.confirm:
             print(f"(dry-run) would send inline to={args.to} subject={args.subject!r}",
                   file=sys.stderr)
@@ -217,6 +226,7 @@ def main(argv: list[str]) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would send draft {args.draft_id}", file=sys.stderr)

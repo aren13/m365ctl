@@ -42,6 +42,16 @@ signature_path         = ""                             # e.g. "~/.config/m365ct
 drafts_before_send     = true
 schedule_send_enabled  = false
 
+[safety]
+# Allow advanced operators to pass `--assume-yes` on mail verbs to skip
+# non-irreversible TTY confirmations (bulk threshold prompts, the
+# external-recipient prompt, and unsafe-scope drive/mailbox prompts).
+# The literal-YES gates in `mail clean` and `mail empty` are NEVER
+# bypassed — those remain TTY-only by design.
+# Default false: an agent cannot bypass TTY just by passing `--assume-yes`;
+# the operator must opt in here first.
+allow_no_tty_confirm = false
+
 [logging]
 ops_dir        = "logs/ops"
 purged_dir     = "logs/purged"                          # hard-delete EML captures

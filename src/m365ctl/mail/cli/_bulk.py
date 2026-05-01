@@ -219,15 +219,33 @@ def emit_plan(
     write_plan(plan, path)
 
 
-def confirm_bulk_proceed(n: int, *, threshold: int = 20, verb: str) -> bool:
+def confirm_bulk_proceed(
+    n: int,
+    *,
+    threshold: int = 20,
+    verb: str,
+    assume_yes: bool = False,
+) -> bool:
     """Return True if the bulk should proceed.
 
     - If ``n < threshold``: always True (no prompt).
+    - If ``assume_yes`` is True: True (no prompt) — printed to stderr so
+      the bypass is visible. The CLI only honors this when
+      ``cfg.safety.allow_no_tty_confirm`` is True.
     - Else: prompt via ``/dev/tty`` (not stdin) for y/N confirmation.
 
-    Designed so Claude/agents piping stdin can't bypass this.
+    Designed so Claude/agents piping stdin can't bypass this without the
+    operator-set config flag.
     """
     if n < threshold:
+        return True
+    if assume_yes:
+        import sys
+        print(
+            f"[--yes] skipping TTY confirm for mail {verb} bulk "
+            f"({n} operations)",
+            file=sys.stderr,
+        )
         return True
     prompt = (
         f"m365ctl mail {verb}: about to apply {n} operations from plan file.\n"

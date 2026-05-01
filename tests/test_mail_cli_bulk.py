@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 
@@ -12,10 +12,32 @@ from m365ctl.common.graph import GraphClient
 from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Operation, load_plan
 from m365ctl.mail.cli._bulk import (
     MessageFilter,
+    confirm_bulk_proceed,
     emit_plan,
     execute_plan_in_batches,
     expand_messages_for_pattern,
 )
+
+
+def test_confirm_bulk_proceed_under_threshold_no_prompt():
+    with patch("m365ctl.mail.cli._bulk._confirm_via_tty") as m:
+        assert confirm_bulk_proceed(5, threshold=20, verb="delete") is True
+        m.assert_not_called()
+
+
+def test_confirm_bulk_proceed_at_or_above_threshold_prompts():
+    with patch("m365ctl.mail.cli._bulk._confirm_via_tty", return_value=True) as m:
+        assert confirm_bulk_proceed(25, threshold=20, verb="delete") is True
+        m.assert_called_once()
+
+
+def test_confirm_bulk_proceed_assume_yes_skips_prompt():
+    with patch("m365ctl.mail.cli._bulk._confirm_via_tty") as m:
+        assert (
+            confirm_bulk_proceed(100, threshold=20, verb="delete", assume_yes=True)
+            is True
+        )
+        m.assert_not_called()
 from m365ctl.mail.models import EmailAddress, Flag, Message
 from m365ctl.mail.mutate._common import MailResult
 

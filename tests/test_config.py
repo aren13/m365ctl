@@ -152,6 +152,36 @@ ops_dir = "logs/ops"
     assert cfg.scope.internal_domain_pattern == "@(contoso|contoso\\.onmicrosoft)\\."
 
 
+def test_safety_section_defaults_when_omitted(tmp_path):
+    cfg = load_config(_valid_toml(tmp_path))
+    assert cfg.safety.allow_no_tty_confirm is False
+
+
+def test_safety_section_loads_allow_no_tty_confirm(tmp_path):
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text("""
+tenant_id    = "00000000-0000-0000-0000-000000000000"
+client_id    = "11111111-1111-1111-1111-111111111111"
+cert_path    = "~/.config/m365ctl/m365ctl.key"
+cert_public  = "~/.config/m365ctl/m365ctl.cer"
+default_auth = "delegated"
+
+[scope]
+allow_drives = ["me"]
+
+[safety]
+allow_no_tty_confirm = true
+
+[catalog]
+path = "cache/catalog.duckdb"
+
+[logging]
+ops_dir = "logs/ops"
+""".lstrip())
+    cfg = load_config(cfg_path)
+    assert cfg.safety.allow_no_tty_confirm is True
+
+
 def test_config_mail_section_defaults_when_omitted(tmp_path):
     from m365ctl.common.config import load_config
     cfg_path = tmp_path / "config.toml"
