@@ -146,28 +146,60 @@ When a flush returns:
 envelope-level transients, and each sub-response's `headers["Retry-After"]`
 on per-sub transients.
 
-### `_Resolved` wrapper for non-batched callers
+### `EagerSession` adapter for non-batched callers
 
-To keep verbs uniform across batched and non-batched call sites, every
-`GraphClient` method returns a `_Resolved` object that exposes the same
-`.result()` shape as `BatchFuture` but resolves eagerly:
+`GraphClient`'s public surface is **unchanged** — it keeps raising
+`GraphError` on permanent errors and returning `dict` on success. To keep
+verbs uniform across batched and non-batched call sites, a thin adapter
+`EagerSession` wraps a `GraphClient` so it satisfies the same `GraphCaller`
+protocol as `BatchSession`:
 
 ```python
 class _Resolved:
+    """Already-resolved future for the eager path."""
     def __init__(self, value: dict | None = None, error: GraphError | None = None): ...
     def result(self) -> dict:
         if self._error: raise self._error
         return self._value
     def done(self) -> bool: return True
+
+
+class EagerSession:
+    """GraphCaller adapter: executes synchronously, wraps result in _Resolved.
+
+    Lets verb code (`start_<verb>`, `finish_<verb>`) work uniformly against
+    either a real BatchSession or a synchronous GraphClient.
+    """
+    def __init__(self, graph: GraphClient):
+        self._g = graph
+    def get(self, path, *, headers=None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.get(path, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+    def post(self, path, *, json, headers=None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.post(path, json=json, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+    # get_absolute / patch / delete defined similarly
 ```
 
-This is a behavior change at the Python type layer: `GraphClient.get(...)`
-returns `_Resolved` instead of `dict`. Verbs always call `.result()`. HTTP
-behavior is unchanged, so tests that mock `httpx` transports continue to
-work as-is.
-
 A `GraphCaller` `Protocol` is introduced (`common/graph.py`) so verbs and
-helpers can declare they accept either `GraphClient` or `BatchSession`.
+helpers declare they accept "anything with `.get/post/patch/delete` that
+returns something with `.result()`." Both `BatchSession` and `EagerSession`
+satisfy it.
+
+`execute_<verb>(op, graph: GraphClient, logger, *, before)` (the single-op
+shim) internally constructs `EagerSession(graph)` and feeds it to
+`start_<verb>` / `finish_<verb>`. Existing call sites of `GraphClient`
+elsewhere in the codebase are untouched. Existing verb tests that mock
+`graph.post.return_value = {...}` continue to work without changes because
+those tests pass a `MagicMock` directly as `graph` — the shim's
+`EagerSession` constructor accepts any duck-typed object, and `MagicMock`'s
+auto-generated `.post(...)` returns yet another `MagicMock` whose
+`.result()` is also a `MagicMock` (verbs don't read the return value
+except in error paths, which are tested by configuring `side_effect`).
 
 ## Verb refactor (mutate verbs)
 
