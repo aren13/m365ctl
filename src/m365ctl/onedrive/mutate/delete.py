@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.batch import EagerSession, GraphCaller
 from m365ctl.common.config import Config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.onedrive.mutate._pwsh import (
@@ -49,6 +50,45 @@ class DeleteResult:
     after: dict[str, Any] | None = None
 
 
+def start_recycle_delete(
+    op: Operation,
+    client: GraphCaller,
+    logger: AuditLogger,
+    *,
+    before: dict[str, Any],
+):
+    """Log start, buffer the recycle DELETE, return ``(future, after)``."""
+    log_mutation_start(
+        logger, op_id=op.op_id, cmd="od-delete",
+        args=op.args, drive_id=op.drive_id, item_id=op.item_id,
+        before=before,
+    )
+    f = client.delete(f"/drives/{op.drive_id}/items/{op.item_id}")
+    after: dict[str, Any] = {
+        "parent_path": "(recycle bin)",
+        "name": before.get("name", ""),
+        "recycled_from": before.get("parent_path", ""),
+    }
+    return f, after
+
+
+def finish_recycle_delete(
+    op: Operation,
+    future,
+    after: dict[str, Any],
+    logger: AuditLogger,
+) -> DeleteResult:
+    """Resolve future, log end, return ``DeleteResult``."""
+    try:
+        future.result()
+    except GraphError as e:
+        log_mutation_end(logger, op_id=op.op_id, after=None,
+                         result="error", error=str(e))
+        return DeleteResult(op_id=op.op_id, status="error", error=str(e))
+    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
+    return DeleteResult(op_id=op.op_id, status="ok", after=after)
+
+
 def execute_recycle_delete(
     op: Operation,
     graph: GraphClient,
@@ -56,21 +96,10 @@ def execute_recycle_delete(
     *,
     before: dict[str, Any],
 ) -> DeleteResult:
-    log_mutation_start(
-        logger, op_id=op.op_id, cmd="od-delete",
-        args=op.args, drive_id=op.drive_id, item_id=op.item_id,
-        before=before,
-    )
-    try:
-        graph.delete(f"/drives/{op.drive_id}/items/{op.item_id}")
-    except GraphError as e:
-        log_mutation_end(logger, op_id=op.op_id, after=None,
-                         result="error", error=str(e))
-        return DeleteResult(op_id=op.op_id, status="error", error=str(e))
-    after = {"parent_path": "(recycle bin)", "name": before.get("name", ""),
-             "recycled_from": before.get("parent_path", "")}
-    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
-    return DeleteResult(op_id=op.op_id, status="ok", after=after)
+    """Single-op convenience for non-batched callers."""
+    eager = EagerSession(graph)
+    f, after = start_recycle_delete(op, eager, logger, before=before)
+    return finish_recycle_delete(op, f, after, logger)
 
 
 _ODFB_RESTORE_MANUAL = (
