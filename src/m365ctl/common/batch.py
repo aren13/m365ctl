@@ -200,7 +200,10 @@ class BatchSession:
     def _enqueue(self, method: str, path: str, *, body: dict | None,
                  headers: dict | None) -> BatchFuture:
         if self._closed:
-            raise RuntimeError("BatchSession is closed")
+            raise RuntimeError(
+                "BatchSession is closed (its `with` block has exited); "
+                "create a new session via graph.batch() to issue more calls"
+            )
         req_id = self._new_id()
         sub = _build_subrequest(req_id, method, path, body=body, headers=headers)
         f = BatchFuture(req_id=req_id)
