@@ -295,5 +295,13 @@ class GraphClient:
             return {}
         return resp.json()
 
+    def batch(self) -> "BatchSession":
+        """Return a new BatchSession bound to this GraphClient.
+
+        See ``m365ctl.common.batch.BatchSession`` for usage.
+        """
+        from m365ctl.common.batch import BatchSession
+        return BatchSession(self)
+
     def close(self) -> None:
         self._client.close()

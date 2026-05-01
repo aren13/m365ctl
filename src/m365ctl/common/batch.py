@@ -109,3 +109,161 @@ class GraphCaller(Protocol):
     def post(self, path: str, *, json: dict, headers: dict | None = None): ...
     def patch(self, path: str, *, json_body: dict, headers: dict | None = None): ...
     def delete(self, path: str): ...
+
+
+from m365ctl.common.graph import GraphClient, _parse_retry_after  # noqa: E402
+
+
+_BATCH_MAX = 20
+
+
+def _normalize_path(path: str) -> str:
+    """Strip a leading slash. Graph $batch sub-requests want bare paths."""
+    return path[1:] if path.startswith("/") else path
+
+
+def _strip_auth(headers: dict[str, str] | None) -> dict[str, str]:
+    """Remove any Authorization variant; the outer /$batch POST owns auth."""
+    if not headers:
+        return {}
+    return {k: v for k, v in headers.items() if k.lower() != "authorization"}
+
+
+def _build_subrequest(req_id: str, method: str, path: str,
+                      body: dict | None = None,
+                      headers: dict[str, str] | None = None) -> dict:
+    sub: dict = {"id": req_id, "method": method, "url": _normalize_path(path)}
+    clean_headers = _strip_auth(headers)
+    if body is not None:
+        sub["body"] = body
+        clean_headers.setdefault("Content-Type", "application/json")
+    if clean_headers:
+        sub["headers"] = clean_headers
+    return sub
+
+
+class BatchSession:
+    """Buffers Graph calls into /$batch envelopes (<=20 sub-requests each).
+
+    Use as a context manager:
+
+        with graph.batch() as b:
+            f = b.get("/me/messages/m1")
+            ...
+        # `with` exit flushed; f.result() now safe.
+
+    Auto-flush fires when the 20th call is buffered. ``.result()`` on a
+    future before its session has flushed raises ``BatchUnflushedError``.
+
+    Note on ``get_absolute``: ``@odata.nextLink`` URLs include the Graph
+    host prefix (``https://graph.microsoft.com/v1.0``). The session strips
+    that prefix so sub-request URLs remain bare paths.
+    """
+
+    def __init__(self, graph: GraphClient) -> None:
+        self._graph = graph
+        self._pending: list[tuple[BatchFuture, dict]] = []
+        self._next_id = 0
+        self._closed = False
+
+    def __enter__(self) -> "BatchSession":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        # Always flush remaining buffered calls, even on exception, so
+        # futures don't dangle in an unflushed state forever.
+        try:
+            if self._pending:
+                self._flush_now()
+        finally:
+            self._closed = True
+
+    def _new_id(self) -> str:
+        self._next_id += 1
+        return str(self._next_id)
+
+    def _enqueue(self, method: str, path: str, *, body: dict | None,
+                 headers: dict | None) -> BatchFuture:
+        if self._closed:
+            raise RuntimeError("BatchSession is closed")
+        req_id = self._new_id()
+        sub = _build_subrequest(req_id, method, path, body=body, headers=headers)
+        f = BatchFuture(req_id=req_id)
+        self._pending.append((f, sub))
+        if len(self._pending) >= _BATCH_MAX:
+            self._flush_now()
+        return f
+
+    def get(self, path: str, *, headers: dict | None = None) -> BatchFuture:
+        return self._enqueue("GET", path, body=None, headers=headers)
+
+    def get_absolute(self, url: str, *, headers: dict | None = None) -> BatchFuture:
+        path = url
+        for prefix in ("https://graph.microsoft.com/v1.0", "https://graph.microsoft.com/beta"):
+            if path.startswith(prefix):
+                path = path[len(prefix):]
+                break
+        return self._enqueue("GET", path, body=None, headers=headers)
+
+    def post(self, path: str, *, json: dict, headers: dict | None = None) -> BatchFuture:
+        return self._enqueue("POST", path, body=json, headers=headers)
+
+    def patch(self, path: str, *, json_body: dict, headers: dict | None = None) -> BatchFuture:
+        return self._enqueue("PATCH", path, body=json_body, headers=headers)
+
+    def delete(self, path: str, *, headers: dict | None = None) -> BatchFuture:
+        return self._enqueue("DELETE", path, body=None, headers=headers)
+
+    def flush(self) -> None:
+        """Explicit flush; usually the `with` exit handles this."""
+        if self._pending:
+            self._flush_now()
+
+    # Internal — actual /$batch dispatch.
+    def _flush_now(self) -> None:
+        batch = self._pending
+        self._pending = []
+        self._dispatch(batch)
+
+    def _dispatch(self, batch: list[tuple["BatchFuture", dict]]) -> None:
+        envelope = {"requests": [sub for _f, sub in batch]}
+        body = self._graph.post("/$batch", json=envelope)
+        self._resolve_responses(batch, body)
+
+    def _resolve_responses(
+        self, batch: list[tuple["BatchFuture", dict]], body: dict,
+    ) -> None:
+        by_id = {f._req_id: f for f, _sub in batch}
+        for resp in body.get("responses", []):
+            req_id = str(resp.get("id"))
+            f = by_id.get(req_id)
+            if f is None:
+                continue
+            status = int(resp.get("status", 0))
+            headers = {k: str(v) for k, v in (resp.get("headers") or {}).items()}
+            sub_body = resp.get("body")
+            if status >= 400:
+                err = self._graph_error_from_subresponse(status, sub_body, headers)
+                f._resolve_error(err)
+            else:
+                f._resolve(
+                    status=status,
+                    headers=headers,
+                    body=sub_body if isinstance(sub_body, dict) else None,
+                )
+        for f, _sub in batch:
+            if not f.done():
+                f._resolve_error(GraphError(
+                    f"HTTP0: missing sub-response for id={f._req_id}",
+                ))
+
+    def _graph_error_from_subresponse(
+        self, status: int, body, headers: dict[str, str],
+    ) -> GraphError:
+        err = (body.get("error") if isinstance(body, dict) else None) or {}
+        code = err.get("code", f"HTTP{status}")
+        msg = err.get("message", "")
+        return GraphError(
+            f"{code}: {msg}",
+            retry_after_seconds=_parse_retry_after(headers.get("Retry-After")),
+        )
