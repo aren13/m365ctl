@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Protocol, TypeVar, runtime_checkable
+from typing import Any, Callable, Iterable, Iterator, Protocol, TypeVar, cast, runtime_checkable
 from urllib.parse import urlencode
 
 from m365ctl.common.audit import AuditLogger
@@ -25,6 +25,7 @@ from m365ctl.common.batch import BatchFuture
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation, Plan, write_plan
 from m365ctl.common.safety import _confirm_via_tty
+from m365ctl.mail.endpoints import AuthMode
 from m365ctl.mail.mutate._common import MailResult  # noqa: F401  (re-export convenience)
 from m365ctl.mail.messages import (
     MessageListFilters,
@@ -146,31 +147,29 @@ def expand_messages_for_pattern(
 
     mailbox_upn = _derive_mailbox_upn(mailbox_spec)
 
-    # Phase 1: batch first-page GETs across all folders in chunks of 20.
-    # Pagination within each folder stream stays sequential (handled below).
-    first_pages: list[tuple[str, str, BatchFuture, dict]] = []  # (fid, fpath, future, params)
+    # Phase 1: build per-folder URLs, then batch the first-page GETs across
+    # all folders in one /$batch (auto-flushes every 20 enqueued).
+    # Pagination within each folder stream stays sequential (below).
+    auth_mode_lit = cast("AuthMode", auth_mode)
+    folder_urls: list[tuple[str, str, str]] = []  # (fid, fpath, url)
     for folder_id, folder_path in resolved_folders:
         path, params = _messages_url(
             mailbox_spec=mailbox_spec,
-            auth_mode=auth_mode,
+            auth_mode=auth_mode_lit,
             folder_id=folder_id,
             filters=list_filters,
             limit=limit,
             page_size=page_size,
         )
-        # BatchSession.get takes a path; bake params into the query string.
-        url_with_query = f"{path}?{urlencode(params)}"
-        first_pages.append((folder_id, folder_path, None, url_with_query))  # placeholder; assigned below
+        folder_urls.append((folder_id, folder_path, f"{path}?{urlencode(params)}"))
 
-    # Re-issue under a single BatchSession (auto-flushes every 20 enqueued).
     with graph.batch() as b:
-        first_pages = [
-            (fid, fpath, b.get(url), url)
-            for (fid, fpath, _f, url) in first_pages
+        first_pages: list[tuple[str, str, BatchFuture]] = [
+            (fid, fpath, b.get(url)) for (fid, fpath, url) in folder_urls
         ]
 
     # Phase 2: walk each folder's pages serially, yielding messages.
-    for folder_id, folder_path, fut, _url in first_pages:
+    for folder_id, folder_path, fut in first_pages:
         try:
             body = fut.result()
         except GraphError:

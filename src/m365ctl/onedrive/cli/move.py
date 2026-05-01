@@ -19,7 +19,7 @@ from m365ctl.onedrive.cli._common import (
 from m365ctl.common.config import load_config
 from m365ctl.onedrive.mutate.move import execute_move, finish_move, start_move
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
-from m365ctl.common.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
+from m365ctl.common.safety import filter_by_scope
 
 
 def _lookup_item(graph, drive_id: str, item_id: str) -> dict:

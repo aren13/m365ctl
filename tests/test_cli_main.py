@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import importlib.metadata as importlib_metadata
 
-import pytest
 
 
 def test_help_prints_domain_banner(capsys) -> None:
