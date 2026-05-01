@@ -4,6 +4,29 @@ All notable changes to m365ctl are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0](https://github.com/aren13/m365ctl/compare/v1.13.0...v1.14.0) (2026-05-01)
+
+
+### Added
+
+* **mail:** mail categories remove --strip-from-messages ([6db72c0](https://github.com/aren13/m365ctl/commit/6db72c07865781ac8761ad31a71a1cb50bed9028))
+* **mail:** mail categories remove --strip-from-messages (closes [#35](https://github.com/aren13/m365ctl/issues/35)) ([953555a](https://github.com/aren13/m365ctl/commit/953555a0c985efe5e8b8b974d99e2313f1b902e8))
+* **mail:** mail categorize bulk filter mode ([2bc4ff2](https://github.com/aren13/m365ctl/commit/2bc4ff209d88103ea59a5435a79f02fa50c5cb1f))
+* **mail:** mail categorize bulk filter mode (closes [#34](https://github.com/aren13/m365ctl/issues/34)) ([0a93db5](https://github.com/aren13/m365ctl/commit/0a93db5a791924cae04ff5be6344da0099aabb58))
+* **mail:** mail folders move accepts root sentinels ([13aeb24](https://github.com/aren13/m365ctl/commit/13aeb24373def7558e7f37f2969474372cf6e022))
+* **mail:** mail folders move accepts root sentinels (msgfolderroot) ([088aa10](https://github.com/aren13/m365ctl/commit/088aa10514d054400a4445aa587a16c611982ab2))
+* pre-push hook running ruff + mypy + pytest gates locally ([22873c3](https://github.com/aren13/m365ctl/commit/22873c3e63552ab1cf049ec6f3143f4b7fca11c1))
+
+
+### Fixed
+
+* **batch:** actionable BatchSession-is-closed error ([89205af](https://github.com/aren13/m365ctl/commit/89205af038c28aeaad41cb45794ed02e05fa794b))
+* **batch:** make BatchSession-is-closed error actionable ([f68596e](https://github.com/aren13/m365ctl/commit/f68596e76076835e0b5fbd3afbd86add5015aa24))
+* **ci:** clean up ruff F401/F821/E402 + mypy errors carried over from batch refactor ([1c7b8ae](https://github.com/aren13/m365ctl/commit/1c7b8aec8617f46ba1bd32e0907abeaf9e58917b))
+* **ci:** pin release-please target-branch to main ([c575ec5](https://github.com/aren13/m365ctl/commit/c575ec58f5fea0d7b213a347b2af29d5ca5ece87))
+* **ci:** pin release-please target-branch to main ([09b3ddd](https://github.com/aren13/m365ctl/commit/09b3ddde82bf1f96d5858e1336972c74df30bbef))
+* **ci:** use PAT for release-please so required checks run ([#43](https://github.com/aren13/m365ctl/issues/43)) ([12e07cc](https://github.com/aren13/m365ctl/commit/12e07cca72ca62ef1ae3ce6c08ad203376464c75))
+
 ## [Unreleased]
 
 ## [1.13.0] — 2026-05-01
