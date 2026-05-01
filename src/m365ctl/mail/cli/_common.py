@@ -36,6 +36,35 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--json", action="store_true", help="Emit NDJSON instead of human-readable output.")
     p.add_argument("--unsafe-scope", action="store_true",
                    help="Override allow_mailboxes via /dev/tty confirm (per mailbox).")
+    p.add_argument(
+        "--assume-yes",
+        dest="assume_yes",
+        action="store_true",
+        help=(
+            "Bypass non-irreversible TTY confirms (bulk thresholds, "
+            "external-recipient gate, unsafe-scope). Requires "
+            "[safety].allow_no_tty_confirm = true in config.toml. "
+            "Does NOT bypass the literal-YES gates in mail clean / mail empty."
+        ),
+    )
+
+
+def _validate_assume_yes(cfg: Config, args: argparse.Namespace) -> None:
+    """Reject ``--yes`` unless ``[safety].allow_no_tty_confirm`` is set.
+
+    The config gate is what prevents an agent from bypassing TTY confirms
+    just by appending ``--yes`` to the command line — the operator must
+    have opted in via config.toml first. On rejection, exits with code 2
+    after printing a helpful message to stderr.
+    """
+    if getattr(args, "assume_yes", False) and not cfg.safety.allow_no_tty_confirm:
+        print(
+            "--yes requires [safety].allow_no_tty_confirm = true in "
+            f"{args.config}. Set it explicitly in config.toml to opt "
+            "advanced operators into bypassing TTY confirms.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def load_and_authorize(
@@ -43,10 +72,12 @@ def load_and_authorize(
 ) -> tuple[Config, AuthMode, DelegatedCredential | AppOnlyCredential]:
     """Load config, gate the requested mailbox, and return (cfg, auth_mode, credential)."""
     cfg = load_config(Path(args.config))
+    _validate_assume_yes(cfg, args)
     mailbox_spec = args.mailbox
     auth_mode: AuthMode = cfg.default_auth if mailbox_spec == "me" else "app-only"
     assert_mailbox_allowed(
         mailbox_spec, cfg, auth_mode=auth_mode, unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     cred: DelegatedCredential | AppOnlyCredential = (
         DelegatedCredential(cfg) if auth_mode == "delegated" else AppOnlyCredential(cfg)

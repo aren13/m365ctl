@@ -112,6 +112,7 @@ def main(argv: list[str]) -> int:
         assert_mail_target_allowed(
             cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
             unsafe_scope=args.unsafe_scope,
+            assume_yes=getattr(args, "assume_yes", False),
         )
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)

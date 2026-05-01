@@ -51,6 +51,16 @@ class MailConfig:
 
 
 @dataclass(frozen=True)
+class SafetyConfig:
+    # When True, advanced operators may pass ``--yes`` to bypass TTY
+    # confirmations on threshold gates (bulk size, external-recip count,
+    # unsafe-scope drive/mailbox). The irreversible purge gates in
+    # ``mail clean`` / ``mail empty`` are NOT affected — they remain
+    # TTY-only by design.
+    allow_no_tty_confirm: bool = False
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     ops_dir: Path
     purged_dir: Path = field(default_factory=lambda: Path("logs/purged"))
@@ -70,6 +80,7 @@ class Config:
     mail: MailConfig = field(
         default_factory=lambda: MailConfig(catalog_path=Path("cache/mail.duckdb"))
     )
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
 
 
 def _require(mapping: dict[str, Any], key: str, source: str) -> Any:
@@ -140,6 +151,11 @@ def load_config(path: Path | str) -> Config:
         schedule_send_enabled=bool(mail_raw.get("schedule_send_enabled", False)),
     )
 
+    safety_raw = data.get("safety", {})
+    safety = SafetyConfig(
+        allow_no_tty_confirm=bool(safety_raw.get("allow_no_tty_confirm", False)),
+    )
+
     logging_raw = data.get("logging", {})
     logging_cfg = LoggingConfig(
         ops_dir=_expand(logging_raw.get("ops_dir", "logs/ops")),
@@ -157,4 +173,5 @@ def load_config(path: Path | str) -> Config:
         catalog=catalog,
         mail=mail,
         logging=logging_cfg,
+        safety=safety,
     )

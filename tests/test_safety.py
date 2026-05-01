@@ -108,6 +108,41 @@ def test_unsafe_scope_without_tty_yes_still_raises(tmp_path: Path) -> None:
             assert_scope_allowed(item, cfg, unsafe_scope=True)
 
 
+def test_assume_yes_bypasses_unsafe_scope_tty(tmp_path: Path) -> None:
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
+    with patch("m365ctl.common.safety._confirm_via_tty") as m:
+        assert_scope_allowed(item, cfg, unsafe_scope=True, assume_yes=True)
+        m.assert_not_called()
+
+
+def test_assume_yes_does_not_bypass_unsafe_scope_flag(tmp_path: Path) -> None:
+    """assume_yes still requires --unsafe-scope; it only skips the TTY layer."""
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    item = _Item(drive_id="OTHER", item_id="i", full_path="/foo")
+    with pytest.raises(ScopeViolation, match="not in scope"):
+        assert_scope_allowed(item, cfg, unsafe_scope=False, assume_yes=True)
+
+
+def test_assume_yes_does_not_bypass_deny_paths(tmp_path: Path) -> None:
+    cfg = _cfg(allow=["d1"], deny=["/HR/**"], tmp_path=tmp_path)
+    item = _Item(drive_id="d1", item_id="i", full_path="/HR/x.docx")
+    with pytest.raises(ScopeViolation, match="deny"):
+        assert_scope_allowed(item, cfg, unsafe_scope=True, assume_yes=True)
+
+
+def test_filter_by_scope_with_assume_yes_keeps_unsafe_drives(tmp_path: Path) -> None:
+    cfg = _cfg(allow=["d1"], tmp_path=tmp_path)
+    items = [
+        _Item(drive_id="d1",    item_id="a", full_path="/p"),
+        _Item(drive_id="OTHER", item_id="b", full_path="/p"),
+    ]
+    with patch("m365ctl.common.safety._confirm_via_tty") as m:
+        kept = list(filter_by_scope(items, cfg, unsafe_scope=True, assume_yes=True))
+        m.assert_not_called()
+    assert sorted(i.item_id for i in kept) == ["a", "b"]
+
+
 def test_unsafe_scope_flag_required_per_config(tmp_path: Path) -> None:
     """If unsafe_requires_flag is True (default), passing unsafe_scope=False
     against an out-of-scope item always raises — no TTY prompt offered."""

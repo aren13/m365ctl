@@ -17,6 +17,7 @@ False and the op is rejected.
 from __future__ import annotations
 
 import fnmatch
+import sys
 from typing import Iterable, Iterator, Protocol
 
 from m365ctl.common.config import Config
@@ -96,12 +97,14 @@ def assert_scope_allowed(
     cfg: Config,
     *,
     unsafe_scope: bool,
+    assume_yes: bool = False,
 ) -> None:
     """Raise ``ScopeViolation`` unless the item is allowed.
 
-    - Deny paths ALWAYS block, even with ``--unsafe-scope``.
-    - Drive-not-in-allow-list blocks unless ``unsafe_scope=True`` AND the
-      /dev/tty prompt confirms.
+    - Deny paths ALWAYS block, even with ``--unsafe-scope`` or ``assume_yes``.
+    - Drive-not-in-allow-list blocks unless ``unsafe_scope=True``. The TTY
+      confirm is then required UNLESS ``assume_yes=True`` (which the CLI
+      only honors when ``cfg.safety.allow_no_tty_confirm`` is True).
     """
     denied = _deny_match(item, cfg)
     if denied is not None:
@@ -123,6 +126,14 @@ def assert_scope_allowed(
             f"pass --unsafe-scope to override (requires TTY confirm)"
         )
 
+    if assume_yes:
+        print(
+            f"[--yes] skipping TTY confirm for unsafe-scope drive "
+            f"{item.drive_id!r} path={item.full_path!r}",
+            file=sys.stderr,
+        )
+        return
+
     prompt = (
         f"UNSAFE SCOPE: drive {item.drive_id!r} is outside allow_drives.\n"
         f"  item full_path: {item.full_path!r}\n"
@@ -140,14 +151,15 @@ def filter_by_scope(
     cfg: Config,
     *,
     unsafe_scope: bool,
+    assume_yes: bool = False,
 ) -> Iterator[_HasScopeFields]:
     """Drop items that would raise ``ScopeViolation``.
 
     Used during bulk selection (before plan emission) so deny-path items
     never appear in the plan. An allow-list miss with ``unsafe_scope=True``
-    still prompts once per item; pass the whole selection through
-    ``assert_scope_allowed`` at execute time anyway — this filter is a
-    fast pre-pass, not the authoritative gate.
+    still prompts once per item (skipped under ``assume_yes=True``); pass
+    the whole selection through ``assert_scope_allowed`` at execute time
+    anyway — this filter is a fast pre-pass, not the authoritative gate.
     """
     for item in items:
         if _deny_match(item, cfg) is not None:
@@ -159,7 +171,7 @@ def filter_by_scope(
             continue
         # Prompt once per item. Order matches the source iterable.
         try:
-            assert_scope_allowed(item, cfg, unsafe_scope=True)
+            assert_scope_allowed(item, cfg, unsafe_scope=True, assume_yes=assume_yes)
         except ScopeViolation:
             continue
         yield item
@@ -212,6 +224,7 @@ def assert_mailbox_allowed(
     *,
     auth_mode: str,
     unsafe_scope: bool,
+    assume_yes: bool = False,
 ) -> None:
     """Raise ``ScopeViolation`` unless ``mailbox_spec`` is in ``allow_mailboxes``.
 
@@ -241,6 +254,13 @@ def assert_mailbox_allowed(
             f"mailbox {mailbox_spec!r} not in scope.allow_mailboxes; "
             f"pass --unsafe-scope to override (requires TTY confirm)"
         )
+
+    if assume_yes:
+        print(
+            f"[--yes] skipping TTY confirm for unsafe-scope mailbox {mailbox_spec!r}",
+            file=sys.stderr,
+        )
+        return
 
     prompt = (
         f"UNSAFE SCOPE: mailbox {mailbox_spec!r} is outside allow_mailboxes.\n"
