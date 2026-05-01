@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-05-01
+
 ### Added
 - **Microsoft Graph `$batch` support.** `m365ctl` now uses Graph's `$batch`
   endpoint (≤20 sub-requests per HTTP call) for bulk plan execution and

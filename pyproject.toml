@@ -1,6 +1,6 @@
 [project]
 name = "m365ctl"
-version = "1.12.2"
+version = "1.13.0"
 description = "Admin CLI for Microsoft 365 OneDrive + SharePoint + Mail via Microsoft Graph."
 readme = "README.md"
 requires-python = ">=3.11"
