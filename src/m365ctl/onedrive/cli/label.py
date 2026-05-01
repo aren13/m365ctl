@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 
 from m365ctl.common.audit import AuditLogger
-from m365ctl.onedrive.cli._common import build_graph_client, emit_plan, new_plan
+from m365ctl.onedrive.cli._common import (
+    batched_lookup_and_scope_check,
+    build_graph_client,
+    emit_plan,
+    new_plan,
+)
 from m365ctl.common.config import load_config
 from m365ctl.onedrive.mutate.label import execute_label_apply, execute_label_remove
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
@@ -70,25 +75,30 @@ def run_label(
             return 2
         plan = load_plan(from_plan)
         graph = build_graph_client(cfg, plan.scope)
-        any_error = False
-        for op in plan.operations:
-            if op.action != action:
-                continue
-            meta = _lookup_label_item(graph, op.drive_id, op.item_id)
-            try:
-                assert_scope_allowed(type("X", (), meta)(), cfg,
-                                     unsafe_scope=unsafe_scope)
-            except ScopeViolation as e:
-                print(f"[{op.op_id}] skipped: {e}", file=sys.stderr)
-                any_error = True
-                continue
-            exec_fn = _ACTION_EXECUTORS[action]
-            result = exec_fn(op, logger,
-                             before={"parent_path": meta["parent_path"],
-                                     "name": meta["name"],
-                                     "server_relative_url":
-                                         meta["server_relative_url"]},
-                             cfg=cfg)
+        # Label is the one OneDrive verb that doesn't fit the Graph $batch
+        # model — it shells out to PnP.PowerShell per item. We still batch
+        # the phase-0 metadata GETs (one /$batch POST for the whole plan)
+        # via ``batched_lookup_and_scope_check``; phase-2 shellouts run
+        # sequentially because pwsh is per-process.
+        ops = [op for op in plan.operations
+               if op.action in (action, action.replace("od.", ""))]
+        kept_ops, befores, skipped = batched_lookup_and_scope_check(
+            graph, ops, cfg, unsafe_scope=unsafe_scope,
+        )
+        any_error = bool(skipped)
+        for op, msg in skipped:
+            print(f"[{op.op_id}] skipped: {msg}", file=sys.stderr)
+
+        exec_fn = _ACTION_EXECUTORS[action]
+        for op in kept_ops:
+            before = befores[op.op_id]
+            result = exec_fn(
+                op, logger,
+                before={"parent_path": before["parent_path"],
+                        "name": before["name"],
+                        "server_relative_url": before["server_relative_url"]},
+                cfg=cfg,
+            )
             if result.status != "ok":
                 any_error = True
                 print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)

@@ -69,18 +69,41 @@ def test_apply_requires_label(tmp_path, mocker, capsys):
 
 
 def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
+    """Bulk plan execution: phase-0 metadata batch + per-op pwsh shellouts.
+
+    Label is the one OneDrive verb that can't put its phase-2 mutations on
+    a Graph $batch (PnP.PowerShell is per-process), so we expect exactly
+    one /$batch POST (the metadata GETs) plus N pwsh invocations.
+    """
+    import httpx
+
     cfg = _stub_cfg(tmp_path)
     mocker.patch("m365ctl.onedrive.cli.label.load_config", return_value=cfg)
-    mocker.patch(
-        "m365ctl.onedrive.cli.label._lookup_label_item",
-        side_effect=lambda g, d, i: {
-            "drive_id": d, "item_id": i,
-            "full_path": f"/A/{i}", "name": i,
-            "parent_path": "/A",
-            "server_relative_url": f"/A/{i}",
-        },
+
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        posts.append(body)
+        responses = []
+        for r in body["requests"]:
+            item_id = r["url"].split("/items/")[1].split("?")[0]
+            responses.append({
+                "id": r["id"], "status": 200, "headers": {},
+                "body": {
+                    "id": item_id, "name": item_id,
+                    "parentReference": {"id": "P", "path": "/drive/root:/A"},
+                },
+            })
+        return httpx.Response(200, json={"responses": responses})
+
+    from m365ctl.common.graph import GraphClient
+    real = GraphClient(
+        token_provider=lambda: "t",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda s: None,
     )
-    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=MagicMock())
+    mocker.patch("m365ctl.onedrive.cli.label.build_graph_client", return_value=real)
 
     completed = MagicMock()
     completed.returncode = 0
@@ -115,4 +138,8 @@ def test_from_plan_invokes_pwsh_once_per_op(tmp_path, mocker):
         confirm=True, unsafe_scope=False,
     )
     assert rc == 0
+    # One /$batch POST for the phase-0 metadata GETs.
+    assert len(posts) == 1
+    assert all(r["method"] == "GET" for r in posts[0]["requests"])
+    # Three pwsh shellouts, one per op.
     assert run_mock.call_count == 3
