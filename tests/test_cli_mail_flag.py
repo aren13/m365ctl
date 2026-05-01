@@ -26,7 +26,7 @@ def test_flag_parser_from_plan():
 
 
 def test_mail_flag_from_plan_uses_batch(tmp_path, monkeypatch):
-    """Bulk flag via plan file should issue ONE $batch envelope (no Phase 1)."""
+    """Bulk flag via plan file issues TWO $batch envelopes (Phase-1 GETs + Phase-2 PATCHes)."""
     import json
     import httpx
     from m365ctl.common.planfile import (
@@ -54,7 +54,14 @@ def test_mail_flag_from_plan_uses_batch(tmp_path, monkeypatch):
                         "id": r["id"],
                         "status": 200,
                         "headers": {},
-                        "body": {},
+                        "body": (
+                            {
+                                "id": r["url"].split("/")[-1].split("?")[0],
+                                "flag": {"flagStatus": "notFlagged"},
+                            }
+                            if r["method"] == "GET"
+                            else {}
+                        ),
                     }
                     for r in payload["requests"]
                 ],
@@ -131,6 +138,8 @@ def test_mail_flag_from_plan_uses_batch(tmp_path, monkeypatch):
     ])
     assert rc == 0
     batch_posts = [p for p in posts if p["path"].endswith("/$batch")]
-    # No Phase 1: just one /$batch POST containing all PATCHes.
-    assert len(batch_posts) == 1
-    assert all(r["method"] == "PATCH" for r in batch_posts[0]["body"]["requests"])
+    # Phase 1: GETs to capture pre-flag state for undo. Phase 2: PATCHes.
+    assert len(batch_posts) == 2
+    phase1, phase2 = batch_posts
+    assert all(r["method"] == "GET" for r in phase1["body"]["requests"])
+    assert all(r["method"] == "PATCH" for r in phase2["body"]["requests"])

@@ -116,12 +116,18 @@ def main(argv: list[str]) -> int:
 
         def fetch_before(b, op):
             ub = user_base_for_op(op)
-            return b.get(f"{ub}/messages/{op.item_id}?$select=id,parentFolderId")
+            return b.get(
+                f"{ub}/messages/{op.item_id}"
+                f"?$select=id,parentFolderId,internetMessageId"
+            )
 
         def parse_before(op, body, err):
             if not body:
                 return {}
-            return {"parent_folder_id": body.get("parentFolderId")}
+            return {
+                "parent_folder_id": body.get("parentFolderId"),
+                "internet_message_id": body.get("internetMessageId"),
+            }
 
         def on_result(op, result):
             if result.status == "ok":

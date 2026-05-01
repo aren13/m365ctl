@@ -10,6 +10,7 @@ from m365ctl.common.graph import GraphClient
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
 from m365ctl.mail.cli._bulk import confirm_bulk_proceed, execute_plan_in_batches
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
 from m365ctl.mail.mutate.read import execute_read, finish_read, start_read
@@ -46,6 +47,15 @@ def main(argv: list[str]) -> int:
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
 
+        def fetch_before(b, op):
+            ub = user_base_for_op(op)
+            return b.get(f"{ub}/messages/{op.item_id}?$select=id,isRead")
+
+        def parse_before(op, body, err):
+            if not body:
+                return {}
+            return {"is_read": bool(body.get("isRead", False))}
+
         def on_result(op, result):
             if result.status == "ok":
                 print(f"[{op.op_id}] ok")
@@ -54,7 +64,7 @@ def main(argv: list[str]) -> int:
 
         return execute_plan_in_batches(
             graph=graph, logger=logger, ops=ops,
-            fetch_before=None, parse_before=lambda *_: {},
+            fetch_before=fetch_before, parse_before=parse_before,
             start_op=start_read, finish_op=finish_read,
             on_result=on_result,
         )

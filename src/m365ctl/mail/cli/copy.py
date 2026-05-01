@@ -22,7 +22,6 @@ from m365ctl.mail.cli._bulk import (
     expand_messages_for_pattern,
 )
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
-from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
 from m365ctl.mail.mutate.copy import execute_copy, finish_copy, start_copy
@@ -107,13 +106,6 @@ def main(argv: list[str]) -> int:
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
 
-        def fetch_before(b, op):
-            ub = user_base_for_op(op)
-            return b.get(f"{ub}/messages/{op.item_id}?$select=id")
-
-        def parse_before(op, body, err):
-            return {}
-
         def on_result(op, result):
             if result.status == "ok":
                 print(f"[{op.op_id}] ok")
@@ -122,7 +114,7 @@ def main(argv: list[str]) -> int:
 
         return execute_plan_in_batches(
             graph=graph, logger=logger, ops=ops,
-            fetch_before=fetch_before, parse_before=parse_before,
+            fetch_before=None, parse_before=lambda *_: {},
             start_op=start_copy, finish_op=finish_copy,
             on_result=on_result,
         )

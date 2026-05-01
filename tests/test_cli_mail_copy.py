@@ -154,8 +154,8 @@ def test_mail_copy_from_plan_uses_batch(tmp_path, monkeypatch):
     ])
     assert rc == 0
     batch_posts = [p for p in posts if p["path"].endswith("/$batch")]
-    assert len(batch_posts) == 2
-    phase1, phase2 = batch_posts
-    assert all(r["method"] == "GET" for r in phase1["body"]["requests"])
-    assert all(r["method"] == "POST" for r in phase2["body"]["requests"])
-    assert all(r["url"].endswith("/copy") for r in phase2["body"]["requests"])
+    # No Phase 1: copy doesn't need pre-state (undo soft-deletes the copy by id).
+    assert len(batch_posts) == 1
+    only = batch_posts[0]
+    assert all(r["method"] == "POST" for r in only["body"]["requests"])
+    assert all(r["url"].endswith("/copy") for r in only["body"]["requests"])
