@@ -194,25 +194,31 @@ def test_from_plan_no_glob_reexpansion_exact_call_count(tmp_path, mocker):
     patches = {"n": 0}
 
     def handler(request):
-        if request.method == "PATCH":
-            patches["n"] += 1
-        return httpx.Response(
-            200, json={"id": "x",
-                       "parentReference": {"id": "P", "path": "/B"},
-                       "name": "x"},
-        )
+        body = json.loads(request.read())
+        responses = []
+        for r in body["requests"]:
+            if r["method"] == "PATCH":
+                patches["n"] += 1
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {"id": "x", "name": "x",
+                             "parentReference": {"id": "P", "path": "/drive/root:/B"}},
+                })
+            else:
+                # GET — phase-0 metadata
+                item_id = r["url"].split("/items/")[1].split("?")[0]
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {"id": item_id, "name": item_id,
+                             "parentReference": {"id": "P", "path": "/drive/root:/junk"}},
+                })
+        return httpx.Response(200, json={"responses": responses})
 
     from m365ctl.common.graph import GraphClient
     client = GraphClient(token_provider=lambda: "t",
                          transport=httpx.MockTransport(handler),
                          sleep=lambda s: None)
     mocker.patch("m365ctl.onedrive.cli.move.build_graph_client", return_value=client)
-    mocker.patch(
-        "m365ctl.onedrive.cli.move._lookup_item",
-        side_effect=lambda g, d, i: {"drive_id": d, "item_id": i,
-                                     "full_path": f"/junk/{i}", "name": i,
-                                     "parent_path": "/junk"},
-    )
 
     from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan_payload = {

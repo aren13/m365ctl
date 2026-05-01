@@ -8,11 +8,12 @@ from pathlib import Path
 from m365ctl.common.audit import AuditLogger
 from m365ctl.common.graph import GraphClient
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
-from m365ctl.mail.cli._bulk import confirm_bulk_proceed
+from m365ctl.mail.cli._bulk import confirm_bulk_proceed, execute_plan_in_batches
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
-from m365ctl.mail.mutate.read import execute_read
+from m365ctl.mail.mutate.read import execute_read, finish_read, start_read
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,25 +41,33 @@ def main(argv: list[str]) -> int:
         ops = [op for op in plan.operations if op.action == "mail.read"]
         if not confirm_bulk_proceed(len(ops), verb="read"):
             return 2
+        for op in ops:
+            op.args.setdefault("auth_mode", auth_mode)
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
-        any_error = False
-        for op in ops:
-            op.args.setdefault("auth_mode", auth_mode)
-            try:
-                msg = get_message(graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
-                                  message_id=op.item_id)
-                before = {"is_read": msg.is_read}
-            except Exception:
-                before = {}
-            result = execute_read(op, graph, logger, before=before)
-            if result.status != "ok":
-                any_error = True
-                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
-            else:
+
+        def fetch_before(b, op):
+            ub = user_base_for_op(op)
+            return b.get(f"{ub}/messages/{op.item_id}?$select=id,isRead")
+
+        def parse_before(op, body, err):
+            if not body:
+                return {}
+            return {"is_read": bool(body.get("isRead", False))}
+
+        def on_result(op, result):
+            if result.status == "ok":
                 print(f"[{op.op_id}] ok")
-        return 1 if any_error else 0
+            else:
+                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
+
+        return execute_plan_in_batches(
+            graph=graph, logger=logger, ops=ops,
+            fetch_before=fetch_before, parse_before=parse_before,
+            start_op=start_read, finish_op=finish_read,
+            on_result=on_result,
+        )
 
     if not args.message_id or args.set_read is None:
         print("mail read: pass --message-id + --yes or --no (or --from-plan --confirm).",

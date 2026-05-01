@@ -18,12 +18,13 @@ from m365ctl.mail.cli._bulk import (
     MessageFilter,
     confirm_bulk_proceed,
     emit_plan,
+    execute_plan_in_batches,
     expand_messages_for_pattern,
 )
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
 from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
-from m365ctl.mail.mutate.copy import execute_copy
+from m365ctl.mail.mutate.copy import execute_copy, finish_copy, start_copy
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -99,19 +100,24 @@ def main(argv: list[str]) -> int:
         if not confirm_bulk_proceed(len(ops), verb="copy"):
             print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
             return 2
+        for op in ops:
+            op.args.setdefault("auth_mode", auth_mode)
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
-        any_error = False
-        for op in ops:
-            op.args.setdefault("auth_mode", auth_mode)
-            result = execute_copy(op, graph, logger, before={})
-            if result.status != "ok":
-                any_error = True
-                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
-            else:
+
+        def on_result(op, result):
+            if result.status == "ok":
                 print(f"[{op.op_id}] ok")
-        return 1 if any_error else 0
+            else:
+                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
+
+        return execute_plan_in_batches(
+            graph=graph, logger=logger, ops=ops,
+            fetch_before=None, parse_before=lambda *_: {},
+            start_op=start_copy, finish_op=finish_copy,
+            on_result=on_result,
+        )
 
     # --- Single-item mode ---------------------------------------------------
     if args.message_id:

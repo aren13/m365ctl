@@ -37,14 +37,35 @@ def run_emit(
     scope: str,
     plan_out: Path,
     header_fetcher: Callable[[str], list[dict[str, str]]] | None = None,
+    prefetch_graph: GraphClient | None = None,
+    prefetch_mailbox_spec: str | None = None,
+    prefetch_auth_mode: AuthMode | None = None,
 ) -> Plan:
-    """Load DSL, query the catalog, emit a Plan, write it to plan_out."""
+    """Load DSL, query the catalog, emit a Plan, write it to plan_out.
+
+    When ``prefetch_graph`` (and the matching mailbox_spec + auth_mode) is
+    supplied, internetMessageHeaders for every candidate message are
+    pre-batched in chunks of 20 via ``/$batch`` before plan evaluation.
+    The resulting cached fetcher takes precedence over ``header_fetcher``.
+    """
     try:
         ruleset = load_ruleset_from_yaml(rules_path)
     except DslError as e:
         raise RunnerError(str(e)) from e
 
     rows = _candidate_rows(catalog_path=catalog_path, mailbox_upn=mailbox_upn)
+
+    if (prefetch_graph is not None
+            and prefetch_mailbox_spec is not None
+            and prefetch_auth_mode is not None):
+        message_ids = [r["message_id"] for r in rows if r.get("message_id")]
+        header_fetcher = make_prefetched_header_fetcher(
+            prefetch_graph,
+            mailbox_spec=prefetch_mailbox_spec,
+            auth_mode=prefetch_auth_mode,
+            message_ids=message_ids,
+        )
+
     plan = build_plan(
         ruleset, rows,
         mailbox_upn=mailbox_upn,
@@ -77,6 +98,67 @@ def make_header_fetcher(
         except GraphError:
             return []
         return list(raw.get("internetMessageHeaders") or [])
+
+    return _fetch
+
+
+def prefetch_headers_for_messages(
+    graph: GraphClient,
+    *,
+    mailbox_spec: str,
+    auth_mode: AuthMode,
+    message_ids: list[str],
+) -> dict[str, list[dict[str, str]]]:
+    """Fetch internetMessageHeaders for many messages in batched chunks of 20.
+
+    Returns ``{message_id: [headers]}`` for messages whose GET returned 2xx;
+    failures are simply omitted (callers using this to pre-warm the
+    triage match-context cache treat missing entries as "no headers
+    available", same as a per-call ``GraphError``).
+    """
+    if not message_ids:
+        return {}
+    ub = user_base(mailbox_spec, auth_mode=auth_mode)
+    out: dict[str, list[dict[str, str]]] = {}
+    with graph.batch() as b:
+        # BatchSession.get takes a path — bake $select into the query.
+        futs = [
+            (mid, b.get(f"{ub}/messages/{mid}?$select=internetMessageHeaders"))
+            for mid in message_ids
+        ]
+    for mid, fut in futs:
+        try:
+            body = fut.result()
+        except GraphError:
+            continue
+        out[mid] = list(body.get("internetMessageHeaders") or []) if isinstance(body, dict) else []
+    return out
+
+
+def make_prefetched_header_fetcher(
+    graph: GraphClient,
+    *,
+    mailbox_spec: str,
+    auth_mode: AuthMode,
+    message_ids: list[str],
+) -> Callable[[str], list[dict[str, str]]]:
+    """Like ``make_header_fetcher`` but pre-batches headers for ``message_ids``.
+
+    The returned closure first consults the prefetched cache; cache misses
+    fall back to a single GET (same behaviour as ``make_header_fetcher``).
+    Use this when the caller knows the message-id set up front (e.g. the
+    triage runner has the full catalog row list before evaluating rules).
+    """
+    cache = prefetch_headers_for_messages(
+        graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
+        message_ids=message_ids,
+    )
+    fallback = make_header_fetcher(graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode)
+
+    def _fetch(message_id: str) -> list[dict[str, str]]:
+        if message_id in cache:
+            return cache[message_id]
+        return fallback(message_id)
 
     return _fetch
 

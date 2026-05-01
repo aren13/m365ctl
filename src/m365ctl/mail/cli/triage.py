@@ -12,7 +12,7 @@ from m365ctl.common.planfile import load_plan
 from m365ctl.common.safety import assert_mailbox_allowed
 from m365ctl.mail.cli._common import derive_mailbox_upn, load_and_authorize
 from m365ctl.mail.triage.runner import (
-    RunnerError, make_header_fetcher, run_emit, run_execute, run_validate,
+    RunnerError, run_emit, run_execute, run_validate,
 )
 
 
@@ -68,16 +68,18 @@ def _run_main(args: argparse.Namespace) -> int:
             _cfg, _auth_mode, cred = load_and_authorize(args)
             token = cred.get_token()
             graph = GraphClient(token_provider=lambda: token)
-            fetcher = make_header_fetcher(
-                graph, mailbox_spec=mailbox_spec, auth_mode=auth_mode,
-            )
+            # Pass graph + spec/mode so run_emit can pre-batch
+            # internetMessageHeaders for every candidate message in one
+            # /$batch chunk-of-20 pass instead of N sequential GETs.
             plan = run_emit(
                 rules_path=Path(args.rules),
                 catalog_path=cfg.mail.catalog_path,
                 mailbox_upn=mailbox_upn,
                 scope=mailbox_spec,
                 plan_out=plan_out,
-                header_fetcher=fetcher,
+                prefetch_graph=graph,
+                prefetch_mailbox_spec=mailbox_spec,
+                prefetch_auth_mode=auth_mode,
             )
         except RunnerError as e:
             print(f"error: {e}", file=sys.stderr)

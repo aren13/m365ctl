@@ -321,13 +321,18 @@ def refresh_mailbox(
     else:
         # Graph's /mailFolders listing does NOT return wellKnownName, so we
         # can't filter ``seen_folders`` by ``well_known_name``. Resolve each
-        # well-known name to its id by hitting /mailFolders/{wk} directly,
-        # then map back to the upserted folder row for the path.
+        # well-known name by hitting /mailFolders/{wk} directly. We fan
+        # these out in a single /$batch POST since the well-known list is
+        # small but each round-trip costs the same as one GET. Per-name
+        # 404s are tolerated (mailbox simply lacks that well-known folder).
         seen_by_id = {f["id"]: f for f in seen_folders}
         targets = []
-        for wk in _DEFAULT_WELL_KNOWN:
+        with graph.batch() as b:
+            wk_futs = [(wk, b.get(f"{ub}/mailFolders/{wk}"))
+                       for wk in _DEFAULT_WELL_KNOWN]
+        for wk, fut in wk_futs:
             try:
-                raw = graph.get(f"{ub}/mailFolders/{wk}")
+                raw = fut.result()
             except GraphError:
                 continue  # mailbox doesn't have this well-known folder
             seen_row = seen_by_id.get(raw["id"])

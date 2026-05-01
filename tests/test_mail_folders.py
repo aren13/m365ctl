@@ -138,3 +138,101 @@ def test_get_folder_by_id():
     assert f.id == "f1"
     assert f.path == "/Inbox"
     assert graph.get.call_args.args[0] == "/me/mailFolders/f1"
+
+
+def test_resolve_folder_paths_batches_per_tier():
+    """Each tier of folder traversal should issue a single /$batch POST."""
+    import json as _json
+
+    import httpx
+
+    from m365ctl.common.graph import GraphClient
+    from m365ctl.mail.folders import resolve_folder_paths
+
+    posts: list[dict] = []
+
+    # A simple mailbox tree:
+    #  /Inbox            (id=inbox, well-known)
+    #  /Inbox/Triage     (id=triage)
+    #  /Inbox/Triage/AI  (id=ai)
+    #  /Archive          (id=archive)
+    root_children = [
+        _folder_raw("inbox", "Inbox", child_count=1),
+        _folder_raw("archive", "Archive"),
+    ]
+    inbox_children = [_folder_raw("triage", "Triage", child_count=1)]
+    triage_children = [_folder_raw("ai", "AI")]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/$batch"):
+            body = _json.loads(request.read())
+            posts.append({"path": path, "body": body})
+            responses = []
+            for r in body["requests"]:
+                url = r["url"]
+                if url.endswith("/mailFolders/inbox"):
+                    sub = {"id": "inbox", "displayName": "Inbox"}
+                elif url.endswith("/mailFolders/archive"):
+                    sub = {"id": "archive", "displayName": "Archive"}
+                elif "/mailFolders/inbox/childFolders" in url:
+                    sub = {"value": inbox_children}
+                elif "/mailFolders/triage/childFolders" in url:
+                    sub = {"value": triage_children}
+                else:
+                    sub = {"value": []}
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {}, "body": sub,
+                })
+            return httpx.Response(200, json={"responses": responses})
+        # Non-batch tier-0 root listing.
+        if path.endswith("/me/mailFolders"):
+            return httpx.Response(200, json={"value": root_children})
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+
+    out = resolve_folder_paths(
+        ["inbox", "/Archive", "Inbox/Triage", "Inbox/Triage/AI"],
+        graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+    )
+    assert out["inbox"] == "inbox"
+    assert out["/Archive"] == "archive"
+    assert out["Inbox/Triage"] == "triage"
+    assert out["Inbox/Triage/AI"] == "ai"
+
+    # Three batched POSTs:
+    #  1. well-known fast-path GETs ("inbox") — only 1 well-known here.
+    #  2. tier-1 expansion: childFolders of /Inbox (for both /Inbox/Triage
+    #     and /Inbox/Triage/AI; current_id == "inbox" for both).
+    #  3. tier-2 expansion: childFolders of /Inbox/Triage (only the AI
+    #     path remains).
+    assert len(posts) == 3
+    # Tier 1 (well-known): one GET for "inbox".
+    t1 = posts[0]["body"]["requests"]
+    assert all(r["method"] == "GET" for r in t1)
+    assert any(r["url"].endswith("/mailFolders/inbox") for r in t1)
+    # Tier 2: childFolders of inbox — issued for both "Inbox/Triage" and
+    # "Inbox/Triage/AI", so 2 sub-requests.
+    t2 = posts[1]["body"]["requests"]
+    assert all("/childFolders" in r["url"] for r in t2)
+    assert len(t2) == 2
+    # Tier 3: childFolders of triage — only the AI path is left.
+    t3 = posts[2]["body"]["requests"]
+    assert all("/childFolders" in r["url"] for r in t3)
+    assert len(t3) == 1
+
+
+def test_resolve_folder_paths_empty_input():
+    from unittest.mock import MagicMock as _MM
+
+    from m365ctl.mail.folders import resolve_folder_paths
+
+    out = resolve_folder_paths([], _MM(), mailbox_spec="me", auth_mode="delegated")
+    assert out == {}

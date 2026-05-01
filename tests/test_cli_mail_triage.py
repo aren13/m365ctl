@@ -82,8 +82,6 @@ rules:
     ), patch(
         "m365ctl.mail.cli.triage.load_and_authorize",
         return_value=(MagicMock(), "delegated", MagicMock(get_token=lambda: "tok")),
-    ), patch(
-        "m365ctl.mail.cli.triage.make_header_fetcher",
     ):
         rc = cli_triage.main([
             "run", "--rules", str(rules),
@@ -94,7 +92,11 @@ rules:
     emit_mock.assert_called_once()
 
 
-def test_run_emit_builds_header_fetcher(tmp_path: Path) -> None:
+def test_run_emit_passes_prefetch_graph(tmp_path: Path) -> None:
+    """The CLI no longer eagerly builds a header_fetcher. Instead it
+    forwards the GraphClient (+ mailbox_spec / auth_mode) to run_emit so
+    headers can be batch-prefetched after the candidate row list is known.
+    """
     cfg = _config(tmp_path)
     rules = tmp_path / "r.yaml"
     rules.write_text("""
@@ -108,12 +110,9 @@ rules:
     plan_out = tmp_path / "plan.json"
     fake_plan = MagicMock()
     fake_plan.operations = []
-    fake_fetcher = MagicMock(name="fetcher")
+    fake_graph = MagicMock(name="graph")
     with patch(
-        "m365ctl.mail.cli.triage.make_header_fetcher",
-        return_value=fake_fetcher,
-    ) as mhf, patch(
-        "m365ctl.mail.cli.triage.GraphClient",
+        "m365ctl.mail.cli.triage.GraphClient", return_value=fake_graph,
     ), patch(
         "m365ctl.mail.cli.triage.load_and_authorize",
         return_value=(MagicMock(), "delegated", MagicMock(get_token=lambda: "tok")),
@@ -127,10 +126,11 @@ rules:
             "--config", str(cfg),
         ])
     assert rc == 0
-    mhf.assert_called_once()
     emit_mock.assert_called_once()
     _, kwargs = emit_mock.call_args
-    assert kwargs.get("header_fetcher") is fake_fetcher
+    assert kwargs.get("prefetch_graph") is fake_graph
+    assert kwargs.get("prefetch_mailbox_spec") == "me"
+    assert kwargs.get("prefetch_auth_mode") in ("delegated", "app-only")
 
 
 def test_run_from_plan_requires_confirm(tmp_path: Path, capsys) -> None:

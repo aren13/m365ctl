@@ -280,3 +280,90 @@ def test_run_execute_continues_on_per_op_error() -> None:
             auth_mode="delegated", graph=MagicMock(), logger=MagicMock(),
         )
     assert [r.status for r in results] == ["error", "ok"]
+
+
+def test_run_emit_prefetches_headers_in_one_batch(tmp_path: Path) -> None:
+    """When prefetch_graph is supplied, run_emit issues one /\\$batch POST
+    containing every candidate message's $select=internetMessageHeaders GET.
+    """
+    import json as _json
+
+    import httpx
+
+    from m365ctl.common.graph import GraphClient
+    from m365ctl.mail.triage.runner import prefetch_headers_for_messages
+
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/$batch"):
+            body = _json.loads(request.read())
+            posts.append({"path": path, "body": body})
+            responses = []
+            for r in body["requests"]:
+                mid = r["url"].split("/messages/")[1].split("?")[0]
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {
+                        "internetMessageHeaders": [
+                            {"name": "X-Source", "value": f"mock-{mid}"},
+                        ],
+                    },
+                })
+            return httpx.Response(200, json={"responses": responses})
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+
+    out = prefetch_headers_for_messages(
+        graph, mailbox_spec="me", auth_mode="delegated",
+        message_ids=[f"m{i}" for i in range(5)],
+    )
+    assert len(posts) == 1
+    assert len(posts[0]["body"]["requests"]) == 5
+    assert all("$select=internetMessageHeaders" in r["url"]
+               for r in posts[0]["body"]["requests"])
+    assert out["m3"][0]["value"] == "mock-m3"
+
+
+def test_prefetch_headers_for_messages_chunks_at_20(tmp_path: Path) -> None:
+    """25 messages -> two /$batch POSTs (auto-flush at 20)."""
+    import json as _json
+
+    import httpx
+
+    from m365ctl.common.graph import GraphClient
+    from m365ctl.mail.triage.runner import prefetch_headers_for_messages
+
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/$batch"):
+            body = _json.loads(request.read())
+            posts.append(body)
+            return httpx.Response(200, json={
+                "responses": [
+                    {"id": r["id"], "status": 200, "headers": {},
+                     "body": {"internetMessageHeaders": []}}
+                    for r in body["requests"]
+                ],
+            })
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    prefetch_headers_for_messages(
+        graph, mailbox_spec="me", auth_mode="delegated",
+        message_ids=[f"m{i}" for i in range(25)],
+    )
+    assert len(posts) == 2
+    assert len(posts[0]["requests"]) == 20
+    assert len(posts[1]["requests"]) == 5

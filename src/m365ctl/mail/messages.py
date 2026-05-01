@@ -115,6 +115,34 @@ def _derive_mailbox_upn(mailbox_spec: str) -> str:
     return mailbox_spec
 
 
+def _messages_url(
+    *,
+    mailbox_spec: str,
+    auth_mode: AuthMode,
+    folder_id: str,
+    filters: MessageListFilters | None = None,
+    limit: int | None = None,
+    page_size: int = 50,
+) -> tuple[str, dict]:
+    """Compute the (path, params) tuple for the first-page GET in ``list_messages``.
+
+    Extracted for batched read-side fan-out: callers that want to fire
+    multiple first-page GETs in one ``/$batch`` envelope reuse this so the
+    URL/param construction stays in one place.
+    """
+    ub = user_base(mailbox_spec, auth_mode=auth_mode)
+    path = f"{ub}/mailFolders/{folder_id}/messages"
+    filters = filters or MessageListFilters()
+    filter_expr = _build_filter_expr(filters)
+    params: dict = {
+        "$orderby": "receivedDateTime desc",
+        "$top": limit if limit is not None else page_size,
+    }
+    if filter_expr:
+        params["$filter"] = filter_expr
+    return path, params
+
+
 def list_messages(
     graph: GraphClient,
     *,
@@ -127,18 +155,15 @@ def list_messages(
     page_size: int = 50,
 ) -> Iterator[Message]:
     """Yield messages from ``folder_id``, optionally filtered."""
-    ub = user_base(mailbox_spec, auth_mode=auth_mode)
-    path = f"{ub}/mailFolders/{folder_id}/messages"
-
     filters = filters or MessageListFilters()
-    filter_expr = _build_filter_expr(filters)
-
-    params: dict = {
-        "$orderby": "receivedDateTime desc",
-        "$top": limit if limit is not None else page_size,
-    }
-    if filter_expr:
-        params["$filter"] = filter_expr
+    path, params = _messages_url(
+        mailbox_spec=mailbox_spec,
+        auth_mode=auth_mode,
+        folder_id=folder_id,
+        filters=filters,
+        limit=limit,
+        page_size=page_size,
+    )
 
     mailbox_upn = _derive_mailbox_upn(mailbox_spec)
 
