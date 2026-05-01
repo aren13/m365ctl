@@ -11,8 +11,18 @@ uv sync --all-extras
 ```
 
 That installs the project plus its dev extras (`pytest`, `ruff`, `mypy`).
-Pre-commit hooks are on the roadmap but are not wired up yet — run the gates
-manually before you push.
+
+Then activate the local pre-push hook (one-time per checkout — runs the same
+`ruff` / `mypy` / `pytest` gates CI runs, before each `git push`):
+
+```bash
+./bin/install-hooks
+```
+
+The hook lives at `.githooks/pre-push`, is idempotent, and can be bypassed
+for a single push with `git push --no-verify` — but the CI ruleset on `main`
+enforces the same checks before merge, so bypassing locally only delays the
+failure.
 
 ## Tests
 

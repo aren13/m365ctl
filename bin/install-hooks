@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# One-time hook activation for this checkout. Idempotent — safe to re-run.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+git config core.hooksPath .githooks
+echo "✓ git core.hooksPath set to .githooks"
+echo "  pre-push hook: ruff + mypy + pytest -m 'not live'"
+echo "  bypass once with: git push --no-verify"
