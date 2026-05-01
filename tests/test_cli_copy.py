@@ -71,20 +71,37 @@ def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsy
 
 
 def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
+    """Bulk plan execution: phase-0 metadata GETs + phase-2 copy POSTs.
+
+    The phase-2 batch returns 202 + Location for each sub-response so that
+    ``finish_copy`` exercises the monitor-URL capture path.
+    """
     cfg = _stub_cfg(tmp_path)
     mocker.patch("m365ctl.onedrive.cli.copy.load_config", return_value=cfg)
 
-    post_calls = {"n": 0}
+    posts: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST":
-            post_calls["n"] += 1
-            return httpx.Response(
-                200, headers={}, json={"id": f"NEW-{post_calls['n']}"}
-            )
-        # No monitor polling needed when 200 sync response is returned
-        return httpx.Response(200, json={"status": "completed",
-                                         "resourceId": "unused"})
+        body = json.loads(request.read())
+        posts.append(body)
+        responses = []
+        for r in body["requests"]:
+            if r["method"] == "GET":
+                item_id = r["url"].split("/items/")[1].split("?")[0]
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {
+                        "id": item_id, "name": item_id,
+                        "parentReference": {"id": "OLD-P", "path": "/drive/root:/src"},
+                    },
+                })
+            else:
+                responses.append({
+                    "id": r["id"], "status": 202,
+                    "headers": {"Location": f"https://graph/monitor/{r['id']}"},
+                    "body": {},
+                })
+        return httpx.Response(200, json={"responses": responses})
 
     from m365ctl.common.graph import GraphClient
     real_client = GraphClient(
@@ -93,14 +110,6 @@ def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
         sleep=lambda s: None,
     )
     mocker.patch("m365ctl.onedrive.cli.copy.build_graph_client", return_value=real_client)
-    mocker.patch(
-        "m365ctl.onedrive.cli.copy._lookup_item",
-        side_effect=lambda graph, drive_id, item_id: {
-            "drive_id": drive_id, "item_id": item_id,
-            "full_path": f"/src/{item_id}", "name": item_id,
-            "parent_path": "/src",
-        },
-    )
 
     from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan = {
@@ -127,4 +136,16 @@ def test_from_plan_issues_exactly_one_copy_per_op(tmp_path, mocker):
         plan_out=None, confirm=True, unsafe_scope=False,
     )
     assert rc == 0
-    assert post_calls["n"] == 3
+    # Two /$batch POSTs: phase-0 metadata + phase-2 copy.
+    assert len(posts) == 2
+    assert all(r["method"] == "GET" for r in posts[0]["requests"])
+    assert all(r["method"] == "POST" for r in posts[1]["requests"])
+    assert len(posts[1]["requests"]) == 3
+
+    # finish_copy must capture the Location header in after.monitor_url.
+    from m365ctl.common.audit import AuditLogger, iter_audit_entries
+    logger = AuditLogger(ops_dir=tmp_path / "logs/ops")
+    ends = [e for e in iter_audit_entries(logger) if e["phase"] == "end"]
+    assert len(ends) == 3
+    for e in ends:
+        assert e["after"]["monitor_url"].startswith("https://graph/monitor/")
