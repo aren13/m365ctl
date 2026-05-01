@@ -17,11 +17,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
-from m365ctl.common.graph import GraphClient
+from m365ctl.common.audit import AuditLogger
+from m365ctl.common.batch import BatchFuture
+from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation, Plan, write_plan
 from m365ctl.common.safety import _confirm_via_tty
+from m365ctl.mail.mutate._common import MailResult
 from m365ctl.mail.messages import MessageListFilters, list_messages as _default_list_messages
 from m365ctl.mail.models import Message
 
@@ -152,14 +155,6 @@ def confirm_bulk_proceed(n: int, *, threshold: int = 20, verb: str) -> bool:
         f"Proceed? [y/N]: "
     )
     return _confirm_via_tty(prompt)
-
-
-from typing import Any
-
-from m365ctl.common.audit import AuditLogger
-from m365ctl.common.batch import BatchFuture
-from m365ctl.common.graph import GraphError
-from m365ctl.mail.mutate._common import MailResult
 
 
 def execute_plan_in_batches(

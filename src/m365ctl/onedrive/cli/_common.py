@@ -19,6 +19,7 @@ from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import Config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan
+from m365ctl.mail.cli._bulk import execute_plan_in_batches  # noqa: F401  (re-export)
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,3 @@ def new_plan(*, source_cmd: str, scope: str,
     )
 
 
-# Shared with mail; OneDrive results use a different dataclass but the
-# helper is generic over the result type via Callable typing.
-from m365ctl.mail.cli._bulk import execute_plan_in_batches  # noqa: F401, E402
