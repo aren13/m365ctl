@@ -8,8 +8,8 @@ import pytest
 
 from m365ctl.common.batch import (
     BatchFuture,
-    BatchSession,
     BatchUnflushedError,
+    EagerSession,
     _Resolved,
 )
 from m365ctl.common.graph import GraphClient, GraphError
@@ -301,9 +301,6 @@ def test_batch_permanent_error_not_retried():
     assert call_count["n"] == 1   # not retried
 
 
-from m365ctl.common.batch import EagerSession
-
-
 def test_eager_session_wraps_success():
     def handler(request):
         return httpx.Response(200, json={"id": "m1"})
@@ -395,3 +392,18 @@ def test_eager_session_delete_passes_headers_through():
     s = EagerSession(graph)
     s.delete("/me/messages/m1", headers={"If-Match": "etag-1"})
     assert captured[0]["if-match"] == "etag-1"
+
+
+def test_batch_session_closed_error_is_actionable():
+    """Re-using a closed session raises with a hint pointing to graph.batch()."""
+    def handler(request):
+        return httpx.Response(200, json={
+            "responses": [{"id": "1", "status": 200, "headers": {}, "body": {}}],
+        })
+
+    graph = _stub_graph(handler)
+    with graph.batch() as b:
+        b.get("/me/messages/m1")
+
+    with pytest.raises(RuntimeError, match="closed.*graph.batch"):
+        b.get("/me/messages/m2")

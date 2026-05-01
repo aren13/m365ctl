@@ -24,7 +24,7 @@ from m365ctl.onedrive.mutate.delete import (
     start_recycle_delete,
 )
 from m365ctl.common.planfile import Operation, load_plan, new_op_id
-from m365ctl.common.safety import ScopeViolation, assert_scope_allowed, filter_by_scope
+from m365ctl.common.safety import filter_by_scope
 
 
 def run_delete(

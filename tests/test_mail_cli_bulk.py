@@ -1,16 +1,23 @@
 """Tests for m365ctl.mail.cli._bulk — pattern expansion + plan I/O."""
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, load_plan
+import httpx
+
+from m365ctl.common.audit import AuditLogger
+from m365ctl.common.graph import GraphClient
+from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Operation, load_plan
 from m365ctl.mail.cli._bulk import (
     MessageFilter,
     emit_plan,
+    execute_plan_in_batches,
     expand_messages_for_pattern,
 )
 from m365ctl.mail.models import EmailAddress, Flag, Message
-from datetime import datetime, timezone
+from m365ctl.mail.mutate._common import MailResult
 
 
 def _msg(msg_id: str, folder_path: str = "/Inbox", subject: str = "s") -> Message:
@@ -106,17 +113,6 @@ def test_message_filter_applies_locally():
     out = [m for m in msgs if f.match(m)]
     assert len(out) == 1
     assert out[0].id == "m1"
-
-
-import json
-
-import httpx
-
-from m365ctl.common.audit import AuditLogger
-from m365ctl.common.graph import GraphClient
-from m365ctl.common.planfile import Operation
-from m365ctl.mail.cli._bulk import execute_plan_in_batches
-from m365ctl.mail.mutate._common import MailResult
 
 
 def _op(op_id: str) -> Operation:
