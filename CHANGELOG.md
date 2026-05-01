@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Microsoft Graph `$batch` support.** `m365ctl` now uses Graph's `$batch`
+  endpoint (≤20 sub-requests per HTTP call) for bulk plan execution and
+  read-side fan-out passes. Typical bulk plans (`mail move/delete/copy/
+  categorize/flag/read/focus`, `od move/copy/delete/rename`) see ~5×
+  speedup. Read-side fan-out improvements include batched first-page GETs
+  across mail folders, batched per-tier folder-path resolution, batched
+  triage header pre-fetch, batched mail-catalog well-known folder lookups,
+  and batched OneDrive tenant-scan user/site enumeration. No CLI flags
+  changed; the speedup is transparent.
+- New `mail.endpoints.user_base_for_op(op)` shared helper used by mail
+  mutate verbs and CLI from-plan paths.
+- New `mail.folders.resolve_folder_paths(paths, ...)` for batched
+  list-input folder resolution.
+- New `mail.attachments.list_attachments_for_messages(...)` primitive for
+  batched per-message attachment listings.
+- `GraphClient.delete(headers=...)` now accepts conditional-delete headers
+  (e.g. `If-Match`).
+
+### Changed
+- **Audit-log records during bulk plan execution**: in `--from-plan` mode,
+  all `start` records for a phase now appear before any `end` records
+  (previously they strictly interleaved per op). `op_id` linkage between
+  `start` and `end` is preserved, so `m365ctl undo` and log-replay tools
+  are unaffected. Crash safety is maintained: every `start` is durable
+  before its corresponding `/$batch` flush.
+- Bulk-mode `before` audit state for `mail move` / `mail delete` is now
+  populated via batched `?$select=...` GETs rather than full-message
+  fetches. As a side effect, `before.parent_folder_path` is no longer
+  captured for bulk-moved messages (only `parent_folder_id`); single-item
+  `--message-id` mode is unchanged. `m365ctl undo` falls back to the
+  folder id for display when path is absent.
+
 ## [1.12.2] — 2026-04-27
 
 First-impression polish for `uv tool install m365ctl` users.
