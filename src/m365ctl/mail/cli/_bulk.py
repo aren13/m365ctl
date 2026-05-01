@@ -17,16 +17,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator, Protocol, TypeVar, runtime_checkable
 
 from m365ctl.common.audit import AuditLogger
 from m365ctl.common.batch import BatchFuture
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation, Plan, write_plan
 from m365ctl.common.safety import _confirm_via_tty
-from m365ctl.mail.mutate._common import MailResult
+from m365ctl.mail.mutate._common import MailResult  # noqa: F401  (re-export convenience)
 from m365ctl.mail.messages import MessageListFilters, list_messages as _default_list_messages
 from m365ctl.mail.models import Message
+
+
+@runtime_checkable
+class _OpResult(Protocol):
+    """Duck-typed result shared by mail and onedrive verb result dataclasses."""
+    status: str  # "ok" | "error"
+
+
+_R = TypeVar("_R", bound=_OpResult)
 
 
 @dataclass(frozen=True)
@@ -165,14 +174,24 @@ def execute_plan_in_batches(
     fetch_before: Callable[[Any, Operation], BatchFuture] | None,
     parse_before: Callable[[Operation, dict | None, GraphError | None], dict],
     start_op: Callable[..., tuple[BatchFuture, dict]],
-    finish_op: Callable[..., MailResult],
-    on_result: Callable[[Operation, MailResult], None],
+    finish_op: Callable[..., _R],
+    on_result: Callable[[Operation, _R], None],
 ) -> int:
     """Two-phase batched plan execution.
 
     Phase 1: batch all `before` GETs (skipped if ``fetch_before`` is None).
     Phase 2: buffer all mutations under one BatchSession; the ``with`` exit
     flushes them. Then resolve futures via ``finish_op`` for each.
+
+    Generic over the result type (``_R``) so the helper is shared between
+    mail and onedrive verbs whose result dataclasses differ but share a
+    ``.status`` attribute (see ``_OpResult``).
+
+    Phase 1 sub-failures are routed through ``parse_before(op, None, err)``
+    so the verb decides what `before` state to record. Exceptions raised by
+    ``parse_before`` itself (e.g. malformed Graph response) propagate to
+    the caller; the contract assumes ``parse_before`` is a small pure
+    projection over the returned body.
 
     Returns 1 if any op errored, else 0.
     """
@@ -187,7 +206,10 @@ def execute_plan_in_batches(
             except GraphError as e:
                 befores[op.op_id] = parse_before(op, None, e)
 
-    # Phase 2: buffer all mutations.
+    # Phase 2: buffer all mutations under a single BatchSession.
+    # Order matters: start_op registers a BatchFuture per call, and the
+    # with-exit flushes them in registration order. Keep this a list-comp
+    # over `ops` so (op, future, after) tuples stay aligned by identity.
     with graph.batch() as b:
         pending = [
             (op, *start_op(op, b, logger, before=befores.get(op.op_id, {})))
