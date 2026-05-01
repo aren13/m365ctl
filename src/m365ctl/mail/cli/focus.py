@@ -39,7 +39,7 @@ def main(argv: list[str]) -> int:
         cfg, auth_mode, cred = load_and_authorize(args)
         plan = load_plan(Path(args.from_plan))
         ops = [op for op in plan.operations if op.action == "mail.focus"]
-        if not confirm_bulk_proceed(len(ops), verb="focus"):
+        if not confirm_bulk_proceed(len(ops), verb="focus", assume_yes=getattr(args, "assume_yes", False)):
             return 2
         for op in ops:
             op.args.setdefault("auth_mode", auth_mode)
@@ -77,6 +77,7 @@ def main(argv: list[str]) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would set focus={args.classification} on {args.message_id}",

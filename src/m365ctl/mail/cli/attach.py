@@ -100,6 +100,7 @@ def _run_add_attachment(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
 
     file_path = _Path(args.file)
@@ -161,6 +162,7 @@ def _run_remove_attachment(args) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     if not args.confirm:
         print(f"(dry-run) would remove attachment {args.attachment_id} from {args.message_id}",

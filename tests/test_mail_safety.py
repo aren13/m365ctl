@@ -90,6 +90,26 @@ def test_unsafe_scope_still_rejects_without_tty():
         assert_mailbox_allowed("upn:other@example.com", cfg, auth_mode="app-only", unsafe_scope=True)
 
 
+def test_assume_yes_bypasses_mailbox_tty():
+    from unittest.mock import patch
+    cfg = _cfg(allow_mailboxes=["me"])
+    with patch("m365ctl.common.safety._confirm_via_tty") as m:
+        assert_mailbox_allowed(
+            "upn:other@example.com", cfg, auth_mode="app-only",
+            unsafe_scope=True, assume_yes=True,
+        )
+        m.assert_not_called()
+
+
+def test_assume_yes_does_not_bypass_mailbox_unsafe_scope_flag():
+    cfg = _cfg(allow_mailboxes=["me"])
+    with pytest.raises(ScopeViolation, match="not in scope.allow_mailboxes"):
+        assert_mailbox_allowed(
+            "upn:other@example.com", cfg, auth_mode="app-only",
+            unsafe_scope=False, assume_yes=True,
+        )
+
+
 # ---- is_folder_denied ------------------------------------------------------
 
 @pytest.mark.parametrize("path", [

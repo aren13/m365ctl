@@ -97,7 +97,7 @@ def main(argv: list[str]) -> int:
         if not ops:
             print("mail copy --from-plan: no mail.copy ops in plan.", file=sys.stderr)
             return 2
-        if not confirm_bulk_proceed(len(ops), verb="copy"):
+        if not confirm_bulk_proceed(len(ops), verb="copy", assume_yes=getattr(args, "assume_yes", False)):
             print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
             return 2
         for op in ops:
@@ -128,6 +128,7 @@ def main(argv: list[str]) -> int:
         assert_mail_target_allowed(
             cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
             unsafe_scope=args.unsafe_scope, folder_path=args.to_folder,
+            assume_yes=getattr(args, "assume_yes", False),
         )
         if not args.confirm:
             print(f"(dry-run) would copy {args.message_id} -> {args.to_folder!r}",
@@ -169,6 +170,7 @@ def main(argv: list[str]) -> int:
     assert_mail_target_allowed(
         cfg, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         unsafe_scope=args.unsafe_scope, folder_path=args.to_folder,
+        assume_yes=getattr(args, "assume_yes", False),
     )
     token = cred.get_token()
     graph = GraphClient(token_provider=lambda: token)

@@ -48,6 +48,7 @@ def assert_mail_target_allowed(
     auth_mode: str,
     unsafe_scope: bool,
     folder_path: str | None = None,
+    assume_yes: bool = False,
 ) -> None:
     """Combined mailbox + folder gate for mail mutations.
 
@@ -63,4 +64,5 @@ def assert_mail_target_allowed(
         )
     assert_mailbox_allowed(
         mailbox_spec, cfg, auth_mode=auth_mode, unsafe_scope=unsafe_scope,
+        assume_yes=assume_yes,
     )

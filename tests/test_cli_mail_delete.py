@@ -58,6 +58,57 @@ def test_delete_help_mentions_hard_delete_distinction():
     assert "clean" in help_text.lower() or "hard" in help_text.lower()
 
 
+def test_delete_parser_accepts_assume_yes():
+    args = build_parser().parse_args(["--assume-yes"])
+    assert args.assume_yes is True
+
+
+def test_assume_yes_rejected_when_config_disallows(tmp_path):
+    """``--assume-yes`` errors out cleanly when config opts out (default)."""
+    import argparse
+    from m365ctl.common.config import (
+        CatalogConfig, Config, LoggingConfig, MailConfig, SafetyConfig, ScopeConfig,
+    )
+    from m365ctl.mail.cli._common import _validate_assume_yes
+    cfg = Config(
+        tenant_id="t", client_id="c",
+        cert_path=tmp_path / "k", cert_public=tmp_path / "c",
+        default_auth="delegated",
+        scope=ScopeConfig(allow_drives=["me"]),
+        catalog=CatalogConfig(path=tmp_path / "x.duckdb"),
+        logging=LoggingConfig(ops_dir=tmp_path / "logs"),
+        mail=MailConfig(catalog_path=tmp_path / "m.duckdb"),
+        safety=SafetyConfig(allow_no_tty_confirm=False),
+    )
+    args = argparse.Namespace(assume_yes=True, config="config.toml")
+    try:
+        _validate_assume_yes(cfg, args)
+    except SystemExit as e:
+        assert e.code == 2
+    else:
+        raise AssertionError("expected SystemExit(2)")
+
+
+def test_assume_yes_passes_when_config_allows(tmp_path):
+    from m365ctl.mail.cli._common import _validate_assume_yes
+    from m365ctl.common.config import (
+        Config, ScopeConfig, SafetyConfig, CatalogConfig, LoggingConfig, MailConfig,
+    )
+    import argparse
+    cfg = Config(
+        tenant_id="t", client_id="c",
+        cert_path=tmp_path / "k", cert_public=tmp_path / "c",
+        default_auth="delegated",
+        scope=ScopeConfig(allow_drives=["me"]),
+        catalog=CatalogConfig(path=tmp_path / "x.duckdb"),
+        logging=LoggingConfig(ops_dir=tmp_path / "logs"),
+        mail=MailConfig(catalog_path=tmp_path / "m.duckdb"),
+        safety=SafetyConfig(allow_no_tty_confirm=True),
+    )
+    args = argparse.Namespace(assume_yes=True, config="config.toml")
+    _validate_assume_yes(cfg, args)  # no raise
+
+
 def test_mail_delete_from_plan_uses_batch(tmp_path, monkeypatch):
     """Bulk soft-delete via plan file should issue $batch envelopes."""
     posts: list[dict] = []
