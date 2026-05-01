@@ -4,6 +4,19 @@ All notable changes to m365ctl are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0](https://github.com/aren13/m365ctl/compare/v1.14.0...v1.15.0) (2026-05-01)
+
+
+### Added
+
+* **mail:** add --assume-yes flag to bypass non-irreversible TTY confirms ([f4773a5](https://github.com/aren13/m365ctl/commit/f4773a5929647f3f681c16e7fb8128677ec7cb4c))
+* **mail:** add --assume-yes flag to bypass non-irreversible TTY confirms ([36f9ac4](https://github.com/aren13/m365ctl/commit/36f9ac4d3017e04d6c89f596524a9b4b9594161f))
+
+
+### Fixed
+
+* **tests:** clean up ruff F401/E402 from --assume-yes test additions ([#48](https://github.com/aren13/m365ctl/issues/48)) ([c793029](https://github.com/aren13/m365ctl/commit/c793029302d82f2e505d6282be318fa50c3b0a89))
+
 ## [1.14.0](https://github.com/aren13/m365ctl/compare/v1.13.0...v1.14.0) (2026-05-01)
 
 
