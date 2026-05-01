@@ -14,9 +14,12 @@ single ``GraphCaller`` protocol regardless of batched vs. eager execution.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from m365ctl.common.graph import GraphError
+
+if TYPE_CHECKING:
+    from m365ctl.common.graph import GraphClient
 
 
 class BatchUnflushedError(RuntimeError):
@@ -111,9 +114,6 @@ class GraphCaller(Protocol):
     def delete(self, path: str): ...
 
 
-from m365ctl.common.graph import GraphClient, _parse_retry_after  # noqa: E402
-
-
 _BATCH_MAX = 20
 
 
@@ -160,7 +160,7 @@ class BatchSession:
     that prefix so sub-request URLs remain bare paths.
     """
 
-    def __init__(self, graph: GraphClient) -> None:
+    def __init__(self, graph: "GraphClient") -> None:
         self._graph = graph
         self._pending: list[tuple[BatchFuture, dict]] = []
         self._next_id = 0
@@ -258,8 +258,9 @@ class BatchSession:
                 ))
 
     def _graph_error_from_subresponse(
-        self, status: int, body, headers: dict[str, str],
+        self, status: int, body: object, headers: dict[str, str],
     ) -> GraphError:
+        from m365ctl.common.graph import _parse_retry_after
         err = (body.get("error") if isinstance(body, dict) else None) or {}
         code = err.get("code", f"HTTP{status}")
         msg = err.get("message", "")
