@@ -299,3 +299,99 @@ def test_batch_permanent_error_not_retried():
     with pytest.raises(GraphError, match="ItemNotFound"):
         f.result()
     assert call_count["n"] == 1   # not retried
+
+
+from m365ctl.common.batch import EagerSession
+
+
+def test_eager_session_wraps_success():
+    def handler(request):
+        return httpx.Response(200, json={"id": "m1"})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    s = EagerSession(graph)
+    f = s.get("/me/messages/m1")
+    assert f.done() is True
+    assert f.result() == {"id": "m1"}
+
+
+def test_eager_session_wraps_error():
+    def handler(request):
+        return httpx.Response(404, json={"error": {"code": "ItemNotFound", "message": "gone"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    s = EagerSession(graph)
+    f = s.get("/me/messages/missing")
+    assert f.done() is True
+    with pytest.raises(GraphError, match="ItemNotFound"):
+        f.result()
+
+
+def test_eager_session_post_passes_through_json_body():
+    captured: list[bytes] = []
+
+    def handler(request):
+        captured.append(request.read())
+        return httpx.Response(200, json={"ok": True})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    s = EagerSession(graph)
+    f = s.post("/me/messages/m1/move", json={"destinationId": "archive"})
+    assert f.result() == {"ok": True}
+    assert b"destinationId" in captured[0]
+
+
+def test_eager_session_delete_returns_empty_dict_on_204():
+    """DELETE returns no body; EagerSession resolves to empty dict via .result()."""
+    def handler(request):
+        return httpx.Response(204)
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    s = EagerSession(graph)
+    f = s.delete("/me/messages/m1")
+    assert f.result() == {}
+
+
+def test_graph_client_delete_accepts_if_match_header():
+    """T4 widening: GraphClient.delete now accepts a `headers` kwarg."""
+    captured: list[dict] = []
+
+    def handler(request):
+        captured.append(dict(request.headers))
+        return httpx.Response(204)
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    graph.delete("/me/messages/m1", headers={"If-Match": "etag-1"})
+    assert captured[0]["if-match"] == "etag-1"
+
+
+def test_eager_session_delete_passes_headers_through():
+    """T4 widening: EagerSession.delete accepts and forwards headers."""
+    captured: list[dict] = []
+
+    def handler(request):
+        captured.append(dict(request.headers))
+        return httpx.Response(204)
+
+    graph = GraphClient(
+        token_provider=lambda: "tok", transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    s = EagerSession(graph)
+    s.delete("/me/messages/m1", headers={"If-Match": "etag-1"})
+    assert captured[0]["if-match"] == "etag-1"

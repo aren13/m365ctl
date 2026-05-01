@@ -52,6 +52,12 @@ class BatchFuture:
         return self._done
 
     def result(self) -> dict:
+        """Return the parsed sub-response body, or raise.
+
+        Sub-responses without a body (e.g. HTTP 204 on DELETE) resolve to an
+        empty dict. Callers that need to distinguish 204 from a Graph response
+        of literal ``{}`` should consult ``.status()`` instead.
+        """
         if not self._done:
             raise BatchUnflushedError(
                 f"BatchFuture(req_id={self._req_id!r}) not yet flushed; "
@@ -111,7 +117,7 @@ class GraphCaller(Protocol):
     def get_absolute(self, url: str, *, headers: dict | None = None): ...
     def post(self, path: str, *, json: dict, headers: dict | None = None): ...
     def patch(self, path: str, *, json_body: dict, headers: dict | None = None): ...
-    def delete(self, path: str): ...
+    def delete(self, path: str, *, headers: dict | None = None): ...
 
 
 _BATCH_MAX = 20
@@ -312,3 +318,47 @@ class BatchSession:
             f"{code}: {msg}",
             retry_after_seconds=_parse_retry_after(headers.get("Retry-After")),
         )
+
+
+class EagerSession:
+    """GraphCaller adapter wrapping a GraphClient for synchronous execution.
+
+    Lets verb code (`start_<verb>`, `finish_<verb>`) target a single
+    GraphCaller protocol regardless of batched vs. eager use. Each call
+    issues immediately and the returned ``_Resolved`` is already done; HTTP
+    errors surface from ``.result()``, not from the call itself.
+    """
+
+    def __init__(self, graph: "GraphClient") -> None:
+        self._g = graph
+
+    def get(self, path: str, *, headers: dict | None = None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.get(path, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+
+    def get_absolute(self, url: str, *, headers: dict | None = None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.get_absolute(url, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+
+    def post(self, path: str, *, json: dict, headers: dict | None = None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.post(path, json=json, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+
+    def patch(self, path: str, *, json_body: dict, headers: dict | None = None) -> _Resolved:
+        try:
+            return _Resolved(value=self._g.patch(path, json_body=json_body, headers=headers))
+        except GraphError as e:
+            return _Resolved(error=e)
+
+    def delete(self, path: str, *, headers: dict | None = None) -> _Resolved:
+        try:
+            self._g.delete(path, headers=headers)
+            return _Resolved(value={})
+        except GraphError as e:
+            return _Resolved(error=e)

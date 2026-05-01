@@ -250,11 +250,18 @@ class GraphClient:
 
         return self._retry(_do)
 
-    def delete(self, path: str) -> None:
-        """DELETE; returns None on 204; parses body on non-204; raises on 4xx/5xx."""
+    def delete(self, path: str, *, headers: dict | None = None) -> None:
+        """DELETE; returns None on 204; parses body on non-204; raises on 4xx/5xx.
+
+        ``headers`` merges with the auth headers — pass e.g. ``{"If-Match": "<etag>"}``
+        for conditional-delete semantics.
+        """
 
         def _do() -> None:
-            resp = self._client.delete(path, headers=self._auth_headers())
+            merged = self._auth_headers()
+            if headers:
+                merged.update(headers)
+            resp = self._client.delete(path, headers=merged)
             if resp.status_code == 204:
                 return None
             # Some endpoints (e.g. permanentDelete) return 200 + body.
