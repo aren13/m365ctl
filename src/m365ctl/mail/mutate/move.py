@@ -1,15 +1,21 @@
 """Message move — POST /messages/{id}/move with {destinationId}.
 
-Verb shape (canonical for the rest of mail.mutate):
-- ``start_move(op, client, logger, *, before)`` — log start, buffer the
-  POST, return ``(future, after)``. ``client`` is a ``GraphCaller`` (a
+Verb shape (template for mail.mutate verbs that follow the start/finish/execute
+split — see ``docs/superpowers/specs/2026-05-01-graph-batch-support-design.md``):
+
+- ``start_<verb>(op, client, logger, *, before)`` — log start, buffer the
+  HTTP call, return ``(future, after)``. ``client`` is a ``GraphCaller`` (a
   ``BatchSession`` for bulk/from-plan execution, or an ``EagerSession``
   wrapping a ``GraphClient`` for single-op execution).
-- ``finish_move(op, future, after, logger)`` — resolve the future, log
+- ``finish_<verb>(op, future, after, logger)`` — resolve the future, log
   end, return ``MailResult``.
-- ``execute_move(op, graph, logger, *, before)`` — single-op convenience
+- ``execute_<verb>(op, graph, logger, *, before)`` — single-op convenience
   that wraps a ``GraphClient`` in ``EagerSession`` and chains
-  start_move + finish_move.
+  ``start_<verb>`` + ``finish_<verb>``.
+
+Verbs that don't need a ``before``-state GET (e.g. ``mail.flag``, ``mail.read``
+where ``op.args`` already describes the target state) pass ``fetch_before=None``
+to ``execute_plan_in_batches`` and skip Phase 1 entirely.
 """
 from __future__ import annotations
 
@@ -19,14 +25,8 @@ from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_sta
 from m365ctl.common.batch import EagerSession, GraphCaller
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation
-from m365ctl.mail.endpoints import user_base
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.mutate._common import MailResult
-
-
-def _user_base(op: Operation) -> str:
-    auth_mode = op.args.get("auth_mode", "delegated")
-    spec = "me" if op.drive_id == "me" else f"upn:{op.drive_id}"
-    return user_base(spec, auth_mode=auth_mode)
 
 
 def start_move(
@@ -38,7 +38,7 @@ def start_move(
 ):
     """Log start, buffer the move POST, return ``(future, after)``."""
     dest_id = op.args["destination_id"]
-    ub = _user_base(op)
+    ub = user_base_for_op(op)
     log_mutation_start(
         logger, op_id=op.op_id, cmd="mail-move",
         args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,

@@ -64,3 +64,16 @@ def user_base(spec: str, *, auth_mode: AuthMode) -> str:
         return "/me"
     assert addr is not None
     return f"/users/{addr}"
+
+
+def user_base_for_op(op) -> str:
+    """Resolve the Graph URL prefix from an ``Operation`` carrying drive_id + auth_mode.
+
+    Used by both ``mail.mutate`` verbs (where ``op`` is the unit of work) and CLI
+    ``--from-plan`` ``fetch_before`` callbacks. Reads ``op.args.get("auth_mode",
+    "delegated")``; CLI callers should ``op.args.setdefault("auth_mode", auth_mode)``
+    before invoking this.
+    """
+    auth_mode = op.args.get("auth_mode", "delegated")
+    spec = "me" if op.drive_id == "me" else f"upn:{op.drive_id}"
+    return user_base(spec, auth_mode=auth_mode)

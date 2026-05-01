@@ -268,3 +268,51 @@ def test_execute_plan_in_batches_returns_1_when_any_op_errors(tmp_path):
     )
     # One success, one error → rc=1.
     assert rc == 1
+
+
+def test_execute_plan_in_batches_emits_starts_then_ends_per_phase(tmp_path):
+    """Audit-log ordering: in bulk mode, start records group before end records."""
+    from m365ctl.common.audit import iter_audit_entries, log_mutation_end, log_mutation_start
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": r["id"], "status": 200, "headers": {}, "body": {}}
+                for r in body["requests"]
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    logger = AuditLogger(ops_dir=tmp_path / "ops")
+    ops = [_op(f"op{i}") for i in range(3)]
+
+    def start_op(op, b, logger, *, before):
+        log_mutation_start(
+            logger, op_id=op.op_id, cmd="mail-move",
+            args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
+        )
+        f = b.post(f"/me/messages/{op.item_id}/move", json={"destinationId": "archive"})
+        return f, {"parent_folder_id": "archive"}
+
+    def finish_op(op, future, after, logger):
+        future.result()
+        log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
+        return MailResult(op_id=op.op_id, status="ok", after=after)
+
+    execute_plan_in_batches(
+        graph=graph, logger=logger, ops=ops,
+        fetch_before=None,
+        parse_before=lambda op, body, err: {},
+        start_op=start_op, finish_op=finish_op,
+        on_result=lambda op, r: None,
+    )
+    entries = list(iter_audit_entries(logger))
+    phases = [e["phase"] for e in entries]
+    # All three starts should appear before any end in phase 2 (since
+    # auto-flush at 20 doesn't trip for N=3 — flush only on `with` exit).
+    assert phases == ["start", "start", "start", "end", "end", "end"]

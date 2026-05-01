@@ -25,14 +25,8 @@ from m365ctl.mail.cli._common import add_common_args, load_and_authorize
 from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.mutate.move import execute_move, finish_move, start_move
-
-
-def _user_base_for_op(op, auth_mode: str) -> str:
-    """Mirror mail.mutate.move._user_base — used inside the from-plan fetch_before."""
-    from m365ctl.mail.endpoints import user_base
-    spec = "me" if op.drive_id == "me" else f"upn:{op.drive_id}"
-    return user_base(spec, auth_mode=auth_mode)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,8 +109,8 @@ def main(argv: list[str]) -> int:
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
 
         def fetch_before(b, op):
-            ub = _user_base_for_op(op, auth_mode)
-            return b.get(f"{ub}/messages/{op.item_id}")
+            ub = user_base_for_op(op)
+            return b.get(f"{ub}/messages/{op.item_id}?$select=id,parentFolderId")
 
         def parse_before(op, body, err):
             if not body:
