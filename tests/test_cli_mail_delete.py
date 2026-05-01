@@ -63,14 +63,13 @@ def test_delete_parser_accepts_assume_yes():
     assert args.assume_yes is True
 
 
-def test_assume_yes_rejected_when_config_disallows(tmp_path, monkeypatch):
+def test_assume_yes_rejected_when_config_disallows(tmp_path):
     """``--assume-yes`` errors out cleanly when config opts out (default)."""
-    import sys
-    from m365ctl.mail.cli._common import _validate_assume_yes
-    from m365ctl.common.config import (
-        Config, ScopeConfig, SafetyConfig, CatalogConfig, LoggingConfig, MailConfig,
-    )
     import argparse
+    from m365ctl.common.config import (
+        CatalogConfig, Config, LoggingConfig, MailConfig, SafetyConfig, ScopeConfig,
+    )
+    from m365ctl.mail.cli._common import _validate_assume_yes
     cfg = Config(
         tenant_id="t", client_id="c",
         cert_path=tmp_path / "k", cert_public=tmp_path / "c",

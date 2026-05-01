@@ -17,6 +17,8 @@ from m365ctl.mail.cli._bulk import (
     execute_plan_in_batches,
     expand_messages_for_pattern,
 )
+from m365ctl.mail.models import EmailAddress, Flag, Message
+from m365ctl.mail.mutate._common import MailResult
 
 
 def test_confirm_bulk_proceed_under_threshold_no_prompt():
@@ -38,8 +40,6 @@ def test_confirm_bulk_proceed_assume_yes_skips_prompt():
             is True
         )
         m.assert_not_called()
-from m365ctl.mail.models import EmailAddress, Flag, Message
-from m365ctl.mail.mutate._common import MailResult
 
 
 def _msg(msg_id: str, folder_path: str = "/Inbox", subject: str = "s") -> Message:
