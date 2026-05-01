@@ -13,16 +13,57 @@ from __future__ import annotations
 from typing import Any
 
 from m365ctl.common.audit import AuditLogger, log_mutation_end, log_mutation_start
+from m365ctl.common.batch import EagerSession, GraphCaller
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation
-from m365ctl.mail.endpoints import user_base
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.mutate._common import MailResult
 
 
-def _user_base(op: Operation) -> str:
-    auth_mode = op.args.get("auth_mode", "delegated")
-    spec = "me" if op.drive_id == "me" else f"upn:{op.drive_id}"
-    return user_base(spec, auth_mode=auth_mode)
+def start_soft_delete(
+    op: Operation,
+    client: GraphCaller,
+    logger: AuditLogger,
+    *,
+    before: dict[str, Any],
+):
+    """Log start, buffer the move POST, return ``(future, after)``.
+
+    ``after.parent_folder_id`` is filled in by ``finish_soft_delete`` from
+    the Graph response body; we seed an empty string here so the shape is
+    stable.
+    """
+    ub = user_base_for_op(op)
+    log_mutation_start(
+        logger, op_id=op.op_id, cmd="mail-delete-soft",
+        args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
+    )
+    f = client.post(
+        f"{ub}/messages/{op.item_id}/move",
+        json={"destinationId": "deleteditems"},
+    )
+    after: dict[str, Any] = {
+        "parent_folder_id": "",
+        "deleted_from": before.get("parent_folder_id", ""),
+    }
+    return f, after
+
+
+def finish_soft_delete(
+    op: Operation,
+    future,
+    after: dict[str, Any],
+    logger: AuditLogger,
+) -> MailResult:
+    """Resolve future, populate ``after.parent_folder_id`` from response, log end."""
+    try:
+        body = future.result()
+    except GraphError as e:
+        log_mutation_end(logger, op_id=op.op_id, after=None, result="error", error=str(e))
+        return MailResult(op_id=op.op_id, status="error", error=str(e))
+    after = {**after, "parent_folder_id": body.get("parentFolderId", "")}
+    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
+    return MailResult(op_id=op.op_id, status="ok", after=after)
 
 
 def execute_soft_delete(
@@ -39,22 +80,6 @@ def execute_soft_delete(
     ``get_message`` before calling. If the pre-fetch fails, empty ``before``
     is acceptable — the delete still succeeds; undo degrades to best-effort.
     """
-    ub = _user_base(op)
-    log_mutation_start(
-        logger, op_id=op.op_id, cmd="mail-delete-soft",
-        args=op.args, drive_id=op.drive_id, item_id=op.item_id, before=before,
-    )
-    try:
-        response = graph.post(
-            f"{ub}/messages/{op.item_id}/move",
-            json={"destinationId": "deleteditems"},
-        )
-    except GraphError as e:
-        log_mutation_end(logger, op_id=op.op_id, after=None, result="error", error=str(e))
-        return MailResult(op_id=op.op_id, status="error", error=str(e))
-    after: dict[str, Any] = {
-        "parent_folder_id": response.get("parentFolderId", ""),
-        "deleted_from": before.get("parent_folder_id", ""),
-    }
-    log_mutation_end(logger, op_id=op.op_id, after=after, result="ok")
-    return MailResult(op_id=op.op_id, status="ok", after=after)
+    eager = EagerSession(graph)
+    f, after = start_soft_delete(op, eager, logger, before=before)
+    return finish_soft_delete(op, f, after, logger)

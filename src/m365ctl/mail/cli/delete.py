@@ -22,13 +22,15 @@ from m365ctl.mail.cli._bulk import (
     MessageFilter,
     confirm_bulk_proceed,
     emit_plan,
+    execute_plan_in_batches,
     expand_messages_for_pattern,
 )
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
+from m365ctl.mail.endpoints import user_base_for_op
 from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
-from m365ctl.mail.mutate.delete import execute_soft_delete
+from m365ctl.mail.mutate.delete import execute_soft_delete, finish_soft_delete, start_soft_delete
 
 
 _DESCRIPTION = (
@@ -106,29 +108,33 @@ def main(argv: list[str]) -> int:
         if not confirm_bulk_proceed(len(ops), verb="delete"):
             print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
             return 2
+        for op in ops:
+            op.args.setdefault("auth_mode", auth_mode)
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
-        any_error = False
-        for op in ops:
-            op.args.setdefault("auth_mode", auth_mode)
-            try:
-                msg = get_message(graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
-                                  message_id=op.item_id)
-                # internet_message_id is preserved across Graph folder moves;
-                # `mail undo` uses it to recover the rotated id from Deleted Items.
-                before = {"parent_folder_id": msg.parent_folder_id,
-                          "parent_folder_path": msg.parent_folder_path,
-                          "internet_message_id": msg.internet_message_id}
-            except Exception:
-                before = {}
-            result = execute_soft_delete(op, graph, logger, before=before)
-            if result.status != "ok":
-                any_error = True
-                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
-            else:
+
+        def fetch_before(b, op):
+            ub = user_base_for_op(op)
+            return b.get(f"{ub}/messages/{op.item_id}?$select=id,parentFolderId")
+
+        def parse_before(op, body, err):
+            if not body:
+                return {}
+            return {"parent_folder_id": body.get("parentFolderId")}
+
+        def on_result(op, result):
+            if result.status == "ok":
                 print(f"[{op.op_id}] ok")
-        return 1 if any_error else 0
+            else:
+                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
+
+        return execute_plan_in_batches(
+            graph=graph, logger=logger, ops=ops,
+            fetch_before=fetch_before, parse_before=parse_before,
+            start_op=start_soft_delete, finish_op=finish_soft_delete,
+            on_result=on_result,
+        )
 
     # --- Single-item mode ---------------------------------------------------
     if args.message_id:
