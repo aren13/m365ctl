@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Pre-push hook: runs the same gates CI runs, so failures show up locally
+# before a push instead of after. Skip with `git push --no-verify` (don't make
+# this a habit — the CI ruleset on `main` requires these to pass anyway).
+#
+# Activate once per checkout:
+#   git config core.hooksPath .githooks
+# (or run ./bin/install-hooks)
+
+set -euo pipefail
+
+# Don't run on `git push --delete` or push of zero commits.
+zero_sha="0000000000000000000000000000000000000000"
+has_real_push=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$local_sha" != "$zero_sha" ]]; then
+        has_real_push=1
+        break
+    fi
+done
+
+if [[ $has_real_push -eq 0 ]]; then
+    exit 0
+fi
+
+# Skip the hook when pushing tags only (e.g., `git push origin v1.13.0`).
+# tags don't go through CI gates — no value blocking on them locally.
+if [[ "${1:-}" == *--tags* ]]; then
+    exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+gray()  { printf '\033[90m%s\033[0m\n' "$*"; }
+
+run_step() {
+    local label=$1
+    shift
+    gray "==> $label"
+    if ! "$@"; then
+        red "✗ $label failed — push aborted (use --no-verify to bypass)"
+        exit 1
+    fi
+}
+
+# Mirror .github/workflows/ci.yml's steps. Cheap things first, fail fast.
+run_step "ruff check"  uv run ruff check
+run_step "mypy src"    uv run mypy src
+run_step "pytest"      uv run pytest -m "not live" -q
+
+green "✓ all pre-push gates passed"
