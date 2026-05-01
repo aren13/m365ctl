@@ -32,6 +32,11 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # PAT (scopes: repo + workflow) so the release PR is attributed to a
+          # user, not GITHUB_TOKEN. Required so branch-protection checks like
+          # `test (ubuntu-latest, 3.11)` actually run on the release PR —
+          # workflows are skipped for events created by the default token.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           # Config + manifest live at repo root.
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
