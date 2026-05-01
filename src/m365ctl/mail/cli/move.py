@@ -18,6 +18,7 @@ from m365ctl.mail.cli._bulk import (
     MessageFilter,
     confirm_bulk_proceed,
     emit_plan,
+    execute_plan_in_batches,
     expand_messages_for_pattern,
 )
 from m365ctl.mail.cli._common import add_common_args, load_and_authorize
@@ -25,6 +26,13 @@ from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
 from m365ctl.mail.mutate.move import execute_move
+
+
+def _user_base_for_op(op, auth_mode: str) -> str:
+    """Mirror mail.mutate.move._user_base — used inside the from-plan fetch_before."""
+    from m365ctl.mail.endpoints import user_base
+    spec = "me" if op.drive_id == "me" else f"upn:{op.drive_id}"
+    return user_base(spec, auth_mode=auth_mode)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,7 +94,7 @@ def _build_filter(args) -> MessageFilter:
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
 
-    # --- From-plan mode (bulk execute) --------------------------------------
+    # --- From-plan mode (bulk execute, batched) -----------------------------
     if args.from_plan:
         if not args.confirm:
             print("mail move --from-plan requires --confirm.", file=sys.stderr)
@@ -100,26 +108,37 @@ def main(argv: list[str]) -> int:
         if not confirm_bulk_proceed(len(ops), verb="move"):
             print("aborted: user declined /dev/tty confirm.", file=sys.stderr)
             return 2
+        for op in ops:
+            op.args.setdefault("auth_mode", auth_mode)
         token = cred.get_token()
         graph = GraphClient(token_provider=lambda: token)
         logger = AuditLogger(ops_dir=cfg.logging.ops_dir)
-        any_error = False
-        for op in ops:
-            op.args.setdefault("auth_mode", auth_mode)
-            try:
-                msg = get_message(graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
-                                  message_id=op.item_id)
-                before = {"parent_folder_id": msg.parent_folder_id,
-                          "parent_folder_path": msg.parent_folder_path}
-            except Exception:
-                before = {}
-            result = execute_move(op, graph, logger, before=before)
-            if result.status != "ok":
-                any_error = True
-                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
-            else:
+
+        def fetch_before(b, op):
+            ub = _user_base_for_op(op, auth_mode)
+            return b.get(f"{ub}/messages/{op.item_id}")
+
+        def parse_before(op, body, err):
+            if not body:
+                return {}
+            return {
+                "parent_folder_id": body.get("parentFolderId"),
+                "parent_folder_path": None,
+            }
+
+        def on_result(op, result):
+            if result.status == "ok":
                 print(f"[{op.op_id}] ok")
-        return 1 if any_error else 0
+            else:
+                print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
+
+        from m365ctl.mail.mutate.move import finish_move, start_move
+        return execute_plan_in_batches(
+            graph=graph, logger=logger, ops=ops,
+            fetch_before=fetch_before, parse_before=parse_before,
+            start_op=start_move, finish_op=finish_move,
+            on_result=on_result,
+        )
 
     # --- Single-item mode ---------------------------------------------------
     if args.message_id:
