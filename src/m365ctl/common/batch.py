@@ -82,7 +82,7 @@ class BatchFuture:
         self._done = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Resolved:
     """Already-resolved future used by EagerSession (synchronous fallback)."""
     value: dict | None = None

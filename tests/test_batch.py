@@ -15,6 +15,10 @@ def test_batch_future_unflushed_raises():
     f = BatchFuture(req_id="1")
     with pytest.raises(BatchUnflushedError):
         f.result()
+    with pytest.raises(BatchUnflushedError):
+        f.status()
+    with pytest.raises(BatchUnflushedError):
+        f.headers()
     assert f.done() is False
 
 

@@ -17,8 +17,7 @@
 ### Task 1: Module skeleton — `BatchUnflushedError`, `BatchFuture`, `_Resolved`, `GraphCaller`
 
 **Files:**
-- Create: `src/m365ctl/common/batch.py`
-- Modify: `src/m365ctl/common/graph.py` (add `GraphCaller` Protocol export)
+- Create: `src/m365ctl/common/batch.py` (also hosts the `GraphCaller` Protocol — co-located with its two implementations)
 - Test: `tests/test_batch.py`
 
 - [ ] **Step 1: Write the failing test for `BatchFuture` resolution states**

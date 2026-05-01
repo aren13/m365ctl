@@ -185,10 +185,12 @@ class EagerSession:
     # get_absolute / patch / delete defined similarly
 ```
 
-A `GraphCaller` `Protocol` is introduced (`common/graph.py`) so verbs and
+A `GraphCaller` `Protocol` is introduced (`common/batch.py`) so verbs and
 helpers declare they accept "anything with `.get/post/patch/delete` that
 returns something with `.result()`." Both `BatchSession` and `EagerSession`
-satisfy it.
+satisfy it. (Lives next to its only two implementations rather than in
+`graph.py`, so consumers pulling in batching also pull the protocol in one
+import.)
 
 `execute_<verb>(op, graph: GraphClient, logger, *, before)` (the single-op
 shim) internally constructs `EagerSession(graph)` and feeds it to
