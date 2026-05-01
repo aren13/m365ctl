@@ -25,7 +25,7 @@ from m365ctl.mail.cli._common import add_common_args, load_and_authorize
 from m365ctl.mail.folders import FolderNotFound, resolve_folder_path
 from m365ctl.mail.messages import get_message
 from m365ctl.mail.mutate._common import assert_mail_target_allowed, derive_mailbox_upn
-from m365ctl.mail.mutate.move import execute_move
+from m365ctl.mail.mutate.move import execute_move, finish_move, start_move
 
 
 def _user_base_for_op(op, auth_mode: str) -> str:
@@ -132,7 +132,6 @@ def main(argv: list[str]) -> int:
             else:
                 print(f"[{op.op_id}] error: {result.error}", file=sys.stderr)
 
-        from m365ctl.mail.mutate.move import finish_move, start_move
         return execute_plan_in_batches(
             graph=graph, logger=logger, ops=ops,
             fetch_before=fetch_before, parse_before=parse_before,
