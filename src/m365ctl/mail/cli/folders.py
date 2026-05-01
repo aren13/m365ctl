@@ -210,9 +210,15 @@ def _run_move(args: argparse.Namespace) -> int:
         folder_id = resolve_folder_path(
             args.path, graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
         )
-        dest_id = resolve_folder_path(
-            args.new_parent_path, graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
-        )
+        # Root sentinels: "", "/", "root", "msgfolderroot" all map to the
+        # well-known mailbox root folder. Graph accepts "msgfolderroot" as
+        # a destinationId directly without a path-resolution step.
+        if args.new_parent_path in ("", "/", "root", "msgfolderroot"):
+            dest_id = "msgfolderroot"
+        else:
+            dest_id = resolve_folder_path(
+                args.new_parent_path, graph, mailbox_spec=args.mailbox, auth_mode=auth_mode,
+            )
     except FolderNotFound as e:
         print(f"mail folders move: {e}", file=sys.stderr)
         return 2

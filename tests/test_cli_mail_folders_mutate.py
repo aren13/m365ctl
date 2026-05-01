@@ -86,3 +86,87 @@ ops_dir = "logs/ops"
 
     with pytest.raises(ScopeViolation):
         main(["--config", str(cfg_path), "create", "/Calendar", "Evil", "--confirm"])
+
+
+def test_folders_move_to_root_uses_msgfolderroot(tmp_path, monkeypatch):
+    """`move <child> <root-sentinel>` sends destinationId=msgfolderroot.
+
+    Per #33, "", "/", "root", "msgfolderroot" must all be accepted as the
+    destination and pass through to Graph as the well-known root id without
+    a path-resolution step.
+    """
+    import argparse
+    from unittest.mock import MagicMock
+
+    from m365ctl.mail.cli.folders import _run_move
+
+    # Stub the dependencies that hit Graph or the FS.
+    cfg = MagicMock()
+    cfg.logging.ops_dir = tmp_path / "ops"
+
+    def fake_load_and_authorize(_args):
+        cred = MagicMock()
+        cred.get_token.return_value = "tok"
+        return cfg, "delegated", cred
+
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders.load_and_authorize", fake_load_and_authorize,
+    )
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders.assert_mail_target_allowed",
+        lambda *_a, **_kw: None,
+    )
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders._preauth_deny_check", lambda *_a, **_kw: None,
+    )
+
+    # resolve_folder_path is called for the SOURCE (and the parent_path lookup)
+    # — but should NOT be called for the destination when it's a sentinel.
+    resolved_paths: list[str] = []
+
+    def fake_resolve(path, *_a, **_kw):
+        resolved_paths.append(path)
+        return f"folder-id-of-{path}"
+
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders.resolve_folder_path", fake_resolve,
+    )
+
+    # Capture the Operation passed to execute_move_folder.
+    captured: dict = {}
+
+    def fake_execute(op, _graph, _logger, *, before):
+        captured["op"] = op
+        captured["before"] = before
+        from m365ctl.mail.mutate._common import MailResult
+        return MailResult(op_id=op.op_id, status="ok")
+
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders.execute_move_folder", fake_execute,
+    )
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders._build_audit_logger", lambda _cfg: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "m365ctl.mail.cli.folders.GraphClient", lambda **_kw: MagicMock(),
+    )
+
+    for sentinel in ("", "/", "root", "msgfolderroot"):
+        captured.clear()
+        resolved_paths.clear()
+        args = argparse.Namespace(
+            mailbox="me", path="Inbox/Newsletter", new_parent_path=sentinel,
+            unsafe_scope=False, confirm=True, config=str(tmp_path / "x.toml"),
+        )
+        rc = _run_move(args)
+        assert rc == 0, f"move to {sentinel!r} should succeed"
+        assert captured["op"].args["destination_id"] == "msgfolderroot", (
+            f"sentinel {sentinel!r} should resolve to msgfolderroot, "
+            f"got {captured['op'].args['destination_id']!r}"
+        )
+        # The destination sentinel must NOT have triggered resolve_folder_path —
+        # only the source path (and possibly its parent for `before`) should.
+        assert sentinel not in resolved_paths, (
+            f"resolve_folder_path was called for sentinel {sentinel!r} "
+            f"(expected to bypass)"
+        )
