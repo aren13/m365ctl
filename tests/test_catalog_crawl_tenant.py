@@ -239,3 +239,87 @@ def test_resolve_scope_still_supports_me_and_drive() -> None:
     }
     drives = resolve_scope("drive:drv-xyz", graph)
     assert drives[0].drive_id == "drv-xyz"
+
+
+def test_resolve_scope_tenant_batches_per_user_and_per_site_metadata() -> None:
+    """Real GraphClient: per-user /drive and per-site /sites/{id} (+ /drives)
+    metadata GETs fan out via /$batch instead of N sequential GETs.
+    """
+    import json as _json
+
+    import httpx
+
+    from m365ctl.common.graph import GraphClient
+
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/$batch"):
+            body = _json.loads(request.read())
+            posts.append({"path": path, "body": body})
+            responses = []
+            for r in body["requests"]:
+                url = r["url"]
+                if url.startswith("users/") and url.endswith("/drive"):
+                    uid = url.split("/")[1]
+                    responses.append({
+                        "id": r["id"], "status": 200, "headers": {},
+                        "body": {
+                            "id": f"drv-{uid}", "name": f"OneDrive-{uid}",
+                            "driveType": "business",
+                            "owner": {"user": {"email": f"{uid}@example.com"}},
+                        },
+                    })
+                elif url.startswith("sites/") and url.endswith("/drives"):
+                    sid = url.split("/")[1]
+                    responses.append({
+                        "id": r["id"], "status": 200, "headers": {},
+                        "body": {"value": [{
+                            "id": f"drv-{sid}-doc", "name": "Documents",
+                            "driveType": "documentLibrary",
+                            "owner": {"group": {"displayName": sid}},
+                        }]},
+                    })
+                elif url.startswith("sites/"):
+                    sid = url.split("/")[1]
+                    responses.append({
+                        "id": r["id"], "status": 200, "headers": {},
+                        "body": {"id": sid, "displayName": sid.title()},
+                    })
+                else:
+                    responses.append({
+                        "id": r["id"], "status": 404, "headers": {},
+                        "body": {"error": {"code": "NotFound"}},
+                    })
+            return httpx.Response(200, json={"responses": responses})
+        if path.endswith("/users"):
+            return httpx.Response(200, json={"value": [
+                {"id": "u1", "userPrincipalName": "u1@example.com"},
+                {"id": "u2", "userPrincipalName": "u2@example.com"},
+            ]})
+        if path.endswith("/sites"):
+            return httpx.Response(200, json={"value": [
+                {"id": "site-a"}, {"id": "site-b"},
+            ]})
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    drives = resolve_scope("tenant", graph)
+    drv_ids = sorted(d.drive_id for d in drives)
+    assert drv_ids == ["drv-site-a-doc", "drv-site-b-doc", "drv-u1", "drv-u2"]
+
+    # Three /$batch POSTs: user-drives, site-metadata, site-drives.
+    assert len(posts) == 3
+    user_batch = posts[0]["body"]["requests"]
+    assert all(r["url"].endswith("/drive") and r["url"].startswith("users/")
+               for r in user_batch)
+    site_batch = posts[1]["body"]["requests"]
+    assert all(r["url"].startswith("sites/") and not r["url"].endswith("/drives")
+               for r in site_batch)
+    site_drives_batch = posts[2]["body"]["requests"]
+    assert all(r["url"].endswith("/drives") for r in site_drives_batch)

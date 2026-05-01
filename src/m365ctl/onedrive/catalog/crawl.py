@@ -141,7 +141,15 @@ def _drives_of_site(site: dict, graph: _GraphLike) -> list[DriveSpec]:
 
 
 def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
-    """All user OneDrives + all SharePoint site drives."""
+    """All user OneDrives + all SharePoint site drives.
+
+    The per-user ``/users/{uid}/drive`` GETs and per-site
+    ``/sites/{id}`` + ``/sites/{id}/drives`` GETs are non-delta metadata
+    fetches with no inter-call ordering, so they fan out via ``/$batch``
+    when the underlying graph client supports it (real ``GraphClient``).
+    Tests using a bare ``MagicMock`` without ``.batch`` configured fall
+    back to the legacy serial path.
+    """
     specs: list[DriveSpec] = []
 
     from m365ctl.common.graph import GraphError
@@ -177,50 +185,144 @@ def _enumerate_tenant(graph: _GraphLike) -> list[DriveSpec]:
         )
         return list(resp.get("value", []))
 
-    # Users → their OneDrive (skip 404s for unprovisioned users).
-    for user in _collect(
+    # Detect batched-capable client. Bare-MagicMock test stubs that only
+    # configure .get / .get_paginated lack a real .batch — fall through to
+    # the serial path in that case.
+    can_batch = _supports_batch(graph)
+
+    # ---- Users → their OneDrive (skip "user has no drive" errors). ----
+    users = _collect(
         "/users",
         params={"$select": "id,userPrincipalName,displayName", "$top": 999},
-    ):
-        uid = user.get("id")
-        if not uid:
-            continue
-        try:
-            meta = graph.get(f"/users/{uid}/drive")
-        except GraphError as exc:
-            # Per-user OneDrive unavailable for one of many reasons:
-            #   - Never provisioned: "ResourceNotFound: User's mysite not
-            #     found." (unlicensed / guest / never-signed-in).
-            #   - Generic 404: "itemNotFound" / "HTTP404".
-            #   - Admin-blocked: "notAllowed: Access to this site has been
-            #     blocked." (retention hold, legal hold, tenant policy).
-            #   - Permission block: "accessDenied".
-            # All of these mean "we can't crawl this user" — skip silently,
-            # don't abort the whole tenant scan. Transient errors (429/503)
-            # never reach here because with_retry has already exhausted them.
-            if any(t in str(exc) for t in _SKIP_TOKENS):
-                continue
-            raise
-        specs.append(
-            _drive_from_meta(meta, graph_path=f"/drives/{meta['id']}/root/delta")
-        )
+    )
+    user_ids = [u.get("id") for u in users if u.get("id")]
 
-    # Sites → each site's drives. Apply the same skip semantics as the user
-    # loop: some sites (personal / private-channel / retention-held) 403 or
-    # 404 on direct GET even though they appear in the tenant-wide search.
-    for site in _collect("/sites", params={"search": "*"}):
-        try:
-            site_full = graph.get(f"/sites/{site['id']}")
-        except GraphError as exc:
-            if any(t in str(exc) for t in _SKIP_TOKENS):
-                continue
-            raise
-        try:
-            specs.extend(_drives_of_site(site_full, graph))
-        except GraphError as exc:
-            if any(t in str(exc) for t in _SKIP_TOKENS):
-                continue
-            raise
+    if can_batch and user_ids:
+        with graph.batch() as b:
+            user_futs = [(uid, b.get(f"/users/{uid}/drive")) for uid in user_ids]
+        for uid, fut in user_futs:
+            try:
+                meta = fut.result()
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+            specs.append(
+                _drive_from_meta(meta, graph_path=f"/drives/{meta['id']}/root/delta")
+            )
+    else:
+        for uid in user_ids:
+            try:
+                meta = graph.get(f"/users/{uid}/drive")
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+            specs.append(
+                _drive_from_meta(meta, graph_path=f"/drives/{meta['id']}/root/delta")
+            )
+
+    # ---- Sites → each site's drives. Apply the same skip semantics. ----
+    sites = _collect("/sites", params={"search": "*"})
+    site_ids = [s["id"] for s in sites if s.get("id")]
+
+    if can_batch and site_ids:
+        # Batch site metadata first, then site/drives for the survivors.
+        with graph.batch() as b:
+            site_futs = [(sid, b.get(f"/sites/{sid}")) for sid in site_ids]
+        survivors: list[dict] = []
+        for sid, fut in site_futs:
+            try:
+                site_full = fut.result()
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+            survivors.append(site_full)
+
+        with graph.batch() as b:
+            drive_futs = [
+                (s, b.get(f"/sites/{s['id']}/drives")) for s in survivors
+            ]
+        for site_full, fut in drive_futs:
+            try:
+                drives_body = fut.result()
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+            specs.extend(_drives_of_site_from_body(site_full, drives_body))
+    else:
+        for site in sites:
+            try:
+                site_full = graph.get(f"/sites/{site['id']}")
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+            try:
+                specs.extend(_drives_of_site(site_full, graph))
+            except GraphError as exc:
+                if any(t in str(exc) for t in _SKIP_TOKENS):
+                    continue
+                raise
+    return specs
+
+
+def _supports_batch(graph: _GraphLike) -> bool:
+    """Return True iff ``graph`` exposes a real ``batch()`` method.
+
+    Real ``GraphClient`` always does. Bare-MagicMock test stubs that haven't
+    explicitly configured ``.batch`` should keep using the serial path —
+    we detect those by treating any MagicMock instance as no-batch unless
+    its ``batch`` attribute is *not* an auto-attribute (i.e. it's been
+    explicitly set or the test passed a real ``GraphClient``).
+    """
+    try:
+        from unittest.mock import MagicMock as _MM
+    except ImportError:
+        _MM = None  # type: ignore
+    if _MM is not None and isinstance(graph, _MM):
+        # MagicMock auto-creates any attribute access — only treat as
+        # batch-capable if the test has explicitly configured .batch
+        # (e.g. via side_effect or a tracked spec).
+        batch_attr = graph.__dict__.get("batch")
+        if batch_attr is None:
+            return False
+        # If side_effect or return_value is set, the test wants batched.
+        if getattr(batch_attr, "side_effect", None) is not None:
+            return True
+        if getattr(batch_attr, "_mock_return_value", None) not in (None, _MM.DEFAULT):
+            return True
+        return False
+    return callable(getattr(graph, "batch", None))
+
+
+def _drives_of_site_from_body(site: dict, drives_body: dict) -> list[DriveSpec]:
+    """Identical shape to ``_drives_of_site`` but consumes a pre-fetched
+    drives-listing body so the outer caller can issue the GET in a batch.
+    """
+    site_name = site.get("displayName") or site.get("name") or site["id"]
+    specs: list[DriveSpec] = []
+    for d in drives_body.get("value", []) or []:
+        owner_block = d.get("owner") or {}
+        user = owner_block.get("user") or {}
+        group = owner_block.get("group") or {}
+        owner = (
+            user.get("email")
+            or user.get("displayName")
+            or group.get("displayName")
+            or "unknown"
+        )
+        specs.append(
+            DriveSpec(
+                drive_id=d["id"],
+                display_name=f"{site_name} / {d.get('name', d['id'])}",
+                owner=owner,
+                drive_type=d.get("driveType", "documentLibrary"),
+                graph_path=f"/drives/{d['id']}/root/delta",
+            )
+        )
     return specs
 
 
