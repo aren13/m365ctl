@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Protocol, TypeVar, runtime_checkable
+from urllib.parse import urlencode
 
 from m365ctl.common.audit import AuditLogger
 from m365ctl.common.batch import BatchFuture
@@ -25,7 +26,11 @@ from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import Operation, Plan, write_plan
 from m365ctl.common.safety import _confirm_via_tty
 from m365ctl.mail.mutate._common import MailResult  # noqa: F401  (re-export convenience)
-from m365ctl.mail.messages import MessageListFilters, list_messages as _default_list_messages
+from m365ctl.mail.messages import (
+    MessageListFilters,
+    _messages_url,
+    _derive_mailbox_upn,
+)
 from m365ctl.mail.models import Message
 
 
@@ -101,33 +106,99 @@ def expand_messages_for_pattern(
     filter: MessageFilter,
     limit: int = 50,
     page_size: int = 50,
-    _list_messages_impl: Callable[..., Iterable[Message]] = _default_list_messages,
+    _list_messages_impl: Callable[..., Iterable[Message]] | None = None,
 ) -> Iterator[Message]:
     """Yield messages across ``resolved_folders`` (list of ``(folder_id, folder_path)``).
 
-    The server-side ``$filter`` is pushed down via ``list_messages``. Iteration
-    stops at ``limit`` total messages across all folders.
+    The server-side ``$filter`` is pushed down. Iteration stops at ``limit``
+    total messages across all folders.
 
-    ``_list_messages_impl`` is injected so unit tests can bypass the real
-    Graph client. Production callers pass the default.
+    When ``_list_messages_impl`` is None (production), the FIRST page of every
+    folder's listing is fetched in a single ``/$batch`` POST. Subsequent pages
+    of each folder are walked serially via ``@odata.nextLink`` (pagination is
+    inherently sequential per stream). When an injected impl is supplied —
+    legacy unit-test path — we fall back to the simpler serial-per-folder
+    iteration.
     """
     yielded = 0
     list_filters = filter.as_list_filters()
+    if _list_messages_impl is not None:
+        # Legacy serial path for tests that inject a fake list_messages.
+        for folder_id, folder_path in resolved_folders:
+            for msg in _list_messages_impl(
+                graph=graph,
+                mailbox_spec=mailbox_spec,
+                auth_mode=auth_mode,
+                folder_id=folder_id,
+                parent_folder_path=folder_path,
+                filters=list_filters,
+                limit=limit - yielded,
+                page_size=page_size,
+            ):
+                yield msg
+                yielded += 1
+                if yielded >= limit:
+                    return
+        return
+
+    if not resolved_folders:
+        return
+
+    mailbox_upn = _derive_mailbox_upn(mailbox_spec)
+
+    # Phase 1: batch first-page GETs across all folders in chunks of 20.
+    # Pagination within each folder stream stays sequential (handled below).
+    first_pages: list[tuple[str, str, BatchFuture, dict]] = []  # (fid, fpath, future, params)
     for folder_id, folder_path in resolved_folders:
-        for msg in _list_messages_impl(
-            graph=graph,
+        path, params = _messages_url(
             mailbox_spec=mailbox_spec,
             auth_mode=auth_mode,
             folder_id=folder_id,
-            parent_folder_path=folder_path,
             filters=list_filters,
-            limit=limit - yielded,
+            limit=limit,
             page_size=page_size,
-        ):
-            yield msg
+        )
+        # BatchSession.get takes a path; bake params into the query string.
+        url_with_query = f"{path}?{urlencode(params)}"
+        first_pages.append((folder_id, folder_path, None, url_with_query))  # placeholder; assigned below
+
+    # Re-issue under a single BatchSession (auto-flushes every 20 enqueued).
+    with graph.batch() as b:
+        first_pages = [
+            (fid, fpath, b.get(url), url)
+            for (fid, fpath, _f, url) in first_pages
+        ]
+
+    # Phase 2: walk each folder's pages serially, yielding messages.
+    for folder_id, folder_path, fut, _url in first_pages:
+        try:
+            body = fut.result()
+        except GraphError:
+            # If a single folder's first-page GET failed, surface the error
+            # in the same way the eager path would have: the ``GraphError``
+            # propagates out of the iterator. Preserves prior behavior.
+            raise
+        items = body.get("value", []) if isinstance(body, dict) else []
+        next_link = body.get("@odata.nextLink") if isinstance(body, dict) else None
+        for raw in items:
+            yield Message.from_graph_json(
+                raw, mailbox_upn=mailbox_upn, parent_folder_path=folder_path,
+            )
             yielded += 1
             if yielded >= limit:
                 return
+        # Subsequent pages stay sequential (each depends on the prior link).
+        while next_link:
+            page = graph.get_absolute(next_link)
+            page_items = page.get("value", []) if isinstance(page, dict) else []
+            next_link = page.get("@odata.nextLink") if isinstance(page, dict) else None
+            for raw in page_items:
+                yield Message.from_graph_json(
+                    raw, mailbox_upn=mailbox_upn, parent_folder_path=folder_path,
+                )
+                yielded += 1
+                if yielded >= limit:
+                    return
 
 
 def emit_plan(

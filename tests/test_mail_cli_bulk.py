@@ -316,3 +316,80 @@ def test_execute_plan_in_batches_emits_starts_then_ends_per_phase(tmp_path):
     # All three starts should appear before any end in phase 2 (since
     # auto-flush at 20 doesn't trip for N=3 — flush only on `with` exit).
     assert phases == ["start", "start", "start", "end", "end", "end"]
+
+
+def test_expand_messages_for_pattern_batches_first_pages(tmp_path):
+    """First-page GETs across N folders should be issued in one /$batch POST.
+
+    Subsequent pages of any one folder remain serial (pagination is
+    inherently sequential per stream).
+    """
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/$batch"):
+            body = json.loads(request.read())
+            posts.append({"path": request.url.path, "body": body})
+            # Each sub-request returns one message keyed off the URL.
+            responses = []
+            for r in body["requests"]:
+                # url like "/me/mailFolders/<fid>/messages?..."
+                fid = r["url"].split("/mailFolders/")[1].split("/")[0]
+                responses.append({
+                    "id": r["id"],
+                    "status": 200,
+                    "headers": {},
+                    "body": {
+                        "value": [_raw_msg(f"{fid}-m1", fid)],
+                    },
+                })
+            return httpx.Response(200, json={"responses": responses})
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+
+    resolved = [
+        ("inbox", "/Inbox"),
+        ("archive", "/Archive"),
+        ("trash", "/Trash"),
+    ]
+    msgs = list(expand_messages_for_pattern(
+        graph=graph,
+        mailbox_spec="me",
+        auth_mode="delegated",
+        resolved_folders=resolved,
+        filter=MessageFilter(),
+        limit=50,
+    ))
+    # One /$batch POST containing all three first-page GETs.
+    assert len(posts) == 1
+    sub_methods = [r["method"] for r in posts[0]["body"]["requests"]]
+    assert sub_methods == ["GET", "GET", "GET"]
+    sub_urls = [r["url"] for r in posts[0]["body"]["requests"]]
+    assert all("/messages" in u for u in sub_urls)
+    # Three messages — one per folder.
+    assert sorted(m.id for m in msgs) == ["archive-m1", "inbox-m1", "trash-m1"]
+
+
+def _raw_msg(msg_id: str, folder_id: str) -> dict:
+    return {
+        "id": msg_id,
+        "internetMessageId": f"<{msg_id}@example.com>",
+        "conversationId": f"conv-{msg_id}",
+        "conversationIndex": "AQ==",
+        "parentFolderId": folder_id,
+        "subject": f"Subj {msg_id}",
+        "sender": {"emailAddress": {"name": "A", "address": "a@example.com"}},
+        "from": {"emailAddress": {"name": "A", "address": "a@example.com"}},
+        "toRecipients": [], "ccRecipients": [], "bccRecipients": [], "replyTo": [],
+        "receivedDateTime": "2026-04-24T10:00:00Z",
+        "sentDateTime": "2026-04-24T09:59:55Z",
+        "isRead": False, "isDraft": False, "hasAttachments": False,
+        "importance": "normal", "flag": {"flagStatus": "notFlagged"},
+        "categories": [], "inferenceClassification": "focused",
+        "bodyPreview": "...", "webLink": "https://x", "changeKey": "ck",
+    }
