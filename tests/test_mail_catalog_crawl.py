@@ -280,11 +280,30 @@ def test_refresh_mailbox_picks_default_well_known_folders(tmp_path: Path) -> Non
            ("inbox", "sentitems", "drafts", "deleteditems")]
     )
     # Graph's /mailFolders listing doesn't return wellKnownName, so the
-    # crawler resolves each well-known target via graph.get(...) directly.
-    graph.get.side_effect = [
-        {"id": f"fld-{wk}", "displayName": wk.title()}
-        for wk in ("inbox", "sentitems", "drafts", "deleteditems")
-    ]
+    # crawler resolves each well-known target via /$batch (one POST
+    # containing all four well-known GETs).
+    class _FakeFuture:
+        def __init__(self, body: dict) -> None:
+            self._body = body
+
+        def result(self) -> dict:
+            return self._body
+
+    class _FakeBatchSession:
+        def __init__(self) -> None:
+            self._results: list[_FakeFuture] = []
+
+        def __enter__(self) -> "_FakeBatchSession":
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+        def get(self, path: str, *, headers=None) -> _FakeFuture:
+            wk = path.rsplit("/", 1)[-1]
+            return _FakeFuture({"id": f"fld-{wk}", "displayName": wk.title()})
+
+    graph.batch.side_effect = lambda: _FakeBatchSession()
     with open_catalog(tmp_path / "m.duckdb") as conn:
         outcomes = refresh_mailbox(
             graph,
@@ -299,3 +318,73 @@ def test_refresh_mailbox_picks_default_well_known_folders(tmp_path: Path) -> Non
         assert all(o.status == "ok" for o in outcomes)
         (n,) = conn.execute("SELECT COUNT(*) FROM mail_folders").fetchone()
         assert n == 4
+    # The well-known fast-path was resolved via a single batch session
+    # (not N sequential graph.get calls).
+    assert graph.batch.call_count == 1
+
+
+def test_refresh_mailbox_batches_well_known_resolution(tmp_path: Path) -> None:
+    """The well-known fast-path GETs are issued in one /$batch POST."""
+    import json as _json
+
+    import httpx
+
+    from m365ctl.common.graph import GraphClient
+    from m365ctl.mail.catalog.crawl import refresh_mailbox
+
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/$batch"):
+            body = _json.loads(request.read())
+            posts.append({"path": path, "body": body})
+            responses = []
+            for r in body["requests"]:
+                wk = r["url"].rsplit("/", 1)[-1]
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {"id": f"fld-{wk}", "displayName": wk.title()},
+                })
+            return httpx.Response(200, json={"responses": responses})
+        # /me/mailFolders root listing (recursive).
+        if path.endswith("/me/mailFolders"):
+            return httpx.Response(200, json={
+                "value": [
+                    {
+                        "id": f"fld-{wk}",
+                        "displayName": wk.title(),
+                        "wellKnownName": wk,
+                        "childFolderCount": 0,
+                        "totalItemCount": 0,
+                        "unreadItemCount": 0,
+                    }
+                    for wk in ("inbox", "sentitems", "drafts", "deleteditems")
+                ],
+            })
+        # /me/mailFolders/{fld}/messages/delta — empty round.
+        if "/messages/delta" in path:
+            return httpx.Response(200, json={
+                "value": [],
+                "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailFolders/x/messages/delta?$deltatoken=t",
+            })
+        return httpx.Response(404, json={"error": {"code": "NotFound"}})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    with open_catalog(tmp_path / "m.duckdb") as conn:
+        outcomes = refresh_mailbox(
+            graph, conn=conn, mailbox_spec="me", mailbox_upn="me",
+            auth_mode="delegated",
+        )
+        assert {o.folder_id for o in outcomes} == {
+            "fld-inbox", "fld-sentitems", "fld-drafts", "fld-deleteditems",
+        }
+    # Exactly one /$batch POST: the well-known fast-path resolution.
+    # Delta crawls themselves are sequential (each per-folder stream).
+    assert len(posts) == 1
+    sub_methods = [r["method"] for r in posts[0]["body"]["requests"]]
+    assert sub_methods == ["GET", "GET", "GET", "GET"]
