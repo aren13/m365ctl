@@ -142,6 +142,15 @@ def _build_subrequest(req_id: str, method: str, path: str,
     return sub
 
 
+def _is_transient_status(status: int, code: str) -> bool:
+    """Mirror m365ctl.common.graph._TRANSIENT_CODES for sub-response retry."""
+    if status in (429, 500, 502, 503, 504):
+        return True
+    # Lazy: import here to avoid module-level coupling with graph.py.
+    from m365ctl.common.graph import _TRANSIENT_CODES
+    return code in _TRANSIENT_CODES
+
+
 class BatchSession:
     """Buffers Graph calls into /$batch envelopes (<=20 sub-requests each).
 
@@ -226,36 +235,66 @@ class BatchSession:
         self._dispatch(batch)
 
     def _dispatch(self, batch: list[tuple["BatchFuture", dict]]) -> None:
-        envelope = {"requests": [sub for _f, sub in batch]}
-        body = self._graph.post("/$batch", json=envelope)
-        self._resolve_responses(batch, body)
+        attempts_remaining = self._graph._max_attempts
+        pending = list(batch)
+        last_err_by_id: dict[str, GraphError] = {}
 
-    def _resolve_responses(
-        self, batch: list[tuple["BatchFuture", dict]], body: dict,
-    ) -> None:
-        by_id = {f._req_id: f for f, _sub in batch}
-        for resp in body.get("responses", []):
-            req_id = str(resp.get("id"))
-            f = by_id.get(req_id)
-            if f is None:
-                continue
-            status = int(resp.get("status", 0))
-            headers = {k: str(v) for k, v in (resp.get("headers") or {}).items()}
-            sub_body = resp.get("body")
-            if status >= 400:
+        while pending:
+            envelope = {"requests": [sub for _f, sub in pending]}
+            body = self._graph.post("/$batch", json=envelope)
+            still_pending: list[tuple[BatchFuture, dict]] = []
+            max_retry_after = 0.0
+            seen_ids: set[str] = set()
+
+            for resp in body.get("responses", []):
+                req_id = str(resp.get("id"))
+                seen_ids.add(req_id)
+                # Find the (future, sub) pair matching this id.
+                pair = next(((f, sub) for f, sub in pending if f._req_id == req_id), None)
+                if pair is None:
+                    continue
+                f, sub = pair
+                status = int(resp.get("status", 0))
+                headers = {k: str(v) for k, v in (resp.get("headers") or {}).items()}
+                sub_body = resp.get("body")
+                if status < 400:
+                    f._resolve(
+                        status=status,
+                        headers=headers,
+                        body=sub_body if isinstance(sub_body, dict) else None,
+                    )
+                    continue
                 err = self._graph_error_from_subresponse(status, sub_body, headers)
-                f._resolve_error(err)
-            else:
-                f._resolve(
-                    status=status,
-                    headers=headers,
-                    body=sub_body if isinstance(sub_body, dict) else None,
-                )
-        for f, _sub in batch:
-            if not f.done():
-                f._resolve_error(GraphError(
-                    f"HTTP0: missing sub-response for id={f._req_id}",
-                ))
+                last_err_by_id[req_id] = err
+                code = str(err).split(":", 1)[0].strip()
+                if attempts_remaining > 1 and _is_transient_status(status, code):
+                    still_pending.append((f, sub))
+                    if err.retry_after_seconds is not None:
+                        max_retry_after = max(max_retry_after, err.retry_after_seconds)
+                else:
+                    f._resolve_error(err)
+
+            # Sub-requests with no matching response → synthetic error.
+            for f, _sub in pending:
+                if f._req_id not in seen_ids and not f.done():
+                    f._resolve_error(GraphError(
+                        f"HTTP0: missing sub-response for id={f._req_id}",
+                    ))
+
+            if not still_pending:
+                return
+            attempts_remaining -= 1
+            if attempts_remaining <= 0:
+                for f, _sub in still_pending:
+                    if not f.done():
+                        f._resolve_error(
+                            last_err_by_id.get(f._req_id,
+                                               GraphError("HTTP429: retry exhausted"))
+                        )
+                return
+            delay = max_retry_after if max_retry_after > 0 else 1.0
+            self._graph._sleep(delay)
+            pending = still_pending
 
     def _graph_error_from_subresponse(
         self, status: int, body: object, headers: dict[str, str],

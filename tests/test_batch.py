@@ -210,3 +210,92 @@ def test_batch_session_get_absolute_strips_graph_host():
         # @odata.nextLink-style absolute URLs must be normalized to bare paths.
         b.get_absolute("https://graph.microsoft.com/v1.0/me/messages?$skip=10")
     assert captured[0]["requests"][0]["url"] == "me/messages?$skip=10"
+
+
+def test_batch_per_sub_429_retried_with_retry_after():
+    sleeps: list[float] = []
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        payload = json.loads(request.read())
+        ids = [r["id"] for r in payload["requests"]]
+        if call_count["n"] == 1:
+            # First call: id=1 succeeds, id=2 returns 429 with Retry-After 3.
+            return httpx.Response(200, json={
+                "responses": [
+                    {"id": "1", "status": 200, "headers": {}, "body": {"ok": "first"}},
+                    {"id": "2", "status": 429, "headers": {"Retry-After": "3"},
+                     "body": {"error": {"code": "TooManyRequests", "message": "slow down"}}},
+                ],
+            })
+        # Second call: only id=2 re-issued, succeeds.
+        assert ids == ["2"]
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": "2", "status": 200, "headers": {}, "body": {"ok": "second"}},
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=sleeps.append,
+        max_attempts=3,
+    )
+    with graph.batch() as b:
+        f1 = b.get("/me/messages/a")
+        f2 = b.get("/me/messages/b")
+    assert f1.result() == {"ok": "first"}
+    assert f2.result() == {"ok": "second"}
+    assert sleeps == [3.0]
+
+
+def test_batch_per_sub_retry_exhaustion_resolves_with_error():
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": "1", "status": 503, "headers": {"Retry-After": "1"},
+                 "body": {"error": {"code": "serviceNotAvailable", "message": "down"}}},
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=sleeps.append,
+        max_attempts=3,
+    )
+    with graph.batch() as b:
+        f = b.get("/me/messages/x")
+    with pytest.raises(GraphError, match="serviceNotAvailable"):
+        f.result()
+    # 3 attempts → 2 sleeps between them.
+    assert sleeps == [1.0, 1.0]
+
+
+def test_batch_permanent_error_not_retried():
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": "1", "status": 404, "headers": {},
+                 "body": {"error": {"code": "ItemNotFound", "message": "gone"}}},
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+        max_attempts=3,
+    )
+    with graph.batch() as b:
+        f = b.get("/me/messages/missing")
+    with pytest.raises(GraphError, match="ItemNotFound"):
+        f.result()
+    assert call_count["n"] == 1   # not retried
