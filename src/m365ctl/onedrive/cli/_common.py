@@ -19,6 +19,7 @@ from m365ctl.onedrive.catalog.db import open_catalog
 from m365ctl.common.config import Config
 from m365ctl.common.graph import GraphClient, GraphError
 from m365ctl.common.planfile import PLAN_SCHEMA_VERSION, Operation, Plan, write_plan
+from m365ctl.common.safety import ScopeViolation, assert_scope_allowed
 from m365ctl.mail.cli._bulk import execute_plan_in_batches  # noqa: F401  (re-export)
 
 
@@ -136,5 +137,79 @@ def new_plan(*, source_cmd: str, scope: str,
         scope=scope,
         operations=operations,
     )
+
+
+def _normalize_parent_path(parent_path: str) -> str:
+    """Strip the ``/drive/root:`` prefix that Graph attaches to parent paths."""
+    if parent_path.startswith("/drive/root:"):
+        parent_path = parent_path[len("/drive/root:"):] or "/"
+    return parent_path
+
+
+def batched_lookup_and_scope_check(
+    graph: GraphClient,
+    ops: list[Operation],
+    cfg: Config,
+    *,
+    unsafe_scope: bool,
+    select: str = "id,name,parentReference",
+) -> tuple[list[Operation], dict[str, dict], list[tuple[Operation, str]]]:
+    """Phase-0 helper for OneDrive bulk plan execution.
+
+    Batches one ``GET /drives/{d}/items/{i}`` per op (with the supplied
+    ``$select`` clause), runs ``assert_scope_allowed`` against each, and
+    returns:
+
+    - ``kept_ops``: ops that passed scope checks.
+    - ``befores``: ``op_id -> {parent_path, name, parent_id, full_path,
+      server_relative_url}`` keyed by ``op_id`` (only kept ops).
+    - ``skipped``: list of ``(op, error_message)`` for ops dropped due to
+      scope violation or Graph fetch failure.
+
+    Callers feed ``kept_ops`` + closure-bound ``befores`` into
+    ``execute_plan_in_batches`` (with ``fetch_before=None``), so the only
+    Graph round-trips are this metadata batch + the mutation batch.
+    """
+    with graph.batch() as b:
+        pending = [(op, b.get(f"/drives/{op.drive_id}/items/{op.item_id}?$select={select}"))
+                   for op in ops]
+
+    kept_ops: list[Operation] = []
+    befores: dict[str, dict] = {}
+    skipped: list[tuple[Operation, str]] = []
+    for op, fut in pending:
+        try:
+            meta = fut.result()
+        except GraphError as e:
+            skipped.append((op, f"lookup failed: {e}"))
+            continue
+        parent_ref = meta.get("parentReference") or {}
+        parent_path = _normalize_parent_path(parent_ref.get("path") or "")
+        name = meta.get("name", "")
+        full_path = name if parent_path == "/" else f"{parent_path}/{name}"
+        item_view = type("X", (), {
+            "drive_id": op.drive_id,
+            "item_id": op.item_id,
+            "full_path": full_path,
+            "name": name,
+            "parent_path": parent_path,
+        })()
+        try:
+            assert_scope_allowed(item_view, cfg, unsafe_scope=unsafe_scope)
+        except ScopeViolation as e:
+            skipped.append((op, str(e)))
+            continue
+        befores[op.op_id] = {
+            "parent_path": parent_path,
+            "name": name,
+            "parent_id": parent_ref.get("id", ""),
+            "full_path": full_path,
+            # Without reliable SharePoint context, use full_path as a
+            # stand-in for server_relative_url (matches the single-item
+            # behavior in cli/label.py).
+            "server_relative_url": full_path,
+        }
+        kept_ops.append(op)
+    return kept_ops, befores, skipped
 
 

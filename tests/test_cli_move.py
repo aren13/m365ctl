@@ -75,17 +75,37 @@ def test_pattern_plus_confirm_rejected_without_from_plan(tmp_path, mocker, capsy
 
 
 def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
-    """Counting mock transport — proves no glob re-expansion."""
+    """Bulk plan execution: phase-0 metadata GET batch + phase-2 PATCH batch."""
     cfg = _stub_cfg(tmp_path)
     mocker.patch("m365ctl.onedrive.cli.move.load_config", return_value=cfg)
 
-    calls = {"n": 0}
+    posts: list[dict] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        return httpx.Response(
-            200, json={"id": "ignored",
-                       "parentReference": {"id": "P", "path": "/B"},
-                       "name": "x"})
+        body = json.loads(request.read())
+        posts.append(body)
+        responses = []
+        for r in body["requests"]:
+            if r["method"] == "GET":
+                # Metadata GET response.
+                # URL example: drives/d1/items/I0?$select=...
+                item_id = r["url"].split("/items/")[1].split("?")[0]
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {
+                        "id": item_id, "name": item_id,
+                        "parentReference": {"id": "OLD-P", "path": "/drive/root:/src"},
+                    },
+                })
+            else:
+                responses.append({
+                    "id": r["id"], "status": 200, "headers": {},
+                    "body": {
+                        "id": "ignored", "name": "x",
+                        "parentReference": {"id": "P", "path": "/drive/root:/B"},
+                    },
+                })
+        return httpx.Response(200, json={"responses": responses})
 
     from m365ctl.common.graph import GraphClient
     real_client = GraphClient(
@@ -94,14 +114,6 @@ def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
         sleep=lambda s: None,
     )
     mocker.patch("m365ctl.onedrive.cli.move.build_graph_client", return_value=real_client)
-    mocker.patch(
-        "m365ctl.onedrive.cli.move._lookup_item",
-        side_effect=lambda graph, drive_id, item_id: {
-            "drive_id": drive_id, "item_id": item_id,
-            "full_path": f"/src/{item_id}", "name": item_id,
-            "parent_path": "/src",
-        },
-    )
 
     from m365ctl.common.planfile import PLAN_SCHEMA_VERSION
     plan = {
@@ -127,4 +139,8 @@ def test_from_plan_issues_exactly_one_patch_per_op(tmp_path, mocker):
         plan_out=None, confirm=True, unsafe_scope=False,
     )
     assert rc == 0
-    assert calls["n"] == 3
+    # Exactly two /$batch POSTs: phase-0 metadata GETs + phase-2 PATCH mutations.
+    assert len(posts) == 2
+    assert all(r["method"] == "GET" for r in posts[0]["requests"])
+    assert all(r["method"] == "PATCH" for r in posts[1]["requests"])
+    assert len(posts[1]["requests"]) == 3
