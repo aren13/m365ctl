@@ -242,6 +242,7 @@ class BatchSession:
         while pending:
             envelope = {"requests": [sub for _f, sub in pending]}
             body = self._graph.post("/$batch", json=envelope)
+            by_id = {f._req_id: (f, sub) for f, sub in pending}
             still_pending: list[tuple[BatchFuture, dict]] = []
             max_retry_after = 0.0
             seen_ids: set[str] = set()
@@ -249,8 +250,7 @@ class BatchSession:
             for resp in body.get("responses", []):
                 req_id = str(resp.get("id"))
                 seen_ids.add(req_id)
-                # Find the (future, sub) pair matching this id.
-                pair = next(((f, sub) for f, sub in pending if f._req_id == req_id), None)
+                pair = by_id.get(req_id)
                 if pair is None:
                     continue
                 f, sub = pair
@@ -288,8 +288,13 @@ class BatchSession:
                 for f, _sub in still_pending:
                     if not f.done():
                         f._resolve_error(
-                            last_err_by_id.get(f._req_id,
-                                               GraphError("HTTP429: retry exhausted"))
+                            last_err_by_id.get(
+                                f._req_id,
+                                GraphError(
+                                    f"HTTP0: retry exhausted for id={f._req_id} "
+                                    f"(internal: no captured error)"
+                                ),
+                            )
                         )
                 return
             delay = max_retry_after if max_retry_after > 0 else 1.0
