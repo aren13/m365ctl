@@ -152,3 +152,57 @@ def confirm_bulk_proceed(n: int, *, threshold: int = 20, verb: str) -> bool:
         f"Proceed? [y/N]: "
     )
     return _confirm_via_tty(prompt)
+
+
+from typing import Any
+
+from m365ctl.common.audit import AuditLogger
+from m365ctl.common.batch import BatchFuture
+from m365ctl.common.graph import GraphError
+from m365ctl.mail.mutate._common import MailResult
+
+
+def execute_plan_in_batches(
+    *,
+    graph: GraphClient,
+    logger: AuditLogger,
+    ops: list[Operation],
+    fetch_before: Callable[[Any, Operation], BatchFuture] | None,
+    parse_before: Callable[[Operation, dict | None, GraphError | None], dict],
+    start_op: Callable[..., tuple[BatchFuture, dict]],
+    finish_op: Callable[..., MailResult],
+    on_result: Callable[[Operation, MailResult], None],
+) -> int:
+    """Two-phase batched plan execution.
+
+    Phase 1: batch all `before` GETs (skipped if ``fetch_before`` is None).
+    Phase 2: buffer all mutations under one BatchSession; the ``with`` exit
+    flushes them. Then resolve futures via ``finish_op`` for each.
+
+    Returns 1 if any op errored, else 0.
+    """
+    # Phase 1: pre-mutation lookups.
+    befores: dict[str, dict] = {}
+    if fetch_before is not None:
+        with graph.batch() as b:
+            phase1 = [(op, fetch_before(b, op)) for op in ops]
+        for op, f in phase1:
+            try:
+                befores[op.op_id] = parse_before(op, f.result(), None)
+            except GraphError as e:
+                befores[op.op_id] = parse_before(op, None, e)
+
+    # Phase 2: buffer all mutations.
+    with graph.batch() as b:
+        pending = [
+            (op, *start_op(op, b, logger, before=befores.get(op.op_id, {})))
+            for op in ops
+        ]
+
+    any_error = False
+    for op, future, after in pending:
+        result = finish_op(op, future, after, logger)
+        on_result(op, result)
+        if result.status != "ok":
+            any_error = True
+    return 1 if any_error else 0

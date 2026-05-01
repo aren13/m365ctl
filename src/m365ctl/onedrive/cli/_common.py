@@ -135,3 +135,8 @@ def new_plan(*, source_cmd: str, scope: str,
         scope=scope,
         operations=operations,
     )
+
+
+# Shared with mail; OneDrive results use a different dataclass but the
+# helper is generic over the result type via Callable typing.
+from m365ctl.mail.cli._bulk import execute_plan_in_batches  # noqa: F401, E402

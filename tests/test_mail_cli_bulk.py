@@ -106,3 +106,165 @@ def test_message_filter_applies_locally():
     out = [m for m in msgs if f.match(m)]
     assert len(out) == 1
     assert out[0].id == "m1"
+
+
+import json
+
+import httpx
+
+from m365ctl.common.audit import AuditLogger
+from m365ctl.common.graph import GraphClient
+from m365ctl.common.planfile import Operation
+from m365ctl.mail.cli._bulk import execute_plan_in_batches
+from m365ctl.mail.mutate._common import MailResult
+
+
+def _op(op_id: str) -> Operation:
+    return Operation(
+        op_id=op_id, action="mail.move", drive_id="me", item_id=op_id,
+        args={"destination_id": "archive"},
+    )
+
+
+def test_execute_plan_in_batches_runs_phase1_then_phase2(tmp_path):
+    """Phase 1 batches the `before` GETs; Phase 2 batches the mutations."""
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        posts.append(body)
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": r["id"], "status": 200, "headers": {}, "body": {"id": "echo-" + r["id"]}}
+                for r in body["requests"]
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    logger = AuditLogger(ops_dir=tmp_path / "ops")
+    ops = [_op(f"op{i}") for i in range(3)]
+
+    def fetch_before(b, op):
+        return b.get(f"/me/messages/{op.item_id}")
+
+    def parse_before(op, body, err):
+        return {"parent_folder_id": "inbox"} if body else {}
+
+    def start_op(op, b, logger, *, before):
+        f = b.post(f"/me/messages/{op.item_id}/move", json={"destinationId": "archive"})
+        return f, {"parent_folder_id": "archive"}
+
+    def finish_op(op, future, after, logger):
+        try:
+            future.result()
+        except Exception as e:
+            return MailResult(op_id=op.op_id, status="error", error=str(e))
+        return MailResult(op_id=op.op_id, status="ok", after=after)
+
+    results: list[tuple[Operation, MailResult]] = []
+    rc = execute_plan_in_batches(
+        graph=graph, logger=logger, ops=ops,
+        fetch_before=fetch_before, parse_before=parse_before,
+        start_op=start_op, finish_op=finish_op,
+        on_result=lambda op, r: results.append((op, r)),
+    )
+    assert rc == 0
+    # Two /$batch POSTs: phase 1 (3 GETs), phase 2 (3 POSTs).
+    assert len(posts) == 2
+    assert all(r["method"] == "GET" for r in posts[0]["requests"])
+    assert all(r["method"] == "POST" for r in posts[1]["requests"])
+    assert [r.status for _, r in results] == ["ok", "ok", "ok"]
+
+
+def test_execute_plan_in_batches_skips_phase1_when_fetch_before_is_none(tmp_path):
+    """Verbs like mail.flag pass fetch_before=None and skip the GET pass."""
+    posts: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        posts.append(body)
+        return httpx.Response(200, json={
+            "responses": [
+                {"id": r["id"], "status": 200, "headers": {}, "body": {}}
+                for r in body["requests"]
+            ],
+        })
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    logger = AuditLogger(ops_dir=tmp_path / "ops")
+    ops = [_op("op1"), _op("op2")]
+
+    def start_op(op, b, logger, *, before):
+        f = b.patch(f"/me/messages/{op.item_id}", json_body={"isRead": True})
+        return f, {"is_read": True}
+
+    def finish_op(op, future, after, logger):
+        try:
+            future.result()
+        except Exception as e:
+            return MailResult(op_id=op.op_id, status="error", error=str(e))
+        return MailResult(op_id=op.op_id, status="ok", after=after)
+
+    rc = execute_plan_in_batches(
+        graph=graph, logger=logger, ops=ops,
+        fetch_before=None,
+        parse_before=lambda op, body, err: {},
+        start_op=start_op, finish_op=finish_op,
+        on_result=lambda op, r: None,
+    )
+    assert rc == 0
+    # Only one /$batch POST — phase 2 only.
+    assert len(posts) == 1
+    assert all(r["method"] == "PATCH" for r in posts[0]["requests"])
+
+
+def test_execute_plan_in_batches_returns_1_when_any_op_errors(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        responses = []
+        for i, r in enumerate(body["requests"]):
+            if i == 0:
+                responses.append({"id": r["id"], "status": 200, "headers": {}, "body": {}})
+            else:
+                responses.append({
+                    "id": r["id"], "status": 404, "headers": {},
+                    "body": {"error": {"code": "ItemNotFound", "message": "gone"}},
+                })
+        return httpx.Response(200, json={"responses": responses})
+
+    graph = GraphClient(
+        token_provider=lambda: "tok",
+        transport=httpx.MockTransport(handler),
+        sleep=lambda _s: None,
+    )
+    logger = AuditLogger(ops_dir=tmp_path / "ops")
+    ops = [_op("op1"), _op("op2")]
+
+    def start_op(op, b, logger, *, before):
+        f = b.delete(f"/me/messages/{op.item_id}")
+        return f, {"deleted": True}
+
+    def finish_op(op, future, after, logger):
+        try:
+            future.result()
+        except Exception as e:
+            return MailResult(op_id=op.op_id, status="error", error=str(e))
+        return MailResult(op_id=op.op_id, status="ok", after=after)
+
+    rc = execute_plan_in_batches(
+        graph=graph, logger=logger, ops=ops,
+        fetch_before=None,
+        parse_before=lambda op, body, err: {},
+        start_op=start_op, finish_op=finish_op,
+        on_result=lambda op, r: None,
+    )
+    # One success, one error → rc=1.
+    assert rc == 1
