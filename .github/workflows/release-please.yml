@@ -35,3 +35,7 @@ jobs:
           # Config + manifest live at repo root.
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Releases come from `main`. The repo's default branch is `dev`
+          # (where feature PRs land first); without this, release-please
+          # would default to dev and try to release from there.
+          target-branch: main
