@@ -11,6 +11,9 @@ from m365ctl.onedrive.catalog.normalize import normalize_item
 class _GraphLike(Protocol):
     def get(self, path: str, *, params: dict | None = ...) -> dict: ...
     def get_paginated(self, path: str, *, params: dict | None = ...): ...
+    # Optional; only present on real GraphClient. Sites that need batching
+    # check via _supports_batch() before calling.
+    def batch(self): ...
 
 
 # Error-code substrings that signal "this user/site is unreachable; skip it".

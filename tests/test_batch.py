@@ -8,8 +8,8 @@ import pytest
 
 from m365ctl.common.batch import (
     BatchFuture,
-    BatchSession,
     BatchUnflushedError,
+    EagerSession,
     _Resolved,
 )
 from m365ctl.common.graph import GraphClient, GraphError
@@ -299,9 +299,6 @@ def test_batch_permanent_error_not_retried():
     with pytest.raises(GraphError, match="ItemNotFound"):
         f.result()
     assert call_count["n"] == 1   # not retried
-
-
-from m365ctl.common.batch import EagerSession
 
 
 def test_eager_session_wraps_success():

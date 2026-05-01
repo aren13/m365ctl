@@ -11,9 +11,12 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 import httpx
+
+if TYPE_CHECKING:
+    from m365ctl.common.batch import BatchSession
 
 from m365ctl.common.retry import with_retry
 
@@ -302,7 +305,7 @@ class GraphClient:
             return {}
         return resp.json()
 
-    def batch(self) -> "BatchSession":
+    def batch(self) -> BatchSession:
         """Return a new BatchSession bound to this GraphClient.
 
         See ``m365ctl.common.batch.BatchSession`` for usage.

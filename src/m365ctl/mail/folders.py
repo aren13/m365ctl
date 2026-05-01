@@ -229,17 +229,17 @@ def resolve_folder_paths(
     while pending:
         with graph.batch() as b:
             shots = [
-                (p, b.get(f"{ub}/mailFolders/{p.current_id}/childFolders?$top=200"))
-                for p in pending
+                (pend, b.get(f"{ub}/mailFolders/{pend.current_id}/childFolders?$top=200"))
+                for pend in pending
             ]
         next_pending: list[_Pending] = []
-        for p, fut in shots:
+        for pend, fut in shots:
             try:
                 body = fut.result()
             except Exception:
                 continue
             children = body.get("value", []) if isinstance(body, dict) else []
-            target = p.remaining[0]
+            target = pend.remaining[0]
             match_id: str | None = None
             for raw in children:
                 if (raw.get("displayName") or "").lower() == target:
@@ -249,12 +249,12 @@ def resolve_folder_paths(
                         break
             if match_id is None:
                 continue
-            rest = p.remaining[1:]
+            rest = pend.remaining[1:]
             if not rest:
-                out[p.orig] = match_id
+                out[pend.orig] = match_id
             else:
                 next_pending.append(_Pending(
-                    orig=p.orig, remaining=rest, current_id=match_id,
+                    orig=pend.orig, remaining=rest, current_id=match_id,
                 ))
         pending = next_pending
 
