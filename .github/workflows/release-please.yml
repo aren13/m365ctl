@@ -1,0 +1,37 @@
+name: Release Please
+
+# Watches conventional commits on `main` and opens (or updates) a "release PR"
+# that proposes the next version bump + CHANGELOG update + pyproject.toml
+# version bump. Merging that release PR triggers release-please to:
+#   1. Create a `vX.Y.Z` git tag.
+#   2. Publish a GitHub Release whose body is the CHANGELOG section for this
+#      version.
+#
+# The PyPI publish workflow (`release.yml`) is triggered by the `vX.Y.Z` tag
+# push that release-please performs, so PyPI shipping is fully chained.
+#
+# Bump rules (conventional commits):
+#   feat:           → minor bump
+#   fix:            → patch bump
+#   feat!: / fix!:  → major bump (or any commit with `BREAKING CHANGE:` footer)
+#   docs:/chore:/refactor:/test:/ci: → no release (still appear in CHANGELOG
+#                                       under their respective sections if
+#                                       configured below).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write       # tag + release creation
+  pull-requests: write  # open / update release PRs
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Config + manifest live at repo root.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
